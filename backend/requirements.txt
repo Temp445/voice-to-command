@@ -61,6 +61,9 @@ pyautogui
 # pynput
 # psutil
 # playwright
+playwright-stealth
 # pystray
-# Pillow
+Pillow
+mss
+pytesseract
 # schedule

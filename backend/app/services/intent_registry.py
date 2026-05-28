@@ -24,8 +24,12 @@ async def handle_open_app(app: str = "", **_) -> str:
 
 async def handle_close_app(app: str = "", **_) -> str:
     from automation.desktop.app_controller import AppController
-    ctrl = AppController()
-    return await ctrl.close_application(app.strip())
+    return await AppController().close_application(app.strip())
+
+
+async def handle_close_heavy_apps(**_) -> str:
+    from automation.desktop.app_controller import AppController
+    return await AppController().close_heavy_applications(threshold_mb=500)
 
 
 async def handle_search_google(query: str = "", **_) -> str:
@@ -159,6 +163,10 @@ async def handle_double_click(**_) -> str:
     MouseController().double_click()
     return "Double clicked"
 
+async def handle_click_text(text: str = "", **_) -> str:
+    from automation.desktop.ocr_controller import OCRController
+    return OCRController().find_and_click_text(text.strip())
+
 
 async def handle_right_click(**_) -> str:
     from automation.input.mouse_controller import MouseController
@@ -245,6 +253,17 @@ def register_all_intents() -> None:
             description="Open a desktop application",
             examples=["open notepad", "launch vs code", "start chrome", "open spotify"],
             param_names=["app"],
+        ),
+        Intent(
+            name="close_heavy_apps",
+            patterns=[
+                r"close\s+(?:all\s+)?heavy\s+(?:applications|apps)",
+                r"free\s+(?:up\s+)?(?:some\s+)?(?:memory|ram)",
+                r"kill\s+heavy\s+(?:applications|apps)"
+            ],
+            handler=handle_close_heavy_apps,
+            description="Close heavy applications taking up excessive memory",
+            examples=["close heavy applications", "free up some memory", "kill heavy apps"],
         ),
         Intent(
             name="close_app",
@@ -380,6 +399,14 @@ def register_all_intents() -> None:
             handler=handle_lock_screen,
             description="Lock the screen",
             examples=["lock screen", "lock the computer", "lock now"],
+        ),
+        Intent(
+            name="click_text",
+            patterns=[r"(?:click|tap)\s+(?:on\s+)?(?P<text>.+)"],
+            handler=handle_click_text,
+            description="Click on specific text on the screen using OCR",
+            examples=["click on submit", "tap next", "click login"],
+            param_names=["text"],
         ),
         Intent(
             name="click",

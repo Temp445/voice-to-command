@@ -8,6 +8,7 @@ from playwright.async_api import async_playwright, Browser, BrowserContext, Page
 from loguru import logger
 from app.config import settings
 from app.core.exceptions import BrowserAutomationError
+from playwright_stealth import Stealth
 
 
 class BrowserController:
@@ -27,15 +28,16 @@ class BrowserController:
             BrowserController._browser = await browser_type.launch(headless=False)
             BrowserController._context = await BrowserController._browser.new_context()
             BrowserController._page = await BrowserController._context.new_page()
-            logger.info(f"Browser launched: {settings.browser_type}")
+            await Stealth().apply_stealth_async(BrowserController._page)
+            logger.info(f"Browser launched: {settings.browser_type} (Stealth Mode Enabled)")
 
         if not BrowserController._page or BrowserController._page.is_closed():
             try:
                 BrowserController._page = await BrowserController._context.new_page()
             except Exception:
-                # If context is also closed, recreate it
                 BrowserController._context = await BrowserController._browser.new_context()
                 BrowserController._page = await BrowserController._context.new_page()
+                await Stealth().apply_stealth_async(BrowserController._page)
 
         return BrowserController._page
 
@@ -72,6 +74,7 @@ class BrowserController:
         if not BrowserController._context:
             await self._ensure_browser()
         BrowserController._page = await BrowserController._context.new_page()
+        await Stealth().apply_stealth_async(BrowserController._page)
         if url:
             await self.navigate(url)
         return "New tab opened"

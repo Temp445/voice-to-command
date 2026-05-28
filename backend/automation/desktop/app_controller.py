@@ -124,6 +124,59 @@ class AppController:
             return f"Closed: {', '.join(set(killed))}"
         raise AppNotFound(app_name)
 
+    async def close_heavy_applications(self, threshold_mb: int = 500) -> str:
+        """Finds and terminates non-critical processes exceeding the memory threshold."""
+        # Whitelist of critical Windows processes, your IDE, and the ACE infrastructure
+        whitelist = [
+            "explorer.exe", "svchost.exe", "smss.exe", "csrss.exe", 
+            "wininit.exe", "services.exe", "lsass.exe", "winlogon.exe", 
+            "dwm.exe", "spoolsv.exe", "system", "system idle process", 
+            "registry", "memory compression", "taskmgr.exe", "searchapp.exe",
+            "startmenuexperiencehost.exe", "ctfmon.exe", "conhost.exe",
+            # Development and ACE processes
+            "python.exe", "node.exe", "code.exe"
+        ]
+
+        killed_apps = []
+        total_freed_bytes = 0
+        threshold_bytes = threshold_mb * 1024 * 1024
+
+        for proc in psutil.process_iter(["pid", "name", "memory_info"]):
+            try:
+                proc_name = proc.info["name"]
+                if not proc_name:
+                    continue
+
+                proc_name_lower = proc_name.lower()
+                
+                # Check whitelist
+                if any(proc_name_lower == w for w in whitelist):
+                    continue
+                
+                mem_bytes = proc.info["memory_info"].rss
+                if mem_bytes > threshold_bytes:
+                    proc.kill()
+                    killed_apps.append(proc_name)
+                    total_freed_bytes += mem_bytes
+                    logger.info(f"Killed heavy process: {proc_name} (PID: {proc.info['pid']}) - Freed {mem_bytes / (1024*1024):.2f} MB")
+            except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                pass
+
+        if not killed_apps:
+            return f"No non-critical applications exceeding {threshold_mb} MB were found."
+
+        # Simplify the killed apps list (e.g. 5x chrome.exe -> chrome.exe)
+        unique_killed = list(set([name.lower().replace('.exe', '') for name in killed_apps]))
+        freed_gb = total_freed_bytes / (1024 * 1024 * 1024)
+        freed_mb = total_freed_bytes / (1024 * 1024)
+        
+        if freed_gb > 1.0:
+            freed_str = f"{freed_gb:.2f} GB"
+        else:
+            freed_str = f"{freed_mb:.0f} MB"
+
+        return f"Freed {freed_str} of memory by closing: {', '.join(unique_killed).title()}."
+
     async def run_terminal_command(self, cmd: str) -> str:
         """Execute a shell command and return its output."""
         try:
