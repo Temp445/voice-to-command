@@ -1,0 +1,89 @@
+{
+  "$schema": "../node_modules/@tauri-apps/cli/schema.json",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build",
+    "devPath": "http://localhost:3000",
+    "distDir": "../out",
+    "withGlobalTauri": true
+  },
+  "package": {
+    "productName": "ACE Voice Controller",
+    "version": "1.0.0"
+  },
+  "tauri": {
+    "allowlist": {
+      "all": false,
+      "shell": { "all": false, "open": true },
+      "window": {
+        "all": false,
+        "close": true,
+        "hide": true,
+        "show": true,
+        "maximize": true,
+        "minimize": true,
+        "unminimize": true,
+        "setTitle": true,
+        "startDragging": true
+      },
+      "notification": { "all": true },
+      "globalShortcut": { "all": true },
+      "http": {
+        "all": true,
+        "request": true,
+        "scope": ["http://127.0.0.1:8000/**", "ws://127.0.0.1:8000/**"]
+      }
+    },
+    "bundle": {
+      "active": true,
+      "targets": "all",
+      "identifier": "com.ace.voice-controller",
+      "icon": [
+        "icons/32x32.png",
+        "icons/128x128.png",
+        "icons/128x128@2x.png",
+        "icons/icon.icns",
+        "icons/icon.ico"
+      ],
+      "windows": {
+        "certificateThumbprint": null,
+        "digestAlgorithm": "sha256",
+        "timestampUrl": ""
+      },
+      "resources": [],
+      "externalBin": [],
+      "copyright": "© 2024 ACE",
+      "category": "Utility",
+      "shortDescription": "AI-powered desktop voice controller",
+      "longDescription": "ACE is a production-grade AI-powered desktop voice control and automation system"
+    },
+    "security": { "csp": null },
+    "updater": {
+      "active": false
+    },
+    "windows": [
+      {
+        "title": "ACE Voice Controller",
+        "width": 1280,
+        "height": 800,
+        "minWidth": 900,
+        "minHeight": 600,
+        "resizable": true,
+        "fullscreen": false,
+        "decorations": true,
+        "transparent": false,
+        "center": true,
+        "skipTaskbar": false,
+        "fileDropEnabled": false,
+        "label": "main",
+        "url": "index.html"
+      }
+    ],
+    "systemTray": {
+      "iconPath": "icons/32x32.png",
+      "iconAsTemplate": false,
+      "menuOnLeftClick": false,
+      "title": "ACE"
+    }
+  }
+}

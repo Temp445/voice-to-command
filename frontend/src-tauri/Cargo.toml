@@ -1,0 +1,36 @@
+[package]
+name = "ace-voice-controller"
+version = "1.0.0"
+description = "ACE AI-powered desktop voice control and automation system"
+authors = ["ACE Team"]
+license = ""
+repository = ""
+default-run = "ace-voice-controller"
+edition = "2021"
+rust-version = "1.60"
+
+[build-dependencies]
+tauri-build = { version = "1.5", features = [] }
+
+[dependencies]
+serde_json = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+tauri = { version = "1.6", features = [
+  "system-tray",
+  "global-shortcut",
+  "notification-all",
+  "http-all",
+  "shell-open",
+  "window-close",
+  "window-hide",
+  "window-show",
+  "window-maximize",
+  "window-minimize",
+  "window-unminimize",
+  "window-set-title",
+  "window-start-dragging",
+]}
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]

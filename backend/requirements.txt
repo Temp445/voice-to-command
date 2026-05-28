@@ -1,0 +1,66 @@
+# ============================================================
+# ACE Voice Controller — Backend Core Dependencies
+# Install with:
+#   pip install --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org -r requirements.txt
+# ============================================================
+
+# --- Web Framework ---
+fastapi
+uvicorn[standard]
+python-multipart
+websockets
+
+# --- Database ---
+sqlalchemy
+alembic
+aiosqlite
+
+# --- Supabase ---
+supabase
+httpx
+
+# --- Auth & Security ---
+python-jose[cryptography]
+passlib[bcrypt]
+cryptography
+
+# --- Config ---
+pydantic
+pydantic-settings
+python-dotenv
+
+# --- Command Parsing ---
+rapidfuzz
+
+# --- Utilities ---
+aiofiles
+loguru
+rich
+pyautogui
+
+# ============================================================
+# Voice Stack — install separately after core is working:
+#   pip install --trusted-host pypi.org ... -r requirements-voice.txt
+# ============================================================
+# faster-whisper
+# openwakeword
+# piper-tts
+# pyaudio
+# sounddevice
+# numpy
+# webrtcvad
+# pygame
+# google-cloud-texttospeech
+# gTTS
+
+# ============================================================
+# Automation Stack — install separately:
+#   pip install --trusted-host pypi.org ... -r requirements-automation.txt
+# ============================================================
+# pywinauto
+# pynput
+# psutil
+# playwright
+# pystray
+# Pillow
+# schedule
