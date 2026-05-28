@@ -17,9 +17,9 @@ build/
 .eggs/
 
 # Voice models (large binary files)
-voice/tts/models/*.onnx
-voice/tts/models/*.json
-voice/wake_word/models/
+# voice/tts/models/*.onnx
+# voice/tts/models/*.json
+# voice/wake_word/models/
 
 # Logs
 logs/
