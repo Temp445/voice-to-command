@@ -20,33 +20,6 @@ from loguru import logger
 from app.core.exceptions import AppNotFound, AutomationError
 
 
-<<<<<<< HEAD
-# Map of friendly names → executable paths / process names
-APP_REGISTRY: dict[str, list[str]] = {
-    "notepad":      ["notepad.exe"],
-    "vs code":      ["code.exe", r"D:\Users\{user}\AppData\Local\Programs\Microsoft VS Code\Code.exe", r"C:\Users\{user}\AppData\Local\Programs\Microsoft VS Code\Code.exe", r"C:\Program Files\Microsoft VS Code\Code.exe"],
-    "vscode":       ["code.exe", r"D:\Users\{user}\AppData\Local\Programs\Microsoft VS Code\Code.exe", r"C:\Users\{user}\AppData\Local\Programs\Microsoft VS Code\Code.exe"],
-    "chrome":       ["chrome.exe", r"C:\Program Files\Google\Chrome\Application\chrome.exe"],
-    "firefox":      ["firefox.exe"],
-    "edge":         ["msedge.exe", r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe", r"C:\Program Files\Microsoft\Edge\Application\msedge.exe"],
-    "microsoft edge":["msedge.exe", r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe", r"C:\Program Files\Microsoft\Edge\Application\msedge.exe"],
-    "explorer":     ["explorer.exe"],
-    "calculator":   ["calc.exe"],
-    "paint":        ["mspaint.exe"],
-    "word":         ["WINWORD.EXE"],
-    "excel":        ["EXCEL.EXE"],
-    "powerpoint":   ["POWERPNT.EXE"],
-    "task manager": ["Taskmgr.exe"],
-    "control panel":["control.exe"],
-    "settings":     ["ms-settings:"],
-    "spotify":      ["Spotify.exe"],
-    "discord":      ["Discord.exe"],
-    "slack":        ["slack.exe"],
-    "teams":        ["Teams.exe"],
-    "terminal":     ["wt.exe", "cmd.exe"],
-    "cmd":          ["cmd.exe"],
-    "powershell":   ["powershell.exe"],
-=======
 # ─── Minimal static fallback for built-in Windows tools ──────────────────────
 # Only keep things that are NOT discoverable via the scanner (UWP URIs, system utils).
 _BUILTIN_REGISTRY: dict[str, list[str]] = {
@@ -63,7 +36,7 @@ _BUILTIN_REGISTRY: dict[str, list[str]] = {
     "word":          ["WINWORD.EXE"],
     "excel":         ["EXCEL.EXE"],
     "powerpoint":    ["POWERPNT.EXE"],
->>>>>>> 30a233b (convert static application to dynamic application search)
+
 }
 
 
