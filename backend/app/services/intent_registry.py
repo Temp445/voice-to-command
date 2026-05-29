@@ -32,9 +32,9 @@ async def handle_close_heavy_apps(**_) -> str:
     return await AppController().close_heavy_applications(threshold_mb=500)
 
 
-async def handle_search_google(query: str = "", **_) -> str:
+async def handle_search_google(query: str = "", browser: str | None = None, **_) -> str:
     from automation.browser.search import BrowserSearch
-    return await BrowserSearch().google(query.strip())
+    return await BrowserSearch().google(query.strip(), browser)
 
 
 async def handle_search_youtube(query: str = "", **_) -> str:
@@ -204,6 +204,7 @@ def register_all_intents() -> None:
             name="search_youtube",
             patterns=[
                 r"(?:search|find|play)\s+(?P<query>.+)\s+on youtube",
+                r"(?:open\s+)?youtube\s+(?:and\s+)?(?:search|find|play)\s+(?:for\s+)?(?P<query>.+)",
                 r"youtube\s+(?P<query>.+)",
             ],
             handler=handle_search_youtube,
@@ -214,13 +215,15 @@ def register_all_intents() -> None:
         Intent(
             name="search_google",
             patterns=[
+                r"(?:open\s+)?(?P<browser>edge|chrome|firefox)?\s*(?:and\s+)?(?:search|find|look up)\s+(?:for\s+)?(?P<query>.+)",
+                r"(?:open\s+)?(?P<browser>edge|chrome|firefox)?\s*(?:and\s+)?google\s+(?:for\s+)?(?P<query>.+)",
                 r"(?:search|google)\s+(?:for\s+)?(?P<query>.+)",
                 r"(?:look up|find)\s+(?P<query>.+)\s+on google",
             ],
             handler=handle_search_google,
             description="Search Google in the browser",
-            examples=["search for python tutorials", "google the weather", "search machine learning"],
-            param_names=["query"],
+            examples=["search for python tutorials", "google the weather", "open edge search spiderman"],
+            param_names=["query", "browser"],
         ),
         Intent(
             name="open_website",

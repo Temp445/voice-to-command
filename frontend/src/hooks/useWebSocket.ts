@@ -20,7 +20,18 @@ export function useWebSocket() {
   const connect = useCallback(() => {
     if (wsRef.current?.readyState === WebSocket.OPEN) return;
 
-    const ws = new WebSocket("ws://127.0.0.1:8000/ws");
+    let wsUrl = "ws://localhost:8000/ws";
+    
+    if (process.env.NEXT_PUBLIC_API_URL) {
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL.replace(/\/api$/, "");
+      wsUrl = baseUrl.replace(/^http/, "ws") + "/ws";
+    } else if (typeof window !== "undefined" && window.location.hostname.includes("devtunnels.ms")) {
+      const isHttps = window.location.protocol === "https:";
+      const host = window.location.host.replace("-3000", "-8000");
+      wsUrl = `${isHttps ? "wss" : "ws"}://${host}/ws`;
+    }
+
+    const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
 
     ws.onopen = () => {

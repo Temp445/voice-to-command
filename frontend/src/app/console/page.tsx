@@ -68,7 +68,7 @@ export default function ConsolePage() {
                 <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "0.625rem", color: "var(--muted-foreground)" }}>
                   <Terminal style={{ width: "2rem", height: "2rem", opacity: 0.3 }} />
                   <p>No commands yet. Start typing below.</p>
-                  <p style={{ fontSize: "0.75rem" }}>Or say <span style={{ color: "var(--foreground)" }}>&quot;hey ACE&quot;</span> to use voice</p>
+                  <p style={{ fontSize: "0.75rem" }}>Or say <span style={{ color: "var(--foreground)" }}>&quot;alexa&quot;</span> to use voice</p>
                 </div>
               )}
               <AnimatePresence>

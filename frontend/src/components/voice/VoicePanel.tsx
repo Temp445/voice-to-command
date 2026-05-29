@@ -113,7 +113,7 @@ export function VoicePanel() {
       <p style={{ fontSize: "0.75rem", color: "var(--muted-foreground)", textAlign: "center", lineHeight: 1.5 }}>
         {wakeWordActive
           ? <>Say <span style={{ color: "#22c55e", fontFamily: "var(--font-mono)", fontWeight: 600 }}>&quot;alexa&quot;</span> to activate instantly<br/><span style={{ fontSize: "0.6875rem", opacity: 0.7 }}>Always listening in background</span></>
-          : "Backend offline — start python -m app.main"}
+          : ""}
       </p>
     </div>
   );

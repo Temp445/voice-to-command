@@ -42,24 +42,42 @@ class BrowserController:
         return BrowserController._page
 
     async def navigate(self, url: str) -> str:
-        """Navigate to a URL."""
+        """Navigate to a URL using the default system browser."""
+        import webbrowser
         if not url.startswith(("http://", "https://")):
             url = f"https://{url}"
-        page = await self._ensure_browser()
-        await page.goto(url, wait_until="domcontentloaded", timeout=20000)
-        logger.info(f"Navigated to: {url}")
+        webbrowser.open(url)
+        logger.info(f"Navigated to: {url} (via default browser)")
         return f"Opened {url}"
 
-    async def search_google(self, query: str) -> str:
-        page = await self._ensure_browser()
+    async def search_google(self, query: str, browser: str | None = None) -> str:
+        import webbrowser
+        import subprocess
+        
+        search_engine = "Google"
         search_url = f"https://www.google.com/search?q={query.replace(' ', '+')}"
-        await page.goto(search_url, wait_until="domcontentloaded")
-        return f"Searched Google for: {query}"
+        
+        if browser:
+            b_name = browser.lower().strip()
+            if b_name == "edge":
+                search_engine = "Bing"
+                search_url = f"https://www.bing.com/search?q={query.replace(' ', '+')}"
+                
+            browser_map = {"edge": "msedge", "chrome": "chrome", "firefox": "firefox"}
+            cmd = browser_map.get(b_name, b_name)
+            try:
+                subprocess.Popen(f"start {cmd} {search_url}", shell=True)
+                return f"Searched {search_engine} for: {query} in {browser.title()}"
+            except Exception:
+                pass # Fallback to default
+                
+        webbrowser.open(search_url)
+        return f"Searched {search_engine} for: {query}"
 
     async def search_youtube(self, query: str) -> str:
-        page = await self._ensure_browser()
+        import webbrowser
         search_url = f"https://www.youtube.com/results?search_query={query.replace(' ', '+')}"
-        await page.goto(search_url, wait_until="domcontentloaded")
+        webbrowser.open(search_url)
         return f"Searched YouTube for: {query}"
 
     async def fill_form(self, selector: str, value: str) -> None:

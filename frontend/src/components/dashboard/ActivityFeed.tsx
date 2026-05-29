@@ -28,7 +28,7 @@ export function ActivityFeed() {
           <Mic style={{ width: "2rem", height: "2rem", color: "var(--border)", margin: "0 auto 0.75rem" }} />
           <p style={{ fontSize: "0.875rem", color: "var(--muted-foreground)" }}>
             No commands yet — say{" "}
-            <span style={{ color: "var(--foreground)", fontFamily: "var(--font-mono)" }}>&quot;hey ACE&quot;</span>
+            <span style={{ color: "var(--foreground)", fontFamily: "var(--font-mono)" }}>&quot;alexa&quot;</span>
             {" "}to start
           </p>
         </div>

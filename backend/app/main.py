@@ -4,6 +4,7 @@ Entry point: mounts all routers, middleware, WebSocket endpoint, and lifecycle e
 """
 
 import sys
+sys.coinit_flags = 0  # Fix COM threading mode conflict for pywinauto
 from pathlib import Path
 _ROOT = Path(__file__).resolve().parent.parent.parent
 if str(_ROOT) not in sys.path:
@@ -135,7 +136,8 @@ async def websocket_endpoint(websocket: WebSocket):
             # Handle ping-pong
             if data.get("type") == "ping":
                 await ws_manager.send_to(websocket, "pong", {})
-    except WebSocketDisconnect:
+    except (WebSocketDisconnect, RuntimeError) as e:
+        # Client disconnected or socket closed
         await ws_manager.disconnect(websocket)
     except Exception as e:
         logger.error(f"WebSocket error: {e}")

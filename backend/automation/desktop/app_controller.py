@@ -16,8 +16,8 @@ from app.core.exceptions import AppNotFound, AutomationError
 # Map of friendly names → executable paths / process names
 APP_REGISTRY: dict[str, list[str]] = {
     "notepad":      ["notepad.exe"],
-    "vs code":      ["code.exe", r"C:\Users\{user}\AppData\Local\Programs\Microsoft VS Code\Code.exe", r"C:\Program Files\Microsoft VS Code\Code.exe"],
-    "vscode":       ["code.exe"],
+    "vs code":      ["code.exe", r"D:\Users\{user}\AppData\Local\Programs\Microsoft VS Code\Code.exe", r"C:\Users\{user}\AppData\Local\Programs\Microsoft VS Code\Code.exe", r"C:\Program Files\Microsoft VS Code\Code.exe"],
+    "vscode":       ["code.exe", r"D:\Users\{user}\AppData\Local\Programs\Microsoft VS Code\Code.exe", r"C:\Users\{user}\AppData\Local\Programs\Microsoft VS Code\Code.exe"],
     "chrome":       ["chrome.exe", r"C:\Program Files\Google\Chrome\Application\chrome.exe"],
     "firefox":      ["firefox.exe"],
     "edge":         ["msedge.exe", r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe", r"C:\Program Files\Microsoft\Edge\Application\msedge.exe"],
