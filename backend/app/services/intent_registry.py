@@ -55,9 +55,14 @@ async def handle_open_website(url: str = "", **_) -> str:
     return f"Opened {url}"
 
 
-async def handle_open_folder(path: str = "", **_) -> str:
+async def handle_open_folder(path: str = "", disambiguation: str | None = None, **_) -> str:
     from automation.desktop.file_operations import FileOperations
-    return FileOperations().open_folder(path.strip())
+    return FileOperations().open_folder(path.strip(), disambiguation)
+
+
+async def handle_search_file(file_name: str = "", **_) -> str:
+    from automation.desktop.file_operations import FileOperations
+    return FileOperations().search_file(file_name.strip())
 
 
 async def handle_create_folder(folder_name: str = "", drive: str | None = None, **_) -> str:
@@ -253,6 +258,17 @@ def register_all_intents() -> None:
             description="Open a folder in Windows Explorer",
             examples=["open the payroll folder", "open folder downloads", "show me documents folder"],
             param_names=["path"],
+        ),
+        Intent(
+            name="search_file",
+            patterns=[
+                r"(?:search|find|locate|open)\s+(?:for\s+)?(?:the\s+)?(?:file|pdf|document|doc|image|video|spreadsheet)\s+(?P<file_name>.+)",
+                r"(?:search|find|locate)\s+(?:for\s+)?(?:the\s+)?(?P<file_name>.+)",
+            ],
+            handler=handle_search_file,
+            description="Search for or open a file on the computer",
+            examples=["search for invoice pdf", "find the file report.docx", "open the pdf budget spreadsheet"],
+            param_names=["file_name"],
         ),
         Intent(
             name="open_app",

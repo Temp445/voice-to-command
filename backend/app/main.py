@@ -50,6 +50,13 @@ async def lifespan(app: FastAPI):
     app.state.app_scanner = scanner
     logger.info(f"✅ App discovery ready — {len(scanner.apps)} apps available")
 
+    # ── Background File Indexer ──────────────────────────────────────────────
+    from automation.desktop.file_indexer import get_indexer
+    file_indexer = get_indexer()
+    file_indexer.start_background_indexing()
+    app.state.file_indexer = file_indexer
+    logger.info("✅ File indexer running in background")
+
     register_all_intents()
     logger.info("✅ Command intents registered")
 
@@ -107,6 +114,8 @@ async def lifespan(app: FastAPI):
     logger.info("🛑 ACE Voice Controller shutting down")
     if getattr(app.state, "pipeline", None):
         app.state.pipeline.stop()
+    if getattr(app.state, "file_indexer", None):
+        app.state.file_indexer.stop()
 
 
 # ─── App ─────────────────────────────────────────────────────────────────────

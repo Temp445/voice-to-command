@@ -1546,5 +1546,23 @@
     "exe_name": "crashreporter.exe",
     "path": "C:\\Program Files (x86)\\Mozilla Firefox\\crashreporter.exe",
     "source": "process"
+  },
+  "onedriveupdaterservice": {
+    "name": "OneDriveUpdaterService",
+    "exe_name": "OneDriveUpdaterService.exe",
+    "path": "C:\\Program Files\\Microsoft OneDrive\\26.078.0426.0002\\OneDriveUpdaterService.exe",
+    "source": "process"
+  },
+  "microsoftedgeupdate": {
+    "name": "MicrosoftEdgeUpdate",
+    "exe_name": "MicrosoftEdgeUpdate.exe",
+    "path": "C:\\Program Files (x86)\\Microsoft\\EdgeUpdate\\MicrosoftEdgeUpdate.exe",
+    "source": "process"
+  },
+  "openwith": {
+    "name": "OpenWith",
+    "exe_name": "OpenWith.exe",
+    "path": "C:\\Windows\\System32\\OpenWith.exe",
+    "source": "process"
   }
 }

@@ -108,15 +108,25 @@ class CommandService:
             action = self._custom_shortcuts[lower]
             intent_name = action
             params: dict[str, Any] = {}
+            self._pending_action = None
         else:
-            # 3. Regex pattern matching
+            # 3. Regex pattern matching (new commands override pending state)
             intent_name, params = self._regex_match(text)
 
-            # 4. Fuzzy fallback if no regex match
-            if not intent_name:
-                intent_name, params = self._fuzzy_match(text)
-
-        duration_ms = int((time.perf_counter() - start) * 1000)
+            # 4. Handle pending disambiguation if no new regex matched
+            if not intent_name and getattr(self, "_pending_action", None):
+                action = self._pending_action
+                intent_name = action["intent"]
+                params = action["params"]
+                params["disambiguation"] = text
+                self._pending_action = None
+            else:
+                # Clear pending action since we either got a new command or no pending action exists
+                self._pending_action = None
+                
+                # 5. Fuzzy fallback if no regex match
+                if not intent_name:
+                    intent_name, params = self._fuzzy_match(text)
 
         if not intent_name:
             logger.warning(f"No intent matched for: '{text}'")
@@ -125,17 +135,22 @@ class CommandService:
                 "parameters": {},
                 "status": "failed",
                 "result": f"Sorry, I didn't understand: '{text}'",
-                "duration_ms": duration_ms,
+                "duration_ms": int((time.perf_counter() - start) * 1000),
             }
-
         # 5. Execute handler
         intent = self._get_intent(intent_name)
         if not intent:
             return {"intent": intent_name, "parameters": params, "status": "failed",
-                    "result": "Intent handler not found", "duration_ms": duration_ms}
+                    "result": "Intent handler not found", "duration_ms": int((time.perf_counter() - start) * 1000)}
 
         try:
             result = await intent.handler(**params)
+            duration_ms = int((time.perf_counter() - start) * 1000)
+            
+            if isinstance(result, str) and result.startswith("MULTIPLE_MATCHES:"):
+                self._pending_action = {"intent": intent_name, "params": params}
+                result = result.replace("MULTIPLE_MATCHES:", "").strip()
+                
             return {
                 "intent": intent_name,
                 "parameters": params,
@@ -150,7 +165,7 @@ class CommandService:
                 "parameters": params,
                 "status": "failed",
                 "result": str(e),
-                "duration_ms": duration_ms,
+                "duration_ms": int((time.perf_counter() - start) * 1000),
             }
 
     def _regex_match(self, text: str) -> tuple[str | None, dict]:

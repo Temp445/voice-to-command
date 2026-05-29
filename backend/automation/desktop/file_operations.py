@@ -7,7 +7,7 @@ from pathlib import Path
 
 
 class FileOperations:
-    def open_folder(self, path: str) -> str:
+    def open_folder(self, path: str, disambiguation: str | None = None) -> str:
         """Open a folder in Windows Explorer by path or fuzzy name."""
         import re
         # Strip common filler words spoken naturally ("the", "my", "a", "an")
@@ -50,32 +50,93 @@ class FileOperations:
             subprocess.Popen(["explorer", str(candidate)])
             return f"Opened folder: {candidate}"
 
-        # Exact folder-name match first (case-insensitive) under home
-        for folder in home.iterdir():
-            if folder.is_dir() and folder.name.lower() == key:
-                subprocess.Popen(["explorer", str(folder)])
-                return f"Opened folder: {folder.name}"
+        # 3. Dynamic search via FileIndexer
+        from automation.desktop.file_indexer import get_indexer
+        from rapidfuzz import fuzz, process
+        
+        indexer = get_indexer()
+        results = indexer.search(key, is_folder=True, limit=20)
+        
+        if not results:
+            return f"Folder '{clean}' not found. Try specifying the full path."
 
-        # Starts-with match under home (e.g. "down" → "Downloads")
-        for folder in sorted(home.iterdir()):
-            if folder.is_dir() and folder.name.lower().startswith(key):
-                subprocess.Popen(["explorer", str(folder)])
-                return f"Opened folder: {folder.name}"
+        # If only 1 result, just open it
+        if len(results) == 1:
+            folder_path = results[0]["path"]
+            subprocess.Popen(["explorer", folder_path])
+            return f"Opened folder: {results[0]['name']}"
+            
+        # Exact name match
+        exact_matches = [r for r in results if r["name"].lower() == key]
+        if len(exact_matches) == 1:
+            folder_path = exact_matches[0]["path"]
+            subprocess.Popen(["explorer", folder_path])
+            return f"Opened folder: {exact_matches[0]['name']}"
+            
+        if len(exact_matches) > 1:
+            if disambiguation:
+                # Check if user said a number (e.g. "press 1", "one", "1")
+                import re
+                # We can also map word numbers to integers if needed, but digits are safest
+                num_match = re.search(r'\b(\d+)\b', disambiguation)
+                if num_match:
+                    idx = int(num_match.group(1)) - 1
+                    if 0 <= idx < len(exact_matches):
+                        matched_folder = exact_matches[idx]
+                        subprocess.Popen(["explorer", matched_folder["path"]])
+                        parent_name = Path(matched_folder["path"]).parent.name
+                        return f"Opened folder: {matched_folder['name']} in {parent_name}"
+                        
+                # User provided disambiguation text, e.g., "Projects" or "Backups"
+                choices = [Path(r["path"]).parent.name for r in exact_matches]
+                best_match = process.extractOne(disambiguation, choices, scorer=fuzz.WRatio)
+                if best_match and best_match[1] > 60:
+                    matched_folder = exact_matches[choices.index(best_match[0])]
+                    subprocess.Popen(["explorer", matched_folder["path"]])
+                    return f"Opened folder: {matched_folder['name']} in {best_match[0]}"
+            
+            # Need disambiguation
+            top_matches = exact_matches[:3] # Limit to top 3 so voice isn't too long
+            opts = " or ".join(f"{i+1} for {Path(r['path']).parent.name} ({r['path']})" for i, r in enumerate(top_matches))
+            return f"MULTIPLE_MATCHES: I found multiple {clean} folders. Say {opts}."
+            
+        # Fallback to fuzzy match
+        choices = [r["name"] for r in results]
+        best_match = process.extractOne(key, choices, scorer=fuzz.WRatio)
+        
+        if best_match and best_match[1] >= 80:
+            matched_folder = next(r for r in results if r["name"] == best_match[0])
+            subprocess.Popen(["explorer", matched_folder["path"]])
+            return f"Opened folder: {matched_folder['name']}"
+            
+        return f"Folder '{clean}' not found."
 
-        # Substring match under home then C:/ and D:/
-        search_roots = [home, Path("C:/"), Path("D:/") if Path("D:/").exists() else None]
-        for root in search_roots:
-            if root is None:
-                continue
+    def search_file(self, file_name: str) -> str:
+        """Search for a file using FileIndexer and open it."""
+        from automation.desktop.file_indexer import get_indexer
+        import os
+        
+        indexer = get_indexer()
+        results = indexer.search(file_name, is_folder=False, limit=5)
+        
+        if not results:
+            return f"Could not find any file named {file_name}"
+            
+        if len(results) == 1:
+            file_path = results[0]["path"]
             try:
-                for folder in sorted(root.iterdir()):
-                    if folder.is_dir() and key in folder.name.lower():
-                        subprocess.Popen(["explorer", str(folder)])
-                        return f"Opened folder: {folder.name}"
-            except PermissionError:
-                continue
-
-        return f"Folder '{clean}' not found. Try specifying the full path."
+                os.startfile(file_path)
+                return f"Opened {results[0]['name']}"
+            except Exception as e:
+                return f"Found {results[0]['name']} but failed to open it: {e}"
+            
+        # If multiple, open the first one (we could add disambiguation here later)
+        file_path = results[0]["path"]
+        try:
+            os.startfile(file_path)
+            return f"Found multiple files named {file_name}. Opened the most likely one."
+        except Exception as e:
+            return f"Found multiple files but failed to open: {e}"
 
     def create_folder(self, folder_name: str) -> str:
         """Create a folder. Defaults to Desktop if no absolute path is given."""

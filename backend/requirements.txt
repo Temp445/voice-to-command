@@ -62,6 +62,7 @@ pynput
 psutil
 playwright
 playwright-stealth
+watchfiles
 # pystray
 Pillow
 mss
