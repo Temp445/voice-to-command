@@ -1540,5 +1540,11 @@
     "exe_name": "OneDrive.Sync.Service.exe",
     "path": "C:\\Program Files\\Microsoft OneDrive\\26.078.0426.0002\\OneDrive.Sync.Service.exe",
     "source": "process"
+  },
+  "crashreporter": {
+    "name": "crashreporter",
+    "exe_name": "crashreporter.exe",
+    "path": "C:\\Program Files (x86)\\Mozilla Firefox\\crashreporter.exe",
+    "source": "process"
   }
 }

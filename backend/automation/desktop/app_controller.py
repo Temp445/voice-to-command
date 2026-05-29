@@ -36,7 +36,6 @@ _BUILTIN_REGISTRY: dict[str, list[str]] = {
     "word":          ["WINWORD.EXE"],
     "excel":         ["EXCEL.EXE"],
     "powerpoint":    ["POWERPNT.EXE"],
-
 }
 
 
