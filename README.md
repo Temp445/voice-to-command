@@ -105,13 +105,5 @@ Voice_Controller_v1/
 └── shared/        Shared utilities + types
 ```
 
-## TTS Engines
 
-| | Piper TTS | gTTS (Google) |
-|---|---|---|
-| Internet | ❌ No | ✅ Yes |
-| API Key | ❌ No | ✅ Yes |
-| Quality | ⭐⭐⭐ | ⭐⭐⭐⭐⭐ |
-| Latency | ~50ms | ~200-500ms |
 
-Switch between engines in **Settings → Text-to-Speech Engine**.
