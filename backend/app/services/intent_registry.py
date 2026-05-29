@@ -60,9 +60,9 @@ async def handle_open_folder(path: str = "", **_) -> str:
     return FileOperations().open_folder(path.strip())
 
 
-async def handle_create_folder(folder_name: str = "", **_) -> str:
+async def handle_create_folder(folder_name: str = "", drive: str | None = None, **_) -> str:
     from automation.desktop.file_operations import FileOperations
-    return FileOperations().create_folder(folder_name.strip())
+    return FileOperations().create_folder(folder_name.strip(), drive)
 
 
 async def handle_run_command(cmd: str = "", **_) -> str:
@@ -236,15 +236,22 @@ def register_all_intents() -> None:
             examples=["open github.com", "go to youtube.com", "visit google.com"],
             param_names=["url"],
         ),
+
         Intent(
             name="open_folder",
             patterns=[
-                r"open\s+(?:folder|directory)\s+(?P<path>.+)",
-                r"show\s+(?:me\s+)?(?P<path>.+)\s+(?:folder|directory)",
+                # "open folder <name>" or "open directory <name>" — keyword FIRST (highest priority)
+                r"open\s+(?:the\s+)?(?:folder|directory)\s+(?P<path>.+)",
+                # "show me <name> folder"
+                r"show\s+(?:me\s+)?(?:the\s+)?(?P<path>[\w\s]+?)\s+(?:folder|directory)",
+                # "open <name> folder" — keyword at END; guard ensures path doesn't start with 'folder'
+                r"open\s+(?:the\s+)?(?P<path>(?!folder\b|directory\b)[\w\s]+?)\s+(?:folder|directory)",
+                # "go to downloads", "go to documents"
+                r"go\s+to\s+(?P<path>downloads|documents|desktop|pictures|music|videos|home)",
             ],
             handler=handle_open_folder,
             description="Open a folder in Windows Explorer",
-            examples=["open folder downloads", "open folder C:/Users", "show me documents folder"],
+            examples=["open the payroll folder", "open folder downloads", "show me documents folder"],
             param_names=["path"],
         ),
         Intent(
@@ -287,12 +294,12 @@ def register_all_intents() -> None:
         Intent(
             name="create_folder",
             patterns=[
-                r"(?:create|make)\s+(?:a\s+)?(?:new\s+)?(?:folder|directory)\s+(?P<folder_name>.+)",
+                r"(?:create|make)\s+(?:a\s+|the\s+)?(?:new\s+)?(?:folder|directory)(?:\s+(?:named|name))?\s+(?P<folder_name>.+?)(?:\s+(?:in|on)\s+(?:the\s+)?(?:drive\s+)?(?P<drive>[A-Za-z])(?:\s+drive)?)?$",
             ],
             handler=handle_create_folder,
-            description="Create a new folder on the Desktop",
-            examples=["create folder demo44", "make a directory test", "create a new folder my_docs"],
-            param_names=["folder_name"],
+            description="Create a new folder on the Desktop or a specific drive",
+            examples=["create a new folder demo45 on drive E", "make directory test in D drive", "create folder my docs"],
+            param_names=["folder_name", "drive"],
         ),
         Intent(
             name="run_command",
