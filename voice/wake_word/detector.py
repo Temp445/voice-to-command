@@ -32,7 +32,7 @@ class WakeWordDetector:
     Calls `on_detected` callback when wake word is heard.
     """
 
-    def __init__(self, wake_word: str = "hello", on_detected: Callable | None = None):
+    def __init__(self, wake_word: str = "alexa", on_detected: Callable | None = None):
         self.wake_word = wake_word.lower().strip()
         self.on_detected = on_detected
         self._running = False
@@ -47,13 +47,9 @@ class WakeWordDetector:
         # OWW supports pre-trained wake words: hey_jarvis, alexa, hey_mycroft, hey_rhasspy
         # The acoustic model must match what is actually spoken
         model_map = {
-            "hey jarvis": "hey_jarvis",
-            "hey ace":    "hey_jarvis",       # Closest match
             "alexa":      "alexa",
-            "hey mycroft":"hey_mycroft",
-            "hey rhasspy":"hey_rhasspy",
         }
-        model_name = model_map.get(self.wake_word, "hey_jarvis")
+        model_name = model_map.get(self.wake_word, "alexa")
 
         if self.wake_word != model_name.replace("_", " "):
             logger.warning(
