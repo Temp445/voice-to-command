@@ -52,8 +52,21 @@ class AppController:
         """Launch an application by friendly name or executable path."""
         import os
         import shutil
-        key = app_name.lower().strip()
-        executables = APP_REGISTRY.get(key, [app_name])
+        import string
+        # Strip trailing punctuation Whisper often adds (e.g. "Chrome." → "Chrome")
+        clean_name = app_name.strip().rstrip(string.punctuation).strip()
+        key = clean_name.lower()
+
+        executables = APP_REGISTRY.get(key)
+        # Fuzzy fallback: check if key is a substring of any registry entry
+        if not executables:
+            for reg_key, reg_exes in APP_REGISTRY.items():
+                if key in reg_key or reg_key in key:
+                    executables = reg_exes
+                    logger.debug(f"Fuzzy matched '{key}' → '{reg_key}'")
+                    break
+        if not executables:
+            executables = [clean_name]
 
         for exe in executables:
             try:
@@ -85,13 +98,13 @@ class AppController:
                                 subprocess.Popen([absolute_exe], shell=False)
                         
                         logger.info(f"Launched: {absolute_exe}")
-                        return f"Opening {app_name}"
+                        return f"Opening {clean_name}"
                     
             except Exception as e:
                 logger.warning(f"Failed to launch '{exe}': {e}")
                 continue
 
-        raise AppNotFound(app_name)
+        raise AppNotFound(clean_name)
 
     async def close_application(self, app_name: str) -> str:
         """Terminate a running application by name."""

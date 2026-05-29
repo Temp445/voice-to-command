@@ -32,27 +32,37 @@ class WakeWordDetector:
     Calls `on_detected` callback when wake word is heard.
     """
 
-    def __init__(self, wake_word: str = "hey ace", on_detected: Callable | None = None):
+    def __init__(self, wake_word: str = "hello", on_detected: Callable | None = None):
         self.wake_word = wake_word.lower().strip()
         self.on_detected = on_detected
         self._running = False
         self._thread: threading.Thread | None = None
         self._model: "OWWModel | None" = None
+        self._audio = pyaudio.PyAudio()
 
     def _load_model(self) -> "OWWModel":
         if not OWW_AVAILABLE:
             raise RuntimeError("openwakeword is not installed")
 
-        # OWW supports pre-trained wake words: hey_jarvis, alexa, hey_mycroft, etc.
-        # Map "hey ace" to closest available or use custom model if provided
+        # OWW supports pre-trained wake words: hey_jarvis, alexa, hey_mycroft, hey_rhasspy
+        # The acoustic model must match what is actually spoken
         model_map = {
-            "hey ace": "hey_jarvis",       # Closest match; replace with custom trained model
             "hey jarvis": "hey_jarvis",
-            "alexa": "alexa",
+            "hey ace":    "hey_jarvis",       # Closest match
+            "alexa":      "alexa",
+            "hey mycroft":"hey_mycroft",
+            "hey rhasspy":"hey_rhasspy",
         }
         model_name = model_map.get(self.wake_word, "hey_jarvis")
 
-        logger.info(f"Loading OpenWakeWord model for: '{self.wake_word}' (using '{model_name}')")
+        if self.wake_word != model_name.replace("_", " "):
+            logger.warning(
+                f"⚠️  Wake word '{self.wake_word}' has no dedicated offline model. "
+                f"Using '{model_name}' acoustic model. "
+                f"You MUST SAY: '{model_name.replace('_', ' ')}' to trigger detection!"
+            )
+        else:
+            logger.info(f"Loading OpenWakeWord model for: '{self.wake_word}' (using '{model_name}')")
         openwakeword.utils.download_models()   # Download if not cached
         return OWWModel(wakeword_models=[model_name], inference_framework="onnx")
 
@@ -72,13 +82,13 @@ class WakeWordDetector:
 
     def _detection_loop(self) -> None:
         try:
-            self._model = self._load_model()
+            if self._model is None:
+                self._model = self._load_model()
         except Exception as e:
             logger.error(f"Failed to load wake word model: {e}")
             return
 
-        audio = pyaudio.PyAudio()
-        stream = audio.open(
+        stream = self._audio.open(
             format=FORMAT,
             channels=CHANNELS,
             rate=SAMPLE_RATE,
@@ -104,4 +114,3 @@ class WakeWordDetector:
         finally:
             stream.stop_stream()
             stream.close()
-            audio.terminate()

@@ -34,6 +34,9 @@ export function useWebSocket() {
         switch (event) {
           case "pipeline_state":
             setPipelineState(data.state);
+            if (data.wake_word_active !== undefined) {
+              setWakeWordActive(data.wake_word_active);
+            }
             break;
           case "transcript":
             setTranscript(data.text, data.is_final);

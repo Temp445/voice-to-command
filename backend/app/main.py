@@ -3,6 +3,12 @@ ACE Voice Controller — FastAPI Main Application
 Entry point: mounts all routers, middleware, WebSocket endpoint, and lifecycle events.
 """
 
+import sys
+from pathlib import Path
+_ROOT = Path(__file__).resolve().parent.parent.parent
+if str(_ROOT) not in sys.path:
+    sys.path.append(str(_ROOT))
+
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
@@ -30,9 +36,60 @@ async def lifespan(app: FastAPI):
     register_all_intents()
     logger.info("✅ Command intents registered")
 
+    # Start the voice pipeline in the backend process
+    from voice.pipeline import VoicePipeline, PipelineState
+    from app.websocket.manager import ws_manager
+    from app.routers.voice import _pipeline_state
+    import asyncio
+
+    loop = asyncio.get_running_loop()
+
+    def on_state_change(state: PipelineState):
+        _pipeline_state["pipeline_state"] = state.value
+        _pipeline_state["listening"] = (state == PipelineState.LISTENING)
+        # Wake word is active whenever pipeline is idle (always listening)
+        _pipeline_state["wake_word_active"] = (state == PipelineState.IDLE)
+        asyncio.run_coroutine_threadsafe(
+            ws_manager.broadcast("pipeline_state", {"state": state.value}),
+            loop
+        )
+        asyncio.run_coroutine_threadsafe(
+            ws_manager.broadcast("wake_word_detected" if state == PipelineState.LISTENING else "pipeline_state",
+                                  {"state": state.value, "wake_word_active": _pipeline_state["wake_word_active"]}),
+            loop
+        )
+
+    def on_transcript(text: str, is_final: bool):
+        asyncio.run_coroutine_threadsafe(
+            ws_manager.broadcast("transcript", {"text": text, "is_final": is_final}),
+            loop
+        )
+
+    def on_command_result(result: dict):
+        asyncio.run_coroutine_threadsafe(
+            ws_manager.broadcast("command_executed", result),
+            loop
+        )
+
+    pipeline = VoicePipeline(
+        on_state_change=on_state_change,
+        on_transcript=on_transcript,
+        on_command_result=on_command_result,
+    )
+    pipeline.start()
+    app.state.pipeline = pipeline
+    # Mark wake word as active from the moment the server starts
+    _pipeline_state["wake_word_active"] = True
+    asyncio.run_coroutine_threadsafe(
+        ws_manager.broadcast("pipeline_state", {"state": "idle", "wake_word_active": True}),
+        loop
+    )
+    logger.info("🎙️ Backend voice pipeline started successfully — wake word listening in background")
+
     yield
 
     logger.info("🛑 ACE Voice Controller shutting down")
+    pipeline.stop()
 
 
 # ─── App ─────────────────────────────────────────────────────────────────────

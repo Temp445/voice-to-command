@@ -65,7 +65,16 @@ class VoicePipeline:
         """Start the pipeline in a background thread."""
         self._running = True
         self._loop = asyncio.new_event_loop()
-        self._audio_capture.start()
+        
+        # Start the event loop in a dedicated background thread so async tasks execute
+        self._loop_thread = threading.Thread(
+            target=self._loop.run_forever,
+            daemon=True,
+            name="VoicePipelineLoop"
+        )
+        self._loop_thread.start()
+        
+        # Only start wake word detector initially (mutually exclusive mic access)
         self._wake_word.start()
         logger.info("🎙️ Voice pipeline started")
 
@@ -73,6 +82,10 @@ class VoicePipeline:
         self._running = False
         self._audio_capture.stop()
         self._wake_word.stop()
+        if self._loop:
+            self._loop.call_soon_threadsafe(self._loop.stop)
+        if hasattr(self, "_loop_thread") and self._loop_thread:
+            self._loop_thread.join(timeout=3)
         logger.info("🎙️ Voice pipeline stopped")
 
     # ─── State ───────────────────────────────────────────────────────────────
@@ -103,25 +116,39 @@ class VoicePipeline:
         """Manually trigger listening (from UI button or hotkey)."""
         self._on_wake_word()
 
+    def deactivate(self) -> None:
+        """Force the pipeline back to IDLE state."""
+        self._audio_capture.stop()
+        self._set_state(PipelineState.IDLE)
+        self._wake_word.start()
+
     # ─── Processing Pipeline ─────────────────────────────────────────────────
 
     async def _listen_and_process(self) -> None:
         """Full pipeline run: listen → transcribe → command → speak."""
         try:
-            # 1. Listen
+            # 1. Stop wake word to free the mic
+            self._wake_word.stop()
+
+            # 2. Listen
             self._set_state(PipelineState.LISTENING)
+            self._audio_capture.start()
             self._audio_capture.clear()
             audio_bytes = await asyncio.get_event_loop().run_in_executor(
                 None,
                 lambda: self._audio_capture.get_speech_segment(timeout=8.0),
             )
 
+            # 3. Stop audio capture to free the mic
+            self._audio_capture.stop()
+
             if not audio_bytes:
                 logger.debug("No speech detected — returning to idle")
                 self._set_state(PipelineState.IDLE)
+                self._wake_word.start()
                 return
 
-            # 2. Transcribe
+            # 4. Transcribe
             self._set_state(PipelineState.PROCESSING)
             text = await asyncio.get_event_loop().run_in_executor(
                 None,
@@ -130,29 +157,33 @@ class VoicePipeline:
 
             if not text.strip():
                 self._set_state(PipelineState.IDLE)
+                self._wake_word.start()
                 return
 
             logger.info(f"📝 Transcript: '{text}'")
             if self.on_transcript:
                 self.on_transcript(text, True)
 
-            # 3. Execute command
+            # 5. Execute command
             from app.services.command_service import command_service
             result = await command_service.parse_and_execute(text)
             if self.on_command_result:
                 self.on_command_result(result)
 
-            # 4. Speak response
+            # 6. Speak response
             response_text = result.get("result", "Done")
             await self._speak(response_text)
 
         except Exception as e:
             logger.error(f"Pipeline error: {e}")
+            self._audio_capture.stop()
             self._set_state(PipelineState.ERROR)
             await asyncio.sleep(1)
             self._set_state(PipelineState.IDLE)
+            self._wake_word.start()
         else:
             self._set_state(PipelineState.IDLE)
+            self._wake_word.start()
 
     async def _speak(self, text: str) -> None:
         """Synthesize and play TTS response."""

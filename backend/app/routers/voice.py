@@ -1,6 +1,6 @@
 """Voice router — TTS synthesis, voice pipeline status."""
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 import io
 
@@ -46,17 +46,21 @@ async def synthesize_speech(body: TTSRequest):
 
 
 @router.post("/activate")
-async def activate_listening():
+async def activate_listening(request: Request):
     """Manually trigger listening mode (skip wake word)."""
     _pipeline_state["listening"] = True
     _pipeline_state["pipeline_state"] = "listening"
     await ws_manager.broadcast("pipeline_state", {"state": "listening"})
+    if hasattr(request.app.state, "pipeline"):
+        request.app.state.pipeline.trigger_listening()
     return {"status": "listening"}
 
 
 @router.post("/deactivate")
-async def deactivate_listening():
+async def deactivate_listening(request: Request):
     _pipeline_state["listening"] = False
     _pipeline_state["pipeline_state"] = "idle"
     await ws_manager.broadcast("pipeline_state", {"state": "idle"})
+    if hasattr(request.app.state, "pipeline"):
+        request.app.state.pipeline.deactivate()
     return {"status": "idle"}

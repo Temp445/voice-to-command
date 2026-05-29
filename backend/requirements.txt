@@ -42,14 +42,14 @@ pyautogui
 # Voice Stack — install separately after core is working:
 #   pip install --trusted-host pypi.org ... -r requirements-voice.txt
 # ============================================================
-# faster-whisper
-# openwakeword
+faster-whisper
+openwakeword
 # piper-tts
-# pyaudio
+pyaudio
 # sounddevice
-# numpy
-# webrtcvad
-# pygame
+numpy
+webrtcvad
+pygame
 # google-cloud-texttospeech
 # gTTS
 
@@ -57,10 +57,10 @@ pyautogui
 # Automation Stack — install separately:
 #   pip install --trusted-host pypi.org ... -r requirements-automation.txt
 # ============================================================
-# pywinauto
-# pynput
-# psutil
-# playwright
+pywinauto
+pynput
+psutil
+playwright
 playwright-stealth
 # pystray
 Pillow

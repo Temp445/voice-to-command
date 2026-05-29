@@ -46,6 +46,8 @@ async def handle_open_website(url: str = "", **_) -> str:
     from automation.browser.browser_controller import BrowserController
     bc = BrowserController()
     url = url.strip()
+    if not url:
+        return "Please specify a website to open."
     # Append .com if it's just a raw name without domain or protocol
     if "." not in url and not url.startswith("http"):
         url = url + ".com"

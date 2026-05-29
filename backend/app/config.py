@@ -42,7 +42,7 @@ class Settings(BaseSettings):
     database_url: str = "sqlite+aiosqlite:///./ace_local.db"
 
     # --- Voice ---
-    wake_word: str = "hey ace"
+    wake_word: str = "alexa"  # Must match OWW model: hey_jarvis, alexa, hey_mycroft, hey_rhasspy
     whisper_model: str = "base"  # tiny | base | small | medium
 
     # --- TTS ---

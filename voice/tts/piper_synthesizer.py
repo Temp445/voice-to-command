@@ -23,7 +23,14 @@ class PiperSynthesizer(TTSProvider):
     """
 
     def __init__(self):
-        self.models_dir = Path(settings.piper_models_dir)
+        models_dir_path = Path(settings.piper_models_dir)
+        if not models_dir_path.is_absolute():
+            # __file__ = voice-to-command-main/voice/tts/piper_synthesizer.py
+            # .parent.parent.parent = voice-to-command-main/ (project root)
+            project_root = Path(__file__).resolve().parent.parent.parent
+            self.models_dir = project_root / models_dir_path
+        else:
+            self.models_dir = models_dir_path
         self.voice = settings.piper_voice
         self.models_dir.mkdir(parents=True, exist_ok=True)
 
