@@ -1606,5 +1606,11 @@
     "exe_name": "MicrosoftEdgeUpdateSetup_X86_1.3.237.7.exe",
     "path": "C:\\Program Files (x86)\\Microsoft\\EdgeUpdate\\Install\\{4E8B22D5-4041-463C-9CC5-FB5043CDDC23}\\MicrosoftEdgeUpdateSetup_X86_1.3.237.7.exe",
     "source": "process"
+  },
+  "werfault": {
+    "name": "WerFault",
+    "exe_name": "WerFault.exe",
+    "path": "C:\\Windows\\System32\\WerFault.exe",
+    "source": "process"
   }
 }

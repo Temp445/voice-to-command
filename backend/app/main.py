@@ -24,6 +24,66 @@ from app.websocket.manager import ws_manager
 from app.services.intent_registry import register_all_intents
 
 
+# ─── LLM .env Bootstrap ──────────────────────────────────────────────────────
+
+def _init_llm_from_env() -> None:
+    """
+    Initialize the LLM service from environment variables / .env file.
+    This allows testing without the Settings UI.
+    Priority: DB settings (set later in lifespan) > .env values.
+    """
+    from app.services.llm.llm_service import llm_service
+
+    # Map provider name → its API key field in settings
+    key_map = {
+        "groq":     settings.groq_api_key,
+        "openai":   settings.openai_api_key,
+        "gemini":   settings.google_api_key,
+        "claude":   settings.anthropic_api_key,
+        "deepseek": settings.deepseek_api_key,
+    }
+
+    # Auto-detect provider if not explicitly set
+    provider = settings.llm_provider.lower().strip()
+    if not provider:
+        for name, key in key_map.items():
+            if key.strip():
+                provider = name
+                break
+
+    if not provider:
+        logger.info("ℹ️  No LLM provider configured in .env — AI features disabled until set in Settings.")
+        return
+
+    api_key = key_map.get(provider, "").strip()
+    if not api_key:
+        logger.warning(f"⚠️  LLM provider '{provider}' set but no API key found in .env")
+        return
+
+    # Use default model if not specified
+    default_models = {
+        "groq":     "llama-3.3-70b-versatile",
+        "openai":   "gpt-4o-mini",
+        "gemini":   "gemini-2.0-flash",
+        "claude":   "claude-haiku-3-5",
+        "deepseek": "deepseek-chat",
+    }
+    model = settings.llm_model.strip() or default_models.get(provider, "")
+
+    try:
+        llm_service.set_provider(
+            provider_name=provider,
+            api_key=api_key,
+            model=model,
+            temperature=settings.llm_temperature,
+            mode=settings.llm_mode,
+            enabled=True,
+        )
+        logger.info(f"✅ LLM initialized from .env: {provider} / {model} (mode={settings.llm_mode})")
+    except Exception as e:
+        logger.warning(f"⚠️  Failed to initialize LLM from .env: {e}")
+
+
 # ─── Lifespan ────────────────────────────────────────────────────────────────
 
 @asynccontextmanager
@@ -59,6 +119,25 @@ async def lifespan(app: FastAPI):
 
     register_all_intents()
     logger.info("✅ Command intents registered")
+
+    # ── Initialize LLM from .env (quick-start without UI) ────────────────────
+    _init_llm_from_env()
+
+    # ── Restore LLM Settings from DB (overrides .env if DB has a key set) ────
+    try:
+        from sqlalchemy import select
+        from app.models import UserSettings
+        from app.database import AsyncSessionLocal
+        from app.routers.settings_router import _apply_llm_settings
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(select(UserSettings).limit(1))
+            s = result.scalar_one_or_none()
+            if s and s.llm_api_key_encrypted:
+                _apply_llm_settings(s)
+                logger.info("✅ LLM settings restored from database")
+    except Exception as e:
+        logger.warning(f"⚠️  Could not restore LLM settings from DB: {e}")
+
 
     # Start the voice pipeline in the backend process
     try:
@@ -137,6 +216,7 @@ register_exception_handlers(app)
 # ─── Routers ─────────────────────────────────────────────────────────────────
 
 from app.routers import auth, voice, commands, workflows, automation, settings_router  # noqa: E402
+from app.routers import llm_router  # noqa: E402
 
 app.include_router(auth.router,          prefix="/api/auth",       tags=["Auth"])
 app.include_router(voice.router,         prefix="/api/voice",      tags=["Voice"])
@@ -144,6 +224,7 @@ app.include_router(commands.router,      prefix="/api/commands",   tags=["Comman
 app.include_router(workflows.router,     prefix="/api/workflows",  tags=["Workflows"])
 app.include_router(automation.router,    prefix="/api/automation", tags=["Automation"])
 app.include_router(settings_router.router, prefix="/api/settings", tags=["Settings"])
+app.include_router(llm_router.router,    prefix="/api/llm",        tags=["AI Assistant"])
 
 
 # ─── WebSocket ───────────────────────────────────────────────────────────────

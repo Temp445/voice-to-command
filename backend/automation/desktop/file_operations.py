@@ -148,12 +148,15 @@ class FileOperations:
         except Exception as e:
             return f"Found multiple files but failed to open: {e}"
 
-    def create_folder(self, folder_name: str) -> str:
+    def create_folder(self, folder_name: str, drive: str | None = None) -> str:
         """Create a folder. Defaults to Desktop if no absolute path is given."""
         folder_name = folder_name.strip("'\" ")
         
+        # If a drive is provided, create it there (e.g., E:\demo45)
+        if drive:
+            target_path = Path(f"{drive.upper()}:\\") / folder_name
         # If it's just a folder name without path separators, put it on Desktop
-        if "\\" not in folder_name and "/" not in folder_name:
+        elif "\\" not in folder_name and "/" not in folder_name:
             target_path = Path.home() / "Desktop" / folder_name
         else:
             target_path = Path(folder_name)

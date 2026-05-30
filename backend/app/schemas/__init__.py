@@ -39,6 +39,13 @@ class SettingsUpdate(BaseModel):
     browser_type: str | None = None
     startup_on_boot: bool | None = None
     minimize_to_tray: bool | None = None
+    # LLM
+    llm_enabled: bool | None = None
+    llm_provider: str | None = None
+    llm_model: str | None = None
+    llm_api_key: str | None = None        # raw; encrypted before storage
+    llm_temperature: float | None = None
+    llm_mode: str | None = None           # "fallback" | "always_on"
 
 
 class SettingsResponse(BaseModel):
@@ -51,6 +58,13 @@ class SettingsResponse(BaseModel):
     startup_on_boot: bool
     minimize_to_tray: bool
     gtts_configured: bool   # True if API key is set
+    # LLM
+    llm_enabled: bool
+    llm_provider: str
+    llm_model: str
+    llm_configured: bool    # True if API key is set
+    llm_temperature: float
+    llm_mode: str
 
 
 # ─── Commands ────────────────────────────────────────────────────────────────
@@ -139,3 +153,31 @@ class AutomationLogResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+# ─── LLM / AI Chat ───────────────────────────────────────────────────────────
+
+class LLMChatRequest(BaseModel):
+    message: str = Field(min_length=1)
+    stream: bool = False
+
+
+class LLMChatResponse(BaseModel):
+    reply: str
+    provider: str
+    model: str
+
+
+class LLMStatusResponse(BaseModel):
+    enabled: bool
+    provider: str
+    model: str
+    mode: str
+    ready: bool
+    history_length: int
+
+
+class LLMProviderInfo(BaseModel):
+    id: str
+    name: str
+    models: list[str]

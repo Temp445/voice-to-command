@@ -33,7 +33,7 @@ class WindowManager:
         return aliases.get(title.lower().strip(), title.lower().strip())
 
     def _find_window_by_title(self, title_substring: str):
-        title_substring = self._resolve_title_alias(title_substring)
+        title_substring = self._resolve_title_alias(title_substring).replace("the ", "").strip()
         for win in Desktop(backend="uia").windows():
             try:
                 title = win.window_text()
@@ -57,6 +57,20 @@ class WindowManager:
             win.maximize()
             logger.info(f"Maximized window matching: {title_substring}")
             return True
+        return False
+
+    def focus_by_title(self, title_substring: str) -> bool:
+        win = self._find_window_by_title(title_substring)
+        if win:
+            try:
+                # Connect to the app's process to ensure we focus the active top-level window (e.g., a modal dialog)
+                app = pywinauto.Application(backend="uia").connect(process=win.process_id())
+                top_win = app.top_window()
+                top_win.set_focus()
+                logger.info(f"Focused top window of application matching: {title_substring}")
+                return True
+            except Exception as e:
+                logger.warning(f"Could not focus {title_substring}: {e}")
         return False
 
     def minimize_active(self) -> None:

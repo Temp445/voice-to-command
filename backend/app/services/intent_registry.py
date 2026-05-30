@@ -68,6 +68,123 @@ async def handle_close_folder(path: str = "", **_) -> str:
     return f"Folder '{folder_name}' is not currently open."
 
 
+async def handle_open_project(project_name: str = "", **_) -> str:
+    from automation.desktop.file_indexer import get_indexer
+    from app.services.context_manager import context_manager
+    import subprocess
+    import os
+    
+    clean = project_name.replace("project", "").strip()
+    indexer = get_indexer()
+    results = indexer.search(clean, is_folder=True, limit=5)
+    
+    if not results:
+        return f"Could not find a project folder named {clean}"
+        
+    project_path = results[0]["path"]
+    context_manager.last_project_path = project_path
+    
+    # Open in VS Code (assuming code is in PATH)
+    try:
+        subprocess.Popen(["code", project_path], cwd=project_path, shell=True)
+        return f"Opened project '{results[0]['name']}' in VS Code"
+    except Exception as e:
+        return f"Found project but failed to open in VS Code: {e}"
+
+
+async def handle_create_project(project_type: str = "", project_name: str = "", **_) -> str:
+    from app.services.context_manager import context_manager
+    import subprocess
+    import os
+    
+    # Clean inputs
+    project_type = project_type.lower().strip() if project_type else ""
+    project_name = project_name.lower().strip() if project_name else "my-app"
+    project_name = project_name.replace(" ", "-") # normalize for npm
+    
+    desktop = os.path.expanduser("~/Desktop")
+    target_path = os.path.join(desktop, project_name)
+    
+    original_project_name = project_name
+    counter = 1
+    while os.path.exists(target_path):
+        project_name = f"{original_project_name}-{counter}"
+        target_path = os.path.join(desktop, project_name)
+        counter += 1
+    # Determine scaffolding command
+    if "react" in project_type or "vite" in project_type:
+        scaffold_cmd = f"npm create vite@latest {project_name} --yes -- --template react"
+        post_cmd = "npm install"
+    elif "next" in project_type:
+        scaffold_cmd = f"npx create-next-app@latest {project_name} --yes --use-npm --eslint --tailwind --app"
+        post_cmd = "" # Next.js does npm install automatically
+    else:
+        # Generic fallback
+        scaffold_cmd = f"mkdir {project_name}"
+        post_cmd = ""
+        
+    try:
+        # 1. Run the fast scaffold command
+        # 2. IMMEDIATELY open VS Code so the user isn't waiting
+        # 3. CD into the directory and run the slow `npm install` (so the user has a fully working project)
+        full_cmd = f"echo Scaffolding {project_type} project (downloading template)... && {scaffold_cmd} && echo Opening VS Code... && code {project_name}"
+        if post_cmd:
+            full_cmd += f" && echo. && echo Installing dependencies from npm (this may take 2-5 minutes depending on network)... && cd {project_name} && {post_cmd}"
+            
+        full_cmd += " && echo. && echo Finished! You can now close this terminal."
+        
+        # Spawn terminal to show progress
+        subprocess.Popen(f"start cmd /k \"cd /d {desktop} && {full_cmd}\"", shell=True)
+        
+        # Track context
+        context_manager.last_project_path = target_path
+        
+        return f"Creating a new {project_type} project named {project_name} on your Desktop..."
+    except Exception as e:
+        return f"Failed to create project: {e}"
+
+
+async def handle_run_dev_server(cmd: str = "", **_) -> str:
+    from app.services.context_manager import context_manager
+    import subprocess
+    import os
+    
+    if not context_manager.last_project_path:
+        return "I don't know which project to run. Please open a project first."
+        
+    project_path = context_manager.last_project_path
+    
+    # Simple detection logic
+    if os.path.exists(os.path.join(project_path, "package.json")):
+        start_cmd = "npm run dev"
+        context_manager.last_dev_server_url = "http://localhost:3000"
+    elif os.path.exists(os.path.join(project_path, "requirements.txt")) or os.path.exists(os.path.join(project_path, "main.py")):
+        start_cmd = "python main.py" # Simple fallback
+        context_manager.last_dev_server_url = "http://localhost:8000"
+    else:
+        start_cmd = cmd or "npm start"
+        
+    try:
+        # We spawn in a new console window so the user can see the dev server
+        subprocess.Popen(f"start cmd /k \"cd /d {project_path} && {start_cmd}\"", shell=True)
+        return f"Started dev server in {os.path.basename(project_path)}"
+    except Exception as e:
+        return f"Failed to start dev server: {e}"
+
+
+async def handle_open_dev_server(**_) -> str:
+    from app.services.context_manager import context_manager
+    from automation.browser.browser_controller import BrowserController
+    
+    url = context_manager.last_dev_server_url
+    if not url:
+        return "I don't have a dev server URL tracked in context."
+        
+    bc = BrowserController()
+    await bc.navigate(url)
+    return f"Opened application in browser at {url}"
+
+
 async def handle_search_file(file_name: str = "", **_) -> str:
     from automation.desktop.file_operations import FileOperations
     return FileOperations().search_file(file_name.strip())
@@ -197,10 +314,14 @@ async def handle_system_restart(**_) -> str:
     return "System restarting"
 
 
-async def handle_type_text(text: str = "", **_) -> str:
+async def handle_type_text(text: str = "", app_name: str = "", **_) -> str:
     from automation.input.keyboard_controller import KeyboardController
+    if app_name:
+        from automation.desktop.window_manager import WindowManager
+        WindowManager().focus_by_title(app_name)
+    import asyncio; await asyncio.sleep(0.5)
     KeyboardController().type_text(text.strip())
-    return f"Typed: {text}"
+    return f"Typed: {text}{f' in {app_name}' if app_name else ''}"
 
 
 async def handle_lock_screen(**_) -> str:
@@ -243,10 +364,190 @@ async def handle_scroll_down(**_) -> str:
     return "Scrolled down"
 
 
-async def handle_submit(**_) -> str:
+async def handle_submit(app_name: str = "", **_) -> str:
+    import asyncio
+    import pywinauto
+    from automation.desktop.window_manager import WindowManager
     from automation.input.keyboard_controller import KeyboardController
-    KeyboardController().press_enter()
-    return "Submitted"
+
+    typed_via_pywinauto = False
+    if app_name:
+        try:
+            win = WindowManager()._find_window_by_title(app_name)
+            if win:
+                app = pywinauto.Application(backend="uia").connect(process=win.process_id())
+                top_win = app.top_window()
+                top_win.set_focus()
+                top_win.type_keys("{ENTER}")
+                typed_via_pywinauto = True
+        except Exception:
+            pass
+            
+    if not typed_via_pywinauto:
+        if app_name:
+            WindowManager().focus_by_title(app_name)
+        await asyncio.sleep(0.5)
+        KeyboardController().press_enter()
+        
+    return f"Submitted {f'in {app_name}' if app_name else ''}"
+
+
+async def handle_dont_save(app_name: str = "", **_) -> str:
+    if app_name:
+        from automation.desktop.app_controller import AppController
+        await AppController().close_application(app_name, force=True)
+        return f"Closed {app_name} without saving"
+    else:
+        from automation.input.keyboard_controller import KeyboardController
+        KeyboardController().press("n")
+        return "Pressed Don't Save"
+
+
+async def handle_save(app_name: str = "", **_) -> str:
+    from automation.input.keyboard_controller import KeyboardController
+    if app_name:
+        from automation.desktop.window_manager import WindowManager
+        WindowManager().focus_by_title(app_name)
+    import asyncio; await asyncio.sleep(0.5)
+    KeyboardController().save()
+    return f"PENDING_FILENAME: Pressed Save{f' in {app_name}' if app_name else ''}. What should I name the file?"
+
+
+async def handle_set_filename(text: str = "", app_name: str = "", **_) -> str:
+    from automation.input.keyboard_controller import KeyboardController
+    import asyncio
+    import pywinauto
+    from automation.desktop.window_manager import WindowManager
+    
+    typed_via_pywinauto = False
+    top_win = None
+    
+    try:
+        desktop = pywinauto.Desktop(backend="win32")
+        
+        # Poll for up to 1.5 seconds to allow the dialog to spawn (crucial for compound LLM commands)
+        dialogs = []
+        for _ in range(15):
+            dialogs = [w for w in desktop.windows() if w.window_text() in ("Save As", "Save", "Open", "Confirm Save As")]
+            if dialogs:
+                break
+            await asyncio.sleep(0.1)
+            
+        if dialogs:
+            top_win = dialogs[0]
+            top_win.set_focus()
+            top_win.type_keys(text.strip() + "{ENTER}", with_spaces=True)
+            typed_via_pywinauto = True
+        elif app_name:
+            # Fallback to application's top window via uia if no explicit dialog is found
+            win = WindowManager()._find_window_by_title(app_name)
+            if win:
+                app = pywinauto.Application(backend="uia").connect(process=win.process_id())
+                top_win = app.top_window()
+                top_win.set_focus()
+                top_win.type_keys(text.strip() + "{ENTER}", with_spaces=True)
+                typed_via_pywinauto = True
+    except Exception as e:
+        pass
+            
+    if not typed_via_pywinauto:
+        # Fallback to physical keyboard if pywinauto failed
+        if app_name:
+            WindowManager().focus_by_title(app_name)
+        await asyncio.sleep(0.5)
+        KeyboardController().type_text(text.strip())
+        await asyncio.sleep(0.3)
+        KeyboardController().press_enter()
+        
+    await asyncio.sleep(0.8) # Wait for potential conflict dialog to appear
+    
+    # Check for conflict dialog
+    conflict_found = False
+    try:
+        # Check if a "Confirm Save As" dialog popped up
+        desktop = pywinauto.Desktop(backend="win32")
+        conflict_dialogs = [w for w in desktop.windows() if "confirm save as" in w.window_text().lower()]
+        if conflict_dialogs:
+            conflict_found = True
+            top_win = conflict_dialogs[0]
+            
+        if not conflict_found and app_name and top_win:
+            # Re-fetch top window in case a new modal appeared in UIA
+            app = pywinauto.Application(backend="uia").connect(process=win.process_id())
+            new_top = app.top_window()
+            title = new_top.window_text().lower()
+            if "confirm" in title or "already exists" in title or "replace" in title:
+                conflict_found = True
+    except Exception:
+        pass
+        
+    if conflict_found:
+        KeyboardController().press_escape() # Cancel the conflict dialog
+        return f"PENDING_FILENAME: A file named '{text}' already exists. Please tell me a different file name."
+        
+    return f"File saved as '{text}'."
+
+async def handle_cancel(app_name: str = "", **_) -> str:
+    import asyncio
+    import pywinauto
+    from automation.desktop.window_manager import WindowManager
+    from automation.input.keyboard_controller import KeyboardController
+
+    typed_via_pywinauto = False
+    
+    try:
+        # 1. Try to find common Win32 dialogs globally (Save As, Open, Confirm, Notepad warnings)
+        desktop = pywinauto.Desktop(backend="win32")
+        # Notepad warning dialog is usually titled "Notepad"
+        dialogs = [w for w in desktop.windows() if w.window_text() in ("Save As", "Open", "Confirm Save As", "Notepad", app_name, app_name.title())]
+        
+        if dialogs:
+            # Sort by window area to find the smallest one (dialogs are smaller than main apps)
+            dialogs.sort(key=lambda w: w.rectangle().width() * w.rectangle().height())
+            top_win = dialogs[0]
+            top_win.set_focus()
+            top_win.type_keys("{ESC}")
+            typed_via_pywinauto = True
+            
+        if not typed_via_pywinauto and app_name:
+            # 2. Fallback to UIA top window of the process
+            win = WindowManager()._find_window_by_title(app_name)
+            if win:
+                app = pywinauto.Application(backend="uia").connect(process=win.process_id())
+                top_win = app.top_window()
+                top_win.set_focus()
+                top_win.type_keys("{ESC}")
+                typed_via_pywinauto = True
+    except Exception:
+        pass
+            
+    if not typed_via_pywinauto:
+        if app_name:
+            WindowManager().focus_by_title(app_name)
+        await asyncio.sleep(0.5)
+        KeyboardController().press_escape()
+        
+    return f"Canceled {f'in {app_name}' if app_name else ''}"
+
+
+async def handle_ask_llm(question: str = "", **_) -> str:
+    from app.services.llm.llm_service import llm_service
+    question = question.strip()
+    if not llm_service.is_ready:
+        return "AI assistant is not configured. Please go to Settings → AI Assistant to set up a provider."
+    return await llm_service.chat(question)
+
+
+async def handle_ask_and_type(question: str = "", **_) -> str:
+    """Ask the LLM to draft content, then physically type it via the keyboard."""
+    from app.services.llm.llm_service import llm_service
+    from automation.input.keyboard_controller import KeyboardController
+    question = question.strip()
+    if not llm_service.is_ready:
+        return "AI assistant is not configured. Please go to Settings → AI Assistant."
+    generated = await llm_service.chat(question)
+    KeyboardController().type_text(generated)
+    return f"Drafted and typed: {generated[:80]}{'...' if len(generated) > 80 else ''}"
 
 
 # ─── Register All Intents ────────────────────────────────────────────────────
@@ -319,6 +620,50 @@ def register_all_intents() -> None:
             description="Search for or open a file on the computer",
             examples=["search for invoice pdf", "find the file report.docx", "open the pdf budget spreadsheet"],
             param_names=["file_name"],
+        ),
+        Intent(
+            name="open_project",
+            patterns=[
+                r"open\s+(?:the\s+)?(?:my\s+)?(?P<project_name>.+?)\s+project",
+                r"open\s+(?:the\s+)?(?:my\s+)?project\s+(?P<project_name>.+)",
+            ],
+            handler=handle_open_project,
+            description="Open a software project in VS Code",
+            examples=["open my react project", "open the website project"],
+            param_names=["project_name"],
+        ),
+        Intent(
+            name="create_project",
+            patterns=[
+                r"create\s+(?:a\s+)?(?:the\s+)?(?:new\s+)?(?P<project_type>\w+)\s+project(?:\s+(?:called|named)\s+(?P<project_name>.+))?",
+                r"make\s+(?:a\s+)?(?:the\s+)?(?:new\s+)?(?P<project_type>\w+)\s+project(?:\s+(?:called|named)\s+(?P<project_name>.+))?",
+            ],
+            handler=handle_create_project,
+            description="Create a new software project (like React, Next.js) on the Desktop",
+            examples=["create a new react project", "create a next project called my website"],
+            param_names=["project_type", "project_name"],
+        ),
+        Intent(
+            name="run_dev_server",
+            patterns=[
+                r"run\s+(?:the\s+)?(?:dev\s+)?(?:server|project|app)",
+                r"start\s+(?:the\s+)?(?:dev\s+)?(?:server|project|app)",
+                r"run\s+it",
+                r"start\s+it"
+            ],
+            handler=handle_run_dev_server,
+            description="Run the development server for the currently active project",
+            examples=["run the dev server", "start the project", "run it"],
+        ),
+        Intent(
+            name="open_dev_server",
+            patterns=[
+                r"open\s+(?:the\s+)?(?:dev\s+)?(?:server|app|project)\s+(?:in\s+)?(?:the\s+)?browser",
+                r"open\s+it\s+(?:in\s+)?(?:the\s+)?browser",
+            ],
+            handler=handle_open_dev_server,
+            description="Open the currently running dev server in the web browser",
+            examples=["open it in browser", "open the dev server in the browser"],
         ),
         Intent(
             name="open_app",
@@ -491,12 +836,26 @@ def register_all_intents() -> None:
             examples=["restart", "restart the computer", "reboot"],
         ),
         Intent(
+            name="set_filename",
+            patterns=[
+                r"(?:enter|set|give)\s+(?:the\s+)?(?:file\s+name|name)\s+(?:to\s+)?(?:as\s+)?(?P<text>.+)",
+                r"file\s+name\s+(?P<text>.+)",
+            ],
+            handler=handle_set_filename,
+            description="Type a file name and confirm the save",
+            examples=["file name document1", "set the file name to report"],
+            param_names=["text", "app_name"],
+        ),
+        Intent(
             name="type_text",
-            patterns=[r"type\s+(?P<text>.+)", r"write\s+(?P<text>.+)"],
+            patterns=[
+                r"type\s+(?:the\s+)?(?:text\s+)?(?P<text>.+)",
+                r"write\s+(?P<text>.+)",
+            ],
             handler=handle_type_text,
-            description="Type text using the keyboard",
-            examples=["type hello world", "write my name", "type this sentence"],
-            param_names=["text"],
+            description="Type specific text using the keyboard",
+            examples=["type hello world", "type my email address"],
+            param_names=["text", "app_name"],
         ),
         Intent(
             name="lock_screen",
@@ -549,11 +908,71 @@ def register_all_intents() -> None:
             examples=["scroll down", "go down"],
         ),
         Intent(
+            name="ask_llm",
+            patterns=[
+                r"(?:ask\s+(?:ai|jarvis|ace)|tell\s+me)\s+(?P<question>.+)",
+                r"(?:what\s+(?:is|are|does|do)|how\s+(?:do|does|can|to))\s+(?P<question>.+)\??",
+                r"(?:explain|describe|summarize)\s+(?P<question>.+)",
+            ],
+            handler=handle_ask_llm,
+            description="Ask the AI assistant a question or have a conversation",
+            examples=["tell me a joke", "ask ai what is Python", "explain machine learning"],
+            param_names=["question"],
+        ),
+        Intent(
+            name="ask_and_type",
+            patterns=[
+                r"(?:draft|write|compose|generate)\s+(?:and\s+type\s+)?(?P<question>(?:an?\s+)?(?:email|message|letter|report|code|essay|reply|response).+)",
+            ],
+            handler=handle_ask_and_type,
+            description="Ask AI to draft content and physically type it in the active window",
+            examples=["draft an email asking for Friday off", "write a professional response"],
+            param_names=["question"],
+        ),
+        Intent(
             name="submit",
-            patterns=[r"submit", r"press\s+enter", r"enter"],
+            patterns=[
+                r"(?:submit|press\s+enter|enter)\s+(?:in\s+)?(?:the\s+)?(?P<app_name>.+)",
+                r"submit", r"press\s+enter", r"enter"
+            ],
             handler=handle_submit,
             description="Press the Enter key",
-            examples=["submit", "press enter", "enter"],
+            examples=["submit", "press enter", "submit in notepad"],
+            param_names=["app_name"],
+        ),
+        Intent(
+            name="dont_save",
+            patterns=[
+                r"(?:don't|do\s+not)\s+save\s+(?:in\s+)?(?:the\s+)?(?P<app_name>.+)",
+                r"don't\s+save", r"do\s+not\s+save"
+            ],
+            handler=handle_dont_save,
+            description="Press 'N' to select Don't Save in dialogs",
+            examples=["don't save", "do not save", "don't save in notepad"],
+            param_names=["app_name"],
+        ),
+        Intent(
+            name="save_file",
+            patterns=[
+                r"save\s+(?:the\s+)?(?:file|document|changes)\s+(?:in\s+)?(?:the\s+)?(?P<app_name>.+)",
+                r"save\s+(?:the\s+)?(?P<app_name>(?!file|document|changes).+)",
+                r"save\s+(?:the\s+)?(?:file|document|changes)?", r"save"
+            ],
+            handler=handle_save,
+            description="Press Ctrl+S or Enter to save",
+            examples=["save", "save file", "save the changes", "save the notepad"],
+            param_names=["app_name"],
+        ),
+        Intent(
+            name="cancel_dialog",
+            patterns=[
+                r"(?:cancel|escape|press\s+escape)\s+(?:in\s+)?(?:the\s+)?(?P<app_name>.+)",
+                r"cancel", r"escape", r"press\s+escape"
+            ],
+            handler=handle_cancel,
+            description="Press Escape to cancel a dialog",
+            examples=["cancel", "escape", "cancel in notepad"],
+            param_names=["app_name"],
         ),
     ]
 

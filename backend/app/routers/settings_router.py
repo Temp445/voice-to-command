@@ -9,6 +9,7 @@ from app.models import UserSettings
 from app.schemas import SettingsUpdate, SettingsResponse
 from app.core.security import encrypt_api_key, decrypt_api_key
 from app.websocket.manager import ws_manager
+from loguru import logger
 
 router = APIRouter()
 
@@ -25,9 +26,7 @@ async def _get_settings(db: AsyncSession) -> UserSettings:
     return s
 
 
-@router.get("", response_model=SettingsResponse)
-async def get_settings(db: AsyncSession = Depends(get_db)):
-    s = await _get_settings(db)
+def _build_response(s: UserSettings) -> SettingsResponse:
     return SettingsResponse(
         wake_word=s.wake_word,
         whisper_model=s.whisper_model,
@@ -38,7 +37,20 @@ async def get_settings(db: AsyncSession = Depends(get_db)):
         startup_on_boot=s.startup_on_boot,
         minimize_to_tray=s.minimize_to_tray,
         gtts_configured=bool(s.gtts_api_key_encrypted),
+        # LLM
+        llm_enabled=s.llm_enabled,
+        llm_provider=s.llm_provider,
+        llm_model=s.llm_model,
+        llm_configured=bool(s.llm_api_key_encrypted),
+        llm_temperature=s.llm_temperature,
+        llm_mode=s.llm_mode,
     )
+
+
+@router.get("", response_model=SettingsResponse)
+async def get_settings(db: AsyncSession = Depends(get_db)):
+    s = await _get_settings(db)
+    return _build_response(s)
 
 
 @router.patch("", response_model=SettingsResponse)
@@ -48,20 +60,38 @@ async def update_settings(body: SettingsUpdate, db: AsyncSession = Depends(get_d
     for field, value in body.model_dump(exclude_none=True).items():
         if field == "gtts_api_key" and value:
             s.gtts_api_key_encrypted = encrypt_api_key(value)
+        elif field == "llm_api_key" and value:
+            s.llm_api_key_encrypted = encrypt_api_key(value)
         elif hasattr(s, field):
             setattr(s, field, value)
 
-    # Broadcast settings change so voice pipeline hot-reloads
+    await db.commit()
+
+    # Hot-swap LLM provider if LLM settings changed
+    if any(f in body.model_dump(exclude_none=True) for f in ("llm_provider", "llm_model", "llm_api_key", "llm_enabled", "llm_mode", "llm_temperature")):
+        _apply_llm_settings(s)
+
+    # Broadcast voice pipeline hot-reload signal
     await ws_manager.broadcast("settings_updated", {"tts_provider": s.tts_provider, "wake_word": s.wake_word})
 
-    return SettingsResponse(
-        wake_word=s.wake_word,
-        whisper_model=s.whisper_model,
-        tts_provider=s.tts_provider,
-        piper_voice=s.piper_voice,
-        theme=s.theme,
-        browser_type=s.browser_type,
-        startup_on_boot=s.startup_on_boot,
-        minimize_to_tray=s.minimize_to_tray,
-        gtts_configured=bool(s.gtts_api_key_encrypted),
-    )
+    return _build_response(s)
+
+
+def _apply_llm_settings(s: UserSettings) -> None:
+    """Hot-swap the LLM provider based on current settings."""
+    from app.services.llm.llm_service import llm_service
+    if not s.llm_enabled or not s.llm_api_key_encrypted:
+        llm_service.disable()
+        return
+    try:
+        api_key = decrypt_api_key(s.llm_api_key_encrypted)
+        llm_service.set_provider(
+            provider_name=s.llm_provider,
+            api_key=api_key,
+            model=s.llm_model,
+            temperature=s.llm_temperature,
+            mode=s.llm_mode,
+            enabled=True,
+        )
+    except Exception as e:
+        logger.error(f"Failed to apply LLM settings: {e}")

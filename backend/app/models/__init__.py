@@ -85,6 +85,14 @@ class UserSettings(Base):
     startup_on_boot: Mapped[bool] = mapped_column(Boolean, default=True)
     minimize_to_tray: Mapped[bool] = mapped_column(Boolean, default=True)
 
+    # LLM / AI Assistant
+    llm_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    llm_provider: Mapped[str] = mapped_column(String(30), default="groq")
+    llm_model: Mapped[str] = mapped_column(String(100), default="llama-3.3-70b-versatile")
+    llm_api_key_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
+    llm_temperature: Mapped[float] = mapped_column(default=0.7)
+    llm_mode: Mapped[str] = mapped_column(String(20), default="fallback")  # fallback | always_on
+
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
     user: Mapped["User"] = relationship("User", back_populates="settings")
 

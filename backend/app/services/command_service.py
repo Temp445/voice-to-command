@@ -48,6 +48,7 @@ class CommandService:
     def __init__(self):
         self._intents: list[Intent] = []
         self._custom_shortcuts: dict[str, str] = {}  # phrase → action_type
+        self.last_target_app: str = ""
 
     def register(self, intent: Intent) -> None:
         self._intents.append(intent)
@@ -64,8 +65,34 @@ class CommandService:
         text = text.strip()
         start = time.perf_counter()
 
+        # 0. Check for conversational pending actions (e.g. waiting for a filename)
+        if hasattr(self, "_pending_action") and self._pending_action:
+            pending = self._pending_action
+            self._pending_action = None
+            
+            if pending.get("intent") == "set_filename":
+                if text.lower() in ("cancel", "stop", "nevermind", "abort"):
+                    intent_name = "cancel_dialog"
+                    params = {"app_name": pending["params"].get("app_name", "")}
+                else:
+                    intent_name = "set_filename"
+                    params = {"text": text, "app_name": pending["params"].get("app_name", "")}
+                    
+                # Skip normal classification and go straight to execution
+                return await self._execute_intent(intent_name, params, text, start)
+
         # 1. Attempt to split into compound commands (e.g., "open notepad and type hello")
-        parts = re.split(r'(?i)\s+(?:and|then)\s+', text)
+        # Check for explicit conjunctions first
+        if re.search(r'(?i)\s+(?:and|then)\s+', text):
+            parts = re.split(r'(?i)\s+(?:and|then)\s+', text)
+        else:
+            # Handle run-on sentences WITHOUT conjunctions like "open notepad type hello"
+            run_on_match = re.match(r"^(open\s+.+?)\s+(type\s+.+|write\s+.+|search\s+.+|close\s+.+|maximize\s+.+|minimize\s+.+|create\s+.+)$", text, re.IGNORECASE)
+            if run_on_match:
+                parts = [run_on_match.group(1), run_on_match.group(2)]
+            else:
+                parts = [text]
+            
         if len(parts) > 1:
             valid_intents = []
             for part in parts:
@@ -82,12 +109,12 @@ class CommandService:
             if len(valid_intents) == len(parts):
                 results = []
                 for i_name, params in valid_intents:
-                    intent = self._get_intent(i_name)
-                    if not intent:
-                        continue
                     try:
-                        res = await intent.handler(**params)
-                        results.append(str(res))
+                        # Use _execute_intent to ensure state tracking and auto-injection works for each sub-command
+                        res_dict = await self._execute_intent(i_name, params, text, start)
+                        results.append(str(res_dict.get("result", "")))
+                        if res_dict.get("status") == "failed":
+                            break
                     except Exception as e:
                         logger.error(f"Handler '{i_name}' raised: {e}")
                         results.append(f"Failed '{i_name}': {e}")
@@ -110,8 +137,16 @@ class CommandService:
             params: dict[str, Any] = {}
             self._pending_action = None
         else:
-            # 3. Regex pattern matching (new commands override pending state)
-            intent_name, params = self._regex_match(text)
+            # 3. Pronoun detection: If the command contains pronouns, bypass native regex to force LLM context resolution.
+            from app.services.llm.llm_service import llm_service
+            has_pronouns = bool(re.search(r'\b(it|this|that|them|here)\b', text, re.IGNORECASE))
+            
+            if has_pronouns and llm_service.is_ready:
+                intent_name = None
+                params = {}
+                logger.info("Pronouns detected. Bypassing native regex to allow LLM context resolution.")
+            else:
+                intent_name, params = self._regex_match(text)
 
             # 4. Handle pending disambiguation if no new regex matched
             if not intent_name and getattr(self, "_pending_action", None):
@@ -129,27 +164,76 @@ class CommandService:
                     intent_name, params = self._fuzzy_match(text)
 
         if not intent_name:
+            # 6. LLM fallback — classify intent via AI when all else fails
+            from app.services.llm.llm_service import llm_service
+            if llm_service.is_ready and llm_service._mode == "fallback":
+                llm_result = await llm_service.classify_intent(text, self.list_intents())
+                if llm_result:
+                    intent_name = llm_result.get("intent")
+                    # Merge any parameters the LLM contextually extracted
+                    params.update(llm_result.get("params", {}))
+                
+                if not intent_name:
+                    # Still no match — route to ask_llm for a conversational response
+                    intent_name = "ask_llm"
+                    params = {"question": text}
+
+        if not intent_name:
             logger.warning(f"No intent matched for: '{text}'")
-            return {
-                "intent": None,
-                "parameters": {},
-                "status": "failed",
-                "result": f"Sorry, I didn't understand: '{text}'",
-                "duration_ms": int((time.perf_counter() - start) * 1000),
-            }
-        # 5. Execute handler
+            # If LLM is in always_on mode but couldn't classify, still try ask_llm
+            from app.services.llm.llm_service import llm_service
+            if llm_service.is_ready and llm_service._mode == "always_on":
+                intent_name = "ask_llm"
+                params = {"question": text}
+            else:
+                return {
+                    "intent": None,
+                    "parameters": {},
+                    "status": "failed",
+                    "result": f"Sorry, I didn't understand: '{text}'",
+                    "duration_ms": int((time.perf_counter() - start) * 1000),
+                }
+
+        # 7. Always-on mode: route every matched intent through LLM for richer response
+        from app.services.llm.llm_service import llm_service
+        # Context is now added AFTER execution to ensure we pair it with the exact system result.
+
+        return await self._execute_intent(intent_name, params, text, start)
+
+    async def _execute_intent(self, intent_name: str, params: dict, text: str, start: float) -> dict[str, Any]:
+        # Execute handler
         intent = self._get_intent(intent_name)
         if not intent:
             return {"intent": intent_name, "parameters": params, "status": "failed",
                     "result": "Intent handler not found", "duration_ms": int((time.perf_counter() - start) * 1000)}
 
+        # Track the last targeted application for focus restoration in follow-up commands
+        app_target = params.get("app") or params.get("app_name")
+        if app_target:
+            self.last_target_app = app_target
+
+        # Auto-inject last target app for dialog commands if missing (solves Web UI focus stealing)
+        if intent_name in ("dont_save", "save_file", "cancel_dialog", "submit", "type_text", "set_filename") and not params.get("app_name"):
+            if getattr(self, "last_target_app", ""):
+                params["app_name"] = self.last_target_app
+
         try:
             result = await intent.handler(**params)
             duration_ms = int((time.perf_counter() - start) * 1000)
             
-            if isinstance(result, str) and result.startswith("MULTIPLE_MATCHES:"):
-                self._pending_action = {"intent": intent_name, "params": params}
-                result = result.replace("MULTIPLE_MATCHES:", "").strip()
+            if isinstance(result, str):
+                if result.startswith("MULTIPLE_MATCHES:"):
+                    self._pending_action = {"intent": intent_name, "params": params}
+                    result = result.replace("MULTIPLE_MATCHES:", "").strip()
+                elif result.startswith("PENDING_FILENAME:"):
+                    self._pending_action = {"intent": "set_filename", "params": {"app_name": params.get("app_name", "")}}
+                    result = result.replace("PENDING_FILENAME:", "").strip()
+                
+            # Record context for LLM history if successful
+            from app.services.llm.llm_service import llm_service
+            if llm_service.is_ready and intent_name not in ("ask_llm", "ask_and_type"):
+                llm_service.add_to_history("user", text)
+                llm_service.add_to_history("assistant", str(result))
                 
             return {
                 "intent": intent_name,
@@ -208,6 +292,7 @@ class CommandService:
                 "name": i.name,
                 "description": i.description,
                 "examples": i.examples,
+                "param_names": i.param_names,
             }
             for i in self._intents
         ]

@@ -32,6 +32,13 @@ python-dotenv
 # --- Command Parsing ---
 rapidfuzz
 
+# --- LLM Providers (install only the ones you use) ---
+groq
+openai
+google-generativeai
+anthropic
+# ollama  # (Phase 2 — local models)
+
 # --- Utilities ---
 aiofiles
 loguru

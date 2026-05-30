@@ -63,4 +63,11 @@ export const api = {
     request("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }),
   register: (email: string, password: string, display_name?: string) =>
     request("/auth/register", { method: "POST", body: JSON.stringify({ email, password, display_name }) }),
+    
+  // LLM / AI Assistant
+  getLLMProviders: () => request("/llm/providers"),
+  getLLMStatus:    () => request("/llm/status"),
+  testLLM:         () => request("/llm/test", { method: "POST" }),
+  chatLLM:         (message: string) => request("/llm/chat", { method: "POST", body: JSON.stringify({ message }) }),
+  clearLLMHistory: () => request("/llm/history", { method: "DELETE" }),
 };

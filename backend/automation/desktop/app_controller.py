@@ -143,6 +143,8 @@ class AppController:
         for exe in candidates:
             try:
                 if self._launch(exe):
+                    # Wait for the app to spawn and steal focus so subsequent typing commands don't miss
+                    await asyncio.sleep(2.0)
                     return f"Opening {clean}"
             except Exception as e:
                 logger.warning(f"Failed to launch '{exe}': {e}")
@@ -150,7 +152,7 @@ class AppController:
 
         raise AppNotFound(clean)
 
-    async def close_application(self, app_name: str) -> str:
+    async def close_application(self, app_name: str, force: bool = False) -> str:
         """Terminate a running application by name."""
         from automation.desktop.app_scanner import get_scanner
         scanner = get_scanner()
@@ -172,27 +174,58 @@ class AppController:
         if not exe_names:
             exe_names = [clean.lower() + ".exe", clean.lower()]
 
-        # 1. pywinauto graceful kill
-        for exe in exe_names:
+        # 1. Close via native Windows taskkill
+        # taskkill without /F sends a graceful WM_CLOSE signal.
+        # This natively triggers the "Save/Don't Save" prompt if there are unsaved changes.
+        # If force=True, /F forcefully terminates without saving.
+        for exe in set(exe_names):
             try:
-                app = pywinauto.Application(backend="uia").connect(path=exe)
-                app.kill()
-                killed.append(exe)
+                cmd = ["taskkill", "/IM", exe]
+                if force:
+                    cmd.insert(1, "/F")
+                result = subprocess.run(
+                    cmd,
+                    capture_output=True,
+                    text=True,
+                    creationflags=subprocess.CREATE_NO_WINDOW
+                )
+                if result.returncode == 0 or "SUCCESS" in result.stdout:
+                    killed.append(exe)
             except Exception:
                 pass
 
-        # 2. psutil fallback
-        for proc in psutil.process_iter(["name", "pid"]):
-            try:
-                proc_name = (proc.info["name"] or "").lower()
-                if proc_name in exe_names:
-                    proc.kill()
-                    killed.append(proc_name)
-            except (psutil.NoSuchProcess, psutil.AccessDenied):
-                pass
+        # 2. Pywinauto fallback for graceful close (if taskkill missed it)
+        if not killed:
+            for exe in set(exe_names):
+                try:
+                    app = pywinauto.Application(backend="uia").connect(path=exe)
+                    for win in app.windows():
+                        win.close()  # Graceful close
+                    killed.append(exe)
+                except Exception:
+                    pass
 
         if killed:
-            return f"Closed: {', '.join(set(killed))}"
+            # Wait briefly to let the OS process the close signal
+            await asyncio.sleep(0.6)
+            
+            # Check if any of the killed executables are still running
+            still_alive = False
+            for exe in set(killed):
+                for proc in psutil.process_iter(["name"]):
+                    if (proc.info["name"] or "").lower() == exe.lower():
+                        still_alive = True
+                        break
+                if still_alive:
+                    break
+
+            unique = set(k.replace(".exe", "").title() for k in killed)
+            app_names = ", ".join(unique)
+
+            if still_alive and not force:
+                return f"{app_names} has unsaved changes. Please say 'save', 'don't save', or 'cancel'."
+            return f"Closed {app_names}"
+            
         raise AppNotFound(clean)
 
     async def close_heavy_applications(self, threshold_mb: int = 500) -> str:

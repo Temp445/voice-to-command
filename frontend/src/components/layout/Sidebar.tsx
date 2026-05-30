@@ -3,12 +3,13 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion } from "framer-motion";
-import { LayoutDashboard, Terminal, GitBranch, Activity, Settings, Mic, ChevronLeft, ChevronRight, Zap } from "lucide-react";
+import { LayoutDashboard, Terminal, GitBranch, Activity, Settings, Mic, ChevronLeft, ChevronRight, Zap, Bot } from "lucide-react";
 import { useState } from "react";
 import { useVoiceStore } from "@/store/voiceStore";
 
 const NAV_ITEMS = [
   { href: "/",           icon: LayoutDashboard, label: "Dashboard"  },
+  { href: "/chat",       icon: Bot,              label: "Chat"       },
   { href: "/console",    icon: Terminal,         label: "Console"    },
   { href: "/workflows",  icon: GitBranch,        label: "Workflows"  },
   { href: "/automation", icon: Activity,         label: "Automation" },

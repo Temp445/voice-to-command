@@ -58,6 +58,18 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     log_file: str = "logs/ace.log"
 
+    # --- LLM Providers ---
+    # Set whichever provider you want to use. Only one is active at a time.
+    llm_provider: str = ""              # groq | openai | gemini | claude | deepseek
+    llm_model: str = ""                 # e.g. llama-3.3-70b-versatile, gpt-4o-mini
+    llm_mode: str = "fallback"          # fallback | always_on
+    llm_temperature: float = 0.7
+    groq_api_key: str = ""
+    openai_api_key: str = ""
+    google_api_key: str = ""
+    anthropic_api_key: str = ""
+    deepseek_api_key: str = ""
+
 
 @lru_cache
 def get_settings() -> Settings:
