@@ -27,7 +27,12 @@ export const useCommandStore = create<CommandStore>((set) => ({
   pending: null,
 
   addEntry: (entry) =>
-    set((s) => ({ history: [entry, ...s.history].slice(0, 500) })),
+    set((s) => {
+      if (s.history.some((e) => e.id === entry.id)) {
+        return { history: s.history.map((e) => (e.id === entry.id ? { ...e, ...entry } : e)) };
+      }
+      return { history: [entry, ...s.history].slice(0, 500) };
+    }),
 
   updateEntry: (id, patch) =>
     set((s) => ({

@@ -1564,5 +1564,47 @@
     "exe_name": "OpenWith.exe",
     "path": "C:\\Windows\\System32\\OpenWith.exe",
     "source": "process"
+  },
+  "vsixautoupdate": {
+    "name": "VSIXAutoUpdate",
+    "exe_name": "VSIXAutoUpdate.exe",
+    "path": "C:\\Program Files (x86)\\Microsoft Visual Studio\\2017\\Community\\Common7\\IDE\\VSIXAutoUpdate.exe",
+    "source": "process"
+  },
+  "cleanmgr": {
+    "name": "cleanmgr",
+    "exe_name": "cleanmgr.exe",
+    "path": "C:\\Windows\\System32\\cleanmgr.exe",
+    "source": "process"
+  },
+  "actionsserver": {
+    "name": "ActionsServer",
+    "exe_name": "ActionsServer.exe",
+    "path": "C:\\Program Files (x86)\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX86\\Microsoft Shared\\Office16\\ActionsServer\\ActionsServer.exe",
+    "source": "process"
+  },
+  "trustedinstaller": {
+    "name": "TrustedInstaller",
+    "exe_name": "TrustedInstaller.exe",
+    "path": "C:\\Windows\\servicing\\TrustedInstaller.exe",
+    "source": "process"
+  },
+  "wermgr": {
+    "name": "wermgr",
+    "exe_name": "wermgr.exe",
+    "path": "C:\\Windows\\System32\\wermgr.exe",
+    "source": "process"
+  },
+  "tiworker": {
+    "name": "TiWorker",
+    "exe_name": "TiWorker.exe",
+    "path": "C:\\Windows\\WinSxS\\amd64_microsoft-windows-servicingstack_31bf3856ad364e35_10.0.19041.3745_none_7ded3f327ca60a41\\TiWorker.exe",
+    "source": "process"
+  },
+  "microsoftedgeupdatesetup_x86_1.3.237.7": {
+    "name": "MicrosoftEdgeUpdateSetup_X86_1.3.237.7",
+    "exe_name": "MicrosoftEdgeUpdateSetup_X86_1.3.237.7.exe",
+    "path": "C:\\Program Files (x86)\\Microsoft\\EdgeUpdate\\Install\\{4E8B22D5-4041-463C-9CC5-FB5043CDDC23}\\MicrosoftEdgeUpdateSetup_X86_1.3.237.7.exe",
+    "source": "process"
   }
 }

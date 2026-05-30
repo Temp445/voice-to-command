@@ -56,6 +56,7 @@ class SettingsResponse(BaseModel):
 # ─── Commands ────────────────────────────────────────────────────────────────
 
 class ExecuteCommandRequest(BaseModel):
+    id: str | None = None
     text: str = Field(min_length=1)
     source: str = "text"   # text | voice
 

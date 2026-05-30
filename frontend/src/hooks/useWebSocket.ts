@@ -20,7 +20,7 @@ export function useWebSocket() {
   const connect = useCallback(() => {
     if (wsRef.current?.readyState === WebSocket.OPEN) return;
 
-    let wsUrl = "ws://localhost:8000/ws";
+    let wsUrl = "ws://127.0.0.1:8000/ws";
     
     if (process.env.NEXT_PUBLIC_API_URL) {
       const baseUrl = process.env.NEXT_PUBLIC_API_URL.replace(/\/api$/, "");
@@ -53,7 +53,12 @@ export function useWebSocket() {
             setTranscript(data.text, data.is_final);
             break;
           case "command_executed":
-            addEntry({ ...data, source: "voice" });
+            const state = useCommandStore.getState();
+            if (state.history.some(e => e.id === data.id)) {
+              state.updateEntry(data.id, { ...data, source: data.source || "voice" });
+            } else {
+              state.addEntry({ ...data, source: data.source || "voice" });
+            }
             break;
           case "wake_word_detected":
             setWakeWordActive(true);
@@ -68,16 +73,22 @@ export function useWebSocket() {
 
     ws.onclose = () => {
       setConnected(false);
-      // Auto-reconnect after 3s
-      setTimeout(connect, 3000);
+      if (isMounted.current) {
+        setTimeout(connect, 3000);
+      }
     };
 
     ws.onerror = () => ws.close();
   }, []);
 
+  const isMounted = useRef(true);
   useEffect(() => {
+    isMounted.current = true;
     connect();
-    return () => wsRef.current?.close();
+    return () => {
+      isMounted.current = false;
+      wsRef.current?.close();
+    };
   }, [connect]);
 
   return { connected };

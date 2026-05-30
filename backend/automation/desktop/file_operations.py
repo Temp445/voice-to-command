@@ -7,6 +7,16 @@ from pathlib import Path
 
 
 class FileOperations:
+    def _launch_and_focus_folder(self, path: str, title: str) -> None:
+        subprocess.Popen(["explorer", path])
+        from automation.desktop.window_manager import WindowManager
+        WindowManager().force_focus_by_title(title)
+
+    def _launch_and_focus_file(self, path: str) -> None:
+        os.startfile(path)
+        from automation.desktop.window_manager import WindowManager
+        WindowManager().force_focus_by_title(Path(path).name)
+
     def open_folder(self, path: str, disambiguation: str | None = None) -> str:
         """Open a folder in Windows Explorer by path or fuzzy name."""
         import re
@@ -41,13 +51,13 @@ class FileOperations:
         }
         if key in aliases:
             resolved_shell = aliases[key]
-            subprocess.Popen(["explorer", resolved_shell])
+            self._launch_and_focus_folder(resolved_shell, key)
             return f"Opened {key.title()} folder"
 
         # Absolute path
         candidate = Path(clean)
         if candidate.is_absolute() and candidate.exists():
-            subprocess.Popen(["explorer", str(candidate)])
+            self._launch_and_focus_folder(str(candidate), candidate.name)
             return f"Opened folder: {candidate}"
 
         # 3. Dynamic search via FileIndexer
@@ -63,14 +73,14 @@ class FileOperations:
         # If only 1 result, just open it
         if len(results) == 1:
             folder_path = results[0]["path"]
-            subprocess.Popen(["explorer", folder_path])
+            self._launch_and_focus_folder(folder_path, results[0]['name'])
             return f"Opened folder: {results[0]['name']}"
             
         # Exact name match
         exact_matches = [r for r in results if r["name"].lower() == key]
         if len(exact_matches) == 1:
             folder_path = exact_matches[0]["path"]
-            subprocess.Popen(["explorer", folder_path])
+            self._launch_and_focus_folder(folder_path, exact_matches[0]['name'])
             return f"Opened folder: {exact_matches[0]['name']}"
             
         if len(exact_matches) > 1:
@@ -83,7 +93,7 @@ class FileOperations:
                     idx = int(num_match.group(1)) - 1
                     if 0 <= idx < len(exact_matches):
                         matched_folder = exact_matches[idx]
-                        subprocess.Popen(["explorer", matched_folder["path"]])
+                        self._launch_and_focus_folder(matched_folder["path"], matched_folder["name"])
                         parent_name = Path(matched_folder["path"]).parent.name
                         return f"Opened folder: {matched_folder['name']} in {parent_name}"
                         
@@ -92,7 +102,7 @@ class FileOperations:
                 best_match = process.extractOne(disambiguation, choices, scorer=fuzz.WRatio)
                 if best_match and best_match[1] > 60:
                     matched_folder = exact_matches[choices.index(best_match[0])]
-                    subprocess.Popen(["explorer", matched_folder["path"]])
+                    self._launch_and_focus_folder(matched_folder["path"], matched_folder["name"])
                     return f"Opened folder: {matched_folder['name']} in {best_match[0]}"
             
             # Need disambiguation
@@ -106,7 +116,7 @@ class FileOperations:
         
         if best_match and best_match[1] >= 80:
             matched_folder = next(r for r in results if r["name"] == best_match[0])
-            subprocess.Popen(["explorer", matched_folder["path"]])
+            self._launch_and_focus_folder(matched_folder["path"], matched_folder["name"])
             return f"Opened folder: {matched_folder['name']}"
             
         return f"Folder '{clean}' not found."
@@ -125,7 +135,7 @@ class FileOperations:
         if len(results) == 1:
             file_path = results[0]["path"]
             try:
-                os.startfile(file_path)
+                self._launch_and_focus_file(file_path)
                 return f"Opened {results[0]['name']}"
             except Exception as e:
                 return f"Found {results[0]['name']} but failed to open it: {e}"
@@ -133,7 +143,7 @@ class FileOperations:
         # If multiple, open the first one (we could add disambiguation here later)
         file_path = results[0]["path"]
         try:
-            os.startfile(file_path)
+            self._launch_and_focus_file(file_path)
             return f"Found multiple files named {file_name}. Opened the most likely one."
         except Exception as e:
             return f"Found multiple files but failed to open: {e}"

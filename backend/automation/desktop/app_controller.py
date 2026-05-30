@@ -11,7 +11,11 @@ import shutil
 import string
 import subprocess
 import sys
+import warnings
 from pathlib import Path
+
+# Suppress pywinauto warning for apps that don't have a standard GUI message loop
+warnings.filterwarnings('ignore', category=RuntimeWarning, message='.*Application is not loaded correctly.*')
 
 import psutil
 import pywinauto
@@ -93,7 +97,7 @@ class AppController:
     def _launch(exe: str) -> bool:
         """
         Try to launch an executable. Returns True on success.
-        Tries pywinauto first (gives focus), falls back to os.startfile/Popen.
+        Uses native Windows OS launching first for maximum reliability.
         """
         exe = exe.replace("{user}", os.environ.get("USERNAME", ""))
 
@@ -110,17 +114,19 @@ class AppController:
         if not abs_exe:
             return False
 
+        # Native OS launch (automatically focuses window on Windows)
         try:
-            app = pywinauto.Application(backend="uia").start(abs_exe, timeout=10)
-            try:
-                app.window(active_only=False).set_focus()
-            except Exception:
-                pass
-        except Exception:
-            try:
-                os.startfile(abs_exe)
-            except AttributeError:
-                subprocess.Popen([abs_exe], shell=False)
+            os.startfile(abs_exe)
+        except AttributeError:
+            subprocess.Popen([abs_exe], shell=False)
+        except Exception as e:
+            logger.error(f"Failed to launch via OS native methods: {e}")
+            # Fallback to subprocess if startfile fails for any reason
+            subprocess.Popen([abs_exe], shell=False)
+
+        # Force focus to prevent taskbar blinking
+        from automation.desktop.window_manager import WindowManager
+        WindowManager().force_focus_by_exe(abs_exe)
 
         logger.info(f"Launched: {abs_exe}")
         return True

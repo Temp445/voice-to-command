@@ -24,7 +24,7 @@ async def execute_command(body: ExecuteCommandRequest, db: AsyncSession = Depend
     result = await command_service.parse_and_execute(body.text)
 
     entry = CommandHistory(
-        id=str(uuid.uuid4()),
+        id=body.id or str(uuid.uuid4()),
         user_id="00000000-0000-0000-0000-000000000001",  # TODO: real user from JWT
         raw_text=body.text,
         intent=result.get("intent"),
@@ -41,10 +41,11 @@ async def execute_command(body: ExecuteCommandRequest, db: AsyncSession = Depend
     # Broadcast real-time event to UI
     await ws_manager.broadcast("command_executed", {
         "id": entry.id,
-        "text": body.text,
+        "raw_text": body.text,
         "intent": entry.intent,
         "status": entry.status,
         "result": entry.result,
+        "source": entry.source,
     })
 
     return entry

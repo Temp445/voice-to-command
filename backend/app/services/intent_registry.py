@@ -60,6 +60,14 @@ async def handle_open_folder(path: str = "", disambiguation: str | None = None, 
     return FileOperations().open_folder(path.strip(), disambiguation)
 
 
+async def handle_close_folder(path: str = "", **_) -> str:
+    from automation.desktop.window_manager import WindowManager
+    folder_name = path.strip()
+    if WindowManager().close_window_by_title(folder_name):
+        return f"Closed folder: {folder_name}"
+    return f"Folder '{folder_name}' is not currently open."
+
+
 async def handle_search_file(file_name: str = "", **_) -> str:
     from automation.desktop.file_operations import FileOperations
     return FileOperations().search_file(file_name.strip())
@@ -103,6 +111,48 @@ async def handle_maximize_window(**_) -> str:
     from automation.desktop.window_manager import WindowManager
     WindowManager().maximize_active()
     return "Window maximized"
+
+
+async def handle_minimize_app(app: str = "", **_) -> str:
+    from automation.desktop.app_controller import AppController
+    from automation.desktop.window_manager import WindowManager
+    import pywinauto
+    
+    clean = app.strip()
+    candidates = AppController()._resolve_candidates(clean.lower())
+    
+    for exe in candidates:
+        try:
+            win_app = pywinauto.Application(backend="uia").connect(path=exe, timeout=1)
+            win_app.top_window().minimize()
+            return f"Minimized {clean}"
+        except Exception:
+            pass
+
+    if WindowManager().minimize_by_title(clean):
+        return f"Minimized {clean}"
+    return f"Could not find open window for {clean}"
+
+
+async def handle_maximize_app(app: str = "", **_) -> str:
+    from automation.desktop.app_controller import AppController
+    from automation.desktop.window_manager import WindowManager
+    import pywinauto
+    
+    clean = app.strip()
+    candidates = AppController()._resolve_candidates(clean.lower())
+    
+    for exe in candidates:
+        try:
+            win_app = pywinauto.Application(backend="uia").connect(path=exe, timeout=1)
+            win_app.top_window().maximize()
+            return f"Maximized {clean}"
+        except Exception:
+            pass
+
+    if WindowManager().maximize_by_title(clean):
+        return f"Maximized {clean}"
+    return f"Could not find open window for {clean}"
 
 
 async def handle_close_window(**_) -> str:
@@ -294,6 +344,17 @@ def register_all_intents() -> None:
             examples=["close heavy applications", "free up some memory", "kill heavy apps"],
         ),
         Intent(
+            name="close_folder",
+            patterns=[
+                r"close\s+(?:the\s+)?(?:folder|directory)\s+(?P<path>.+)",
+                r"close\s+(?:the\s+)?(?P<path>[\w\s]+?)\s+(?:folder|directory)",
+            ],
+            handler=handle_close_folder,
+            description="Close an open folder window",
+            examples=["close the folder friday", "close downloads folder"],
+            param_names=["path"],
+        ),
+        Intent(
             name="close_app",
             patterns=[
                 r"close\s+(?P<app>.+)",
@@ -352,17 +413,33 @@ def register_all_intents() -> None:
         ),
         Intent(
             name="minimize_window",
-            patterns=[r"minimize\s+(?:window|this|the window)?", r"hide\s+window"],
+            patterns=[r"minimize\s+(?:window|this|the window)?$"],
             handler=handle_minimize_window,
             description="Minimize the active window",
             examples=["minimize window", "minimize this"],
         ),
         Intent(
+            name="minimize_app",
+            patterns=[r"minimize\s+(?:the\s+)?(?P<app>.+)"],
+            handler=handle_minimize_app,
+            description="Minimize a specific application by name",
+            examples=["minimize vscode", "minimize chrome"],
+            param_names=["app"],
+        ),
+        Intent(
             name="maximize_window",
-            patterns=[r"maximize\s+(?:window|this|the window)?", r"fullscreen"],
+            patterns=[r"maximize\s+(?:window|this|the window)?$"],
             handler=handle_maximize_window,
             description="Maximize the active window",
             examples=["maximize window", "fullscreen"],
+        ),
+        Intent(
+            name="maximize_app",
+            patterns=[r"maximize\s+(?:the\s+)?(?P<app>.+)"],
+            handler=handle_maximize_app,
+            description="Maximize a specific application by name",
+            examples=["maximize vscode", "maximize chrome"],
+            param_names=["app"],
         ),
         Intent(
             name="close_window",

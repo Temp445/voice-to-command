@@ -1,15 +1,15 @@
 // Ensure we don't accidentally use a dev tunnel URL when running locally, but allow it for remote devices
-const isLocalhost = typeof window !== 'undefined' && window.location.hostname === 'localhost';
+const isLocalhost = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
 
 function getBaseUrl() {
-  if (typeof window === 'undefined') return "http://localhost:8000/api";
+  if (typeof window === 'undefined') return "http://127.0.0.1:8000/api";
   if (window.location.hostname.includes("devtunnels.ms")) {
     return window.location.origin.replace("-3000", "-8000") + "/api";
   }
-  return "http://localhost:8000/api";
+  return "http://127.0.0.1:8000/api";
 }
 
-let BASE = isLocalhost ? "http://localhost:8000/api" : (process.env.NEXT_PUBLIC_API_URL || getBaseUrl());
+let BASE = isLocalhost ? "http://127.0.0.1:8000/api" : (process.env.NEXT_PUBLIC_API_URL || getBaseUrl());
 if (BASE.endsWith('/')) BASE = BASE.slice(0, -1);
 if (!BASE.endsWith('/api')) BASE += "/api";
 
@@ -27,10 +27,10 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
 export const api = {
   // Commands
-  executeCommand: (text: string, source = "text") =>
+  executeCommand: (text: string, source = "text", id?: string) =>
     request("/commands/execute", {
       method: "POST",
-      body: JSON.stringify({ text, source }),
+      body: JSON.stringify({ text, source, id }),
     }),
 
   getHistory: (limit = 50) => request(`/commands/history?limit=${limit}`),

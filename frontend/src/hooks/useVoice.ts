@@ -6,7 +6,7 @@ import { useCommandStore } from "@/store/commandStore";
 import { useVoiceStore } from "@/store/voiceStore";
 
 export function useVoice() {
-  const { addEntry } = useCommandStore();
+  const { addEntry, updateEntry } = useCommandStore();
   const { setPipelineState } = useVoiceStore();
 
   const activate = useCallback(async () => {
@@ -27,10 +27,10 @@ export function useVoice() {
     const tempId = crypto.randomUUID();
     addEntry({ id: tempId, raw_text: text, status: "running", source: "text" });
     try {
-      const result = await api.executeCommand(text) as any;
-      addEntry({ ...result, source: "text" });
+      const result = await api.executeCommand(text, "text", tempId) as any;
+      updateEntry(tempId, { ...result, source: "text" });
     } catch (e) {
-      addEntry({ id: tempId, raw_text: text, status: "failed", result: String(e), source: "text" });
+      updateEntry(tempId, { status: "failed", result: String(e), source: "text" });
     }
   }, []);
 
