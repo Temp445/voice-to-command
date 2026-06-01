@@ -68,7 +68,7 @@ class UserSettings(Base):
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), unique=True, nullable=False)
 
     # Voice
-    wake_word: Mapped[str] = mapped_column(String(100), default="hey ace")
+    wake_word: Mapped[str] = mapped_column(String(100), default="alexa")
     whisper_model: Mapped[str] = mapped_column(String(20), default="base")
 
     # TTS

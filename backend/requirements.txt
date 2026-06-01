@@ -51,14 +51,14 @@ pyautogui
 # ============================================================
 faster-whisper
 openwakeword
-# piper-tts
+piper-tts
 pyaudio
-# sounddevice
+sounddevice
 numpy
 webrtcvad
 pygame
 # google-cloud-texttospeech
-# gTTS
+gTTS
 
 # ============================================================
 # Automation Stack — install separately:
@@ -70,8 +70,8 @@ psutil
 playwright
 playwright-stealth
 watchfiles
-# pystray
+pystray
 Pillow
 mss
 pytesseract
-# schedule
+schedule

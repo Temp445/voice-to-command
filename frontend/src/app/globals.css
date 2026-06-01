@@ -191,7 +191,7 @@ html, body, #__next {
   .badge-error      { background: rgba(239,68,68,0.15);   color: #ef4444; border-color: rgba(239,68,68,0.25); }
 
   /* Stat card */
-  .stat-card       { background: var(--card); border: 1px solid var(--border); border-radius: 0.75rem; padding: 1rem; display: flex; align-items: center; gap: 0.75rem; }
+  .stat-card       { background: var(--card); border: 1px solid var(--border); border-radius: 0.5rem; padding: 1rem; display: flex; align-items: center; gap: 0.75rem; }
   .stat-card-icon  { width: 2.25rem; height: 2.25rem; border-radius: 0.5rem; background: var(--secondary); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
 
   /* Section title */

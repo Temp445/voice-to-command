@@ -11,7 +11,7 @@ const STATS = [
   { key: "commands", icon: Zap,   label: "Commands",    color: "var(--foreground)" },
   { key: "engine",   icon: Cpu,   label: "Engine",      color: "var(--foreground)" },
   { key: "llm",      icon: Bot,   label: "AI Model",    color: "var(--primary)"    },
-  { key: "uptime",   icon: Clock, label: "Uptime",      color: "#22c55e"           },
+  // { key: "uptime",   icon: Clock, label: "Uptime",      color: "#22c55e"           },
 ];
 
 export function StatusBar() {
@@ -23,12 +23,12 @@ export function StatusBar() {
     voice:    pipelineState,
     commands: `${history.length} total`,
     engine:   "Whisper Base",
-    llm:      settings.llmEnabled ? `${settings.llmProvider.toUpperCase()} (${settings.llmMode})` : "Disabled",
+    llm:      settings.llmEnabled ? `${settings.llmProvider.toUpperCase()}` : "Disabled",
     uptime:   "Active",
   };
 
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: "0.75rem" }}>
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "0.75rem" }}>
       {STATS.map(({ key, icon: Icon, label, color }) => (
         <div key={key} className="stat-card">
           <div className="stat-card-icon">

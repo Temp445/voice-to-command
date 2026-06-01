@@ -1612,5 +1612,17 @@
     "exe_name": "WerFault.exe",
     "path": "C:\\Windows\\System32\\WerFault.exe",
     "source": "process"
+  },
+  "uv_x64": {
+    "name": "uv_x64",
+    "exe_name": "uv_x64.exe",
+    "path": "C:\\Program Files (x86)\\UltraViewer\\uv_x64.exe",
+    "source": "process"
+  },
+  "ultraviewer_desktop": {
+    "name": "UltraViewer_Desktop",
+    "exe_name": "UltraViewer_Desktop.exe",
+    "path": "C:\\Program Files (x86)\\UltraViewer\\UltraViewer_Desktop.exe",
+    "source": "process"
   }
 }

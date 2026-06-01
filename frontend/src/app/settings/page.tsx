@@ -156,7 +156,7 @@ export default function SettingsPage() {
                           style={{ textAlign: "left", padding: "1rem", borderRadius: "0.625rem", cursor: "pointer", transition: "all 0.15s", background: active ? "var(--secondary)" : "transparent", border: active ? "1px solid var(--ring)" : "1px solid var(--border)" }}>
                           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.375rem" }}>
                             <span style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--foreground)" }}>{label}</span>
-                            <span style={{ fontSize: "0.7rem", padding: "0.1rem 0.5rem", borderRadius: "9999px", background: badgeBg, color: badgeColor, border: `1px solid ${badgeColor}30` }}>{badge}</span>
+                            {/* <span style={{ fontSize: "0.7rem", padding: "0.1rem 0.5rem", borderRadius: "9999px", background: badgeBg, color: badgeColor, border: `1px solid ${badgeColor}30` }}>{badge}</span> */}
                           </div>
                           <p style={{ fontSize: "0.75rem", color: "var(--muted-foreground)" }}>{desc}</p>
                           {active && <div style={{ marginTop: "0.5rem", display: "flex", alignItems: "center", gap: "0.25rem", color: "var(--foreground)", fontSize: "0.75rem" }}><CheckCircle2 style={{ width: "0.75rem", height: "0.75rem" }} /> Selected</div>}
@@ -300,7 +300,7 @@ export default function SettingsPage() {
             </section>
 
             {/* ── Mobile Remote ── */}
-            <section style={card}>
+            {/* <section style={card}>
               <div style={hdr}>
                 <Smartphone style={{ width: "1rem", height: "1rem", color: "var(--muted-foreground)" }} />
                 <span style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--foreground)" }}>Mobile Remote Controller</span>
@@ -326,7 +326,7 @@ export default function SettingsPage() {
                   </div>
                 </div>
               </div>
-            </section>
+            </section> */}
 
             {/* ── System ── */}
             <section style={card}>

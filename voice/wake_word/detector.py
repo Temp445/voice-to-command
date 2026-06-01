@@ -1,6 +1,6 @@
 """
 ACE Voice Controller — OpenWakeWord Detector
-Always-listening background thread that fires an event on "hey ace" detection.
+Always-listening background thread that fires an event on "alexa" detection.
 """
 
 import threading

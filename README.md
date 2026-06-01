@@ -9,7 +9,7 @@
 | Desktop shell | Tauri (Rust) |
 | Frontend | Next.js 14 · React · TypeScript · Tailwind CSS |
 | Backend | FastAPI · Python 3.11+ |
-| Wake Word | OpenWakeWord (`"hey ACE"`) |
+| Wake Word | OpenWakeWord (`"alexa"`) |
 | STT | Faster-Whisper (offline) |
 | TTS | Piper TTS (offline) or gTTS (Google Cloud) |
 | Automation | pywinauto · pynput · psutil · Playwright |
@@ -69,7 +69,7 @@ npm run tauri:build
 
 ## Features
 
-- 🎤 **Wake Word**: Say `"hey ACE"` to activate
+- 🎤 **Wake Word**: Say `"alexa"` to activate
 - 📝 **STT**: Faster-Whisper offline transcription
 - 🔊 **TTS**: Piper (offline) or Google Cloud TTS (select in Settings)
 - 🖥️ **Desktop Automation**: Open/close apps, window management, file ops
