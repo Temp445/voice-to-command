@@ -68,11 +68,11 @@ class UserSettings(Base):
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), unique=True, nullable=False)
 
     # Voice
-    wake_word: Mapped[str] = mapped_column(String(100), default="hey ace")
+    wake_word: Mapped[str] = mapped_column(String(100), default="alexa")
     whisper_model: Mapped[str] = mapped_column(String(20), default="base")
 
     # TTS
-    tts_provider: Mapped[str] = mapped_column(String(20), default="piper")
+    tts_provider: Mapped[str] = mapped_column(String(20), default="gtts")
     gtts_api_key_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
     piper_voice: Mapped[str] = mapped_column(String(100), default="en_US-lessac-medium")
 

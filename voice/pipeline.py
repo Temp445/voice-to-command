@@ -130,6 +130,9 @@ class VoicePipeline:
             # 1. Stop wake word to free the mic
             self._wake_word.stop()
 
+            # Greet the user
+            await self._speak("How can I help you?")
+
             # 2. Listen
             self._set_state(PipelineState.LISTENING)
             self._audio_capture.start()

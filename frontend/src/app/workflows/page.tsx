@@ -93,7 +93,7 @@ export default function WorkflowsPage() {
             <div style={{ background: "var(--card)", border: "1px dashed var(--border)", borderRadius: "0.875rem", padding: "2.5rem", textAlign: "center" }}>
               <GitBranch style={{ width: "2.5rem", height: "2.5rem", color: "var(--muted-foreground)", margin: "0 auto 0.75rem", opacity: 0.4 }} />
               <p style={{ fontSize: "0.875rem", color: "var(--muted-foreground)" }}>
-                Say <span style={{ color: "var(--foreground)", fontFamily: "var(--font-mono)" }}>&quot;hey ACE, run morning routine&quot;</span> to trigger a workflow
+                Say <span style={{ color: "var(--foreground)", fontFamily: "var(--font-mono)" }}>&quot;alexa, run morning routine&quot;</span> to trigger a workflow
               </p>
             </div>
           </div>

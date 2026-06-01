@@ -58,7 +58,7 @@ numpy
 webrtcvad
 pygame
 # google-cloud-texttospeech
-# gTTS
+gTTS
 
 # ============================================================
 # Automation Stack — install separately:

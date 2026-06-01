@@ -190,7 +190,7 @@ class CommandService:
                     "intent": None,
                     "parameters": {},
                     "status": "failed",
-                    "result": f"Sorry, I didn't understand: '{text}'",
+                    "result": "Sorry, I didn't understand that command. Please try again.",
                     "duration_ms": int((time.perf_counter() - start) * 1000),
                 }
 

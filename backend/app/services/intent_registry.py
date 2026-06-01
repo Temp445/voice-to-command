@@ -19,7 +19,8 @@ async def _get_executor():
 async def handle_open_app(app: str = "", **_) -> str:
     from automation.desktop.app_controller import AppController
     ctrl = AppController()
-    return await ctrl.open_application(app.strip())
+    await ctrl.open_application(app.strip())
+    return f"Opening {app.strip()}."
 
 
 async def handle_close_app(app: str = "", **_) -> str:

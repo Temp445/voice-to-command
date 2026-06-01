@@ -21,9 +21,9 @@ CREATE TABLE IF NOT EXISTS public.users (
 CREATE TABLE IF NOT EXISTS public.settings (
     id                      UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id                 UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
-    wake_word               TEXT DEFAULT 'hey ace',
+    wake_word               TEXT DEFAULT 'alexa',
     whisper_model           TEXT DEFAULT 'base',
-    tts_provider            TEXT DEFAULT 'piper',
+    tts_provider            TEXT DEFAULT 'gtts',
     gtts_api_key_encrypted  TEXT,
     piper_voice             TEXT DEFAULT 'en_US-lessac-medium',
     theme                   TEXT DEFAULT 'dark',
