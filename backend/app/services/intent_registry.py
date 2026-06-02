@@ -43,7 +43,7 @@ async def handle_search_youtube(query: str = "", **_) -> str:
 
 
 async def handle_open_website(url: str = "", **_) -> str:
-    from automation.browser.browser_controller import BrowserController
+    from automation.ace_browser.ace_browser_controller import ACEBrowserController as BrowserController
     bc = BrowserController()
     url = url.strip()
     if not url:
@@ -54,6 +54,35 @@ async def handle_open_website(url: str = "", **_) -> str:
     await bc.navigate(url)
     return f"Opened {url}"
 
+async def handle_browser_play_pause(**_) -> str:
+    from automation.ace_browser.ace_browser_controller import ACEBrowserController as BrowserController
+    return await BrowserController().play_pause()
+
+async def handle_browser_go_back(**_) -> str:
+    from automation.ace_browser.ace_browser_controller import ACEBrowserController as BrowserController
+    return await BrowserController().go_back()
+
+async def handle_browser_click_first_result(**_) -> str:
+    from automation.ace_browser.ace_browser_controller import ACEBrowserController as BrowserController
+    return await BrowserController().click_first_result()
+
+async def handle_read_page_title(**_) -> str:
+    from automation.ace_browser.ace_browser_controller import ACEBrowserController as BrowserController
+    title = await BrowserController().get_page_title()
+    return f"The page title is: {title}"
+
+async def handle_extract_page_content(**_) -> str:
+    from automation.ace_browser.ace_browser_controller import ACEBrowserController as BrowserController
+    content = await BrowserController().extract_page_content()
+    # If content is huge, trim it for TTS
+    if len(content) > 500:
+        content = content[:500] + "... [Content truncated]"
+    return f"Here is the page content:\n{content}"
+async def handle_analyze_screen(query: str = "", **_) -> str:
+    from app.services.vision_service import VisionService
+    if not query:
+        query = "Describe what is currently visible on my screen."
+    return await VisionService.describe_screen(query)
 
 async def handle_open_folder(path: str = "", disambiguation: str | None = None, **_) -> str:
     from automation.desktop.file_operations import FileOperations
@@ -69,25 +98,33 @@ async def handle_close_folder(path: str = "", **_) -> str:
 
 
 async def handle_open_project(project_name: str = "", **_) -> str:
-    from automation.desktop.file_indexer import get_indexer
-    from app.services.context_manager import context_manager
+    from app.services.context_state import get_context
     import subprocess
     import os
     
     clean = project_name.replace("project", "").strip()
-    indexer = get_indexer()
-    results = indexer.search(clean, is_folder=True, limit=5)
     
-    if not results:
+    # 1. Try to fetch from explicit projects.json mapping
+    ctx = get_context()
+    project_path = ctx.get_project_path(clean)
+    
+    if not project_path:
+        # 2. Fallback to Windows Search API
+        from automation.desktop.file_indexer import get_indexer
+        indexer = get_indexer()
+        results = indexer.search(clean, is_folder=True, limit=5)
+        if results:
+            project_path = results[0]["path"]
+            
+    if not project_path:
         return f"Could not find a project folder named {clean}"
         
-    project_path = results[0]["path"]
-    context_manager.last_project_path = project_path
+    ctx.set("active_project_path", project_path)
     
     # Open in VS Code (assuming code is in PATH)
     try:
         subprocess.Popen(["code", project_path], cwd=project_path, shell=True)
-        return f"Opened project '{results[0]['name']}' in VS Code"
+        return f"Opened project '{clean}' in VS Code"
     except Exception as e:
         return f"Found project but failed to open in VS Code: {e}"
 
@@ -174,7 +211,7 @@ async def handle_run_dev_server(cmd: str = "", **_) -> str:
 
 async def handle_open_dev_server(**_) -> str:
     from app.services.context_manager import context_manager
-    from automation.browser.browser_controller import BrowserController
+    from automation.ace_browser.ace_browser_controller import ACEBrowserController as BrowserController
     
     url = context_manager.last_dev_server_url
     if not url:
@@ -578,6 +615,19 @@ async def handle_ask_and_type(question: str = "", **_) -> str:
     return f"Drafted and typed: {generated[:80]}{'...' if len(generated) > 80 else ''}"
 
 
+async def handle_vscode_terminal(**_) -> str:
+    from automation.desktop.window_manager import WindowManager
+    from automation.input.keyboard import KeyboardController
+    import asyncio
+    
+    # Try to focus VS Code
+    if WindowManager().focus_by_title("Visual Studio Code"):
+        await asyncio.sleep(0.5)
+        # Ctrl + ` shortcut
+        KeyboardController().press_keys(["ctrl", "`"])
+        return "Opened VS Code terminal."
+    return "Could not find an active VS Code window."
+
 # ─── Register All Intents ────────────────────────────────────────────────────
 
 def register_all_intents() -> None:
@@ -589,6 +639,7 @@ def register_all_intents() -> None:
             patterns=[
                 r"(?:search|find|play)\s+(?P<query>.+)\s+on youtube",
                 r"(?:open\s+)?youtube\s+(?:and\s+)?(?:search|find|play)\s+(?:for\s+)?(?P<query>.+)",
+                r"(?:search|find|play)\s+(?:on\s+)?youtube\s+(?:for\s+)?(?P<query>.+)",
                 r"youtube\s+(?P<query>.+)",
             ],
             handler=handle_search_youtube,
@@ -613,14 +664,73 @@ def register_all_intents() -> None:
             name="open_website",
             patterns=[
                 r"(?:open|go to|visit|navigate to)\s+(?P<url>(?:https?://)?[\w\-\.]+\.\w{2,}(?:/\S*)?)",
-                r"(?:open|go to|visit)\s+(?P<url>youtube|google|github|netflix|spotify|twitter|facebook|gmail|amazon|reddit)"
+                r"(?:open|go to|visit)\s+(?P<url>youtube|google|github|netflix|spotify|twitter|facebook|gmail|amazon|reddit|linkedin)"
             ],
             handler=handle_open_website,
             description="Open a website URL in the browser",
             examples=["open github.com", "go to youtube.com", "visit google.com"],
             param_names=["url"],
         ),
-
+        Intent(
+            name="browser_play_pause",
+            patterns=[
+                r"(?:play|pause)\s+(?:the\s+)?(?:video|music|song)",
+            ],
+            handler=handle_browser_play_pause,
+            description="Play or pause media in the browser",
+            examples=["play the video", "pause music"],
+        ),
+        Intent(
+            name="browser_go_back",
+            patterns=[
+                r"go\s+back",
+                r"previous\s+page",
+            ],
+            handler=handle_browser_go_back,
+            description="Navigate back in the browser",
+            examples=["go back", "go to previous page"],
+        ),
+        Intent(
+            name="browser_click_first_result",
+            patterns=[
+                r"(?:click|open)\s+(?:the\s+)?first\s+(?:result|video|link)",
+            ],
+            handler=handle_browser_click_first_result,
+            description="Click the first search result in the browser",
+            examples=["open the first result", "play the first video"],
+        ),
+        Intent(
+            name="read_page_title",
+            patterns=[
+                r"(?:what is|read|get)\s+(?:the\s+)?page\s+title",
+                r"what page am i on",
+                r"read\s+title"
+            ],
+            handler=handle_read_page_title,
+            description="Read the title of the current webpage",
+            examples=["what is the page title", "read the page title"],
+        ),
+        Intent(
+            name="extract_page_content",
+            patterns=[
+                r"(?:extract|read|get)\s+(?:the\s+)?(?:page\s+)?content",
+                r"(?:extract|read|get)\s+(?:the\s+)?(?:page\s+)?text",
+                r"what does this page say"
+            ],
+            handler=handle_extract_page_content,
+            description="Extract readable text from the current webpage",
+            examples=["extract the page content", "read the page text"],
+        ),
+        Intent(
+            name="analyze_screen",
+            patterns=[
+                r"(?:what\s+is|what's|describe)\s+(?:on\s+)?(?:my\s+)?screen",
+                r"read\s+(?:the\s+)?(?:my\s+)?screen",
+            ],
+            handler=handle_analyze_screen,
+            description="Use AI vision to describe what is currently on the screen",
+            examples=["what is on my screen?", "read my screen"],
+        ),
         Intent(
             name="open_folder",
             patterns=[
@@ -659,6 +769,16 @@ def register_all_intents() -> None:
             description="Open a software project in VS Code",
             examples=["open my react project", "open the website project"],
             param_names=["project_name"],
+        ),
+        Intent(
+            name="vscode_terminal",
+            patterns=[
+                r"open\s+(?:the\s+)?terminal",
+                r"show\s+(?:the\s+)?terminal",
+            ],
+            handler=handle_vscode_terminal,
+            description="Open the VS Code integrated terminal",
+            examples=["open the terminal", "show terminal"],
         ),
         Intent(
             name="create_project",

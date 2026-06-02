@@ -5,6 +5,10 @@ Entry point: mounts all routers, middleware, WebSocket endpoint, and lifecycle e
 
 import asyncio
 import sys
+
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+
 sys.coinit_flags = 0  # Fix COM threading mode conflict for pywinauto
 from pathlib import Path
 _ROOT = Path(__file__).resolve().parent.parent.parent
@@ -119,6 +123,20 @@ async def lifespan(app: FastAPI):
 
     register_all_intents()
     logger.info("✅ Command intents registered")
+
+    # ── Initialize ACE Browser Controller ────────────────────────────────────
+    try:
+        from automation.ace_browser.ace_browser_controller import ACEBrowserLauncher, ACEBrowserController
+        logger.info("🌐 Preparing default Chrome profile (force injecting CDP port)...")
+        if ACEBrowserLauncher.launch(port=9222):
+            logger.info("✅ ACE Browser Launcher started successfully")
+            # Connect singleton in background to prepare it
+            ctrl = ACEBrowserController()
+            asyncio.create_task(ctrl.connect(port=9222))
+        else:
+            logger.warning("⚠️ Failed to launch ACE Browser")
+    except Exception as e:
+        logger.warning(f"⚠️ ACE Browser integration failed: {e}")
 
     # ── Initialize LLM from .env (quick-start without UI) ────────────────────
     _init_llm_from_env()

@@ -143,14 +143,15 @@ class FileIndexer:
 
         logger.info(f"✅ Indexing complete. Total files/folders indexed: {total_scanned}")
         
-        if WATCHFILES_AVAILABLE and valid_roots:
-            self._watch_thread = threading.Thread(
-                target=self._watch_changes, 
-                args=(valid_roots,), 
-                daemon=True
-            )
-            self._watch_thread.start()
-            logger.info("👀 watchfiles observer started for real-time updates.")
+        # Disabled: Windows Search API (ADODB) is now used instead.
+        # if WATCHFILES_AVAILABLE and valid_roots:
+        #     self._watch_thread = threading.Thread(
+        #         target=self._watch_changes, 
+        #         args=(valid_roots,), 
+        #         daemon=True
+        #     )
+        #     self._watch_thread.start()
+        #     logger.info("👀 watchfiles observer started for real-time updates.")
 
     def _watch_changes(self, roots: list[str]):
         try:
@@ -176,10 +177,47 @@ class FileIndexer:
         if self._watch_thread and self._watch_thread.is_alive():
             self._watch_thread.join(timeout=2.0)
 
-    def search(self, query: str, is_folder: bool = True, drive: Optional[str] = None, limit: int = 20) -> list[dict]:
-        """Search for a file or folder by name substring."""
+    def search(self, query: str, drive: str | None = None, is_folder: bool = True, limit: int = 10) -> list[dict]:
+        """Search for a file or folder by name substring using Windows Search API or SQLite."""
         clean_q = clean_name(query)
         
+        # 1. Try Windows Search API (Extremely Fast, Drive-Wide)
+        try:
+            import win32com.client
+            conn = win32com.client.Dispatch("ADODB.Connection")
+            conn.Open("Provider=Search.CollatorDSO;Extended Properties='Application=Windows';")
+            
+            kind_condition = "System.Kind = 'folder'" if is_folder else "System.Kind <> 'folder'"
+            query_escaped = clean_q.replace("'", "''")
+            
+            sql = f"SELECT System.ItemPathDisplay, System.ItemNameDisplay FROM SystemIndex WHERE {kind_condition} AND System.FileName LIKE '%{query_escaped}%'"
+            
+            if drive:
+                sql += f" AND System.ItemPathDisplay LIKE '{drive.upper()}:\\%'"
+                
+            rs, status = conn.Execute(sql)
+            
+            results = []
+            while not rs.EOF and len(results) < limit:
+                path = rs.Fields.Item("System.ItemPathDisplay").Value
+                name = rs.Fields.Item("System.ItemNameDisplay").Value
+                if path and name:
+                    results.append({
+                        "id": path,
+                        "path": path,
+                        "name": name,
+                        "is_folder": is_folder,
+                        "drive": path[0] if len(path) > 1 and path[1] == ':' else None
+                    })
+                rs.MoveNext()
+                
+            if results:
+                logger.info(f"Windows Search API returned {len(results)} results for '{clean_q}'")
+                return results
+        except Exception as e:
+            logger.warning(f"Windows Search API failed (fallback to local cache): {e}")
+
+        # 2. Fallback to Local SQLite Cache
         sql = "SELECT id, path, name, is_folder, drive FROM files WHERE is_folder = ?"
         params = [1 if is_folder else 0]
         

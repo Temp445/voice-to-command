@@ -65,7 +65,41 @@ class CommandService:
         text = text.strip()
         start = time.perf_counter()
 
-        # 0. Check for conversational pending actions (e.g. waiting for a filename)
+        # 0. Check for user-defined Macros/Workflows in the database
+        try:
+            from app.database import AsyncSessionLocal
+            from app.models import Workflow
+            from sqlalchemy import select
+            async with AsyncSessionLocal() as session:
+                result = await session.execute(select(Workflow))
+                workflows = result.scalars().all()
+                for wf in workflows:
+                    if wf.trigger_phrase.lower() in text.lower():
+                        logger.info(f"Matched workflow macro: {wf.name}")
+                        results = []
+                        import asyncio
+                        for step in wf.steps:
+                            action = step.get("action", "")
+                            if step.get("delay_ms", 0):
+                                await asyncio.sleep(step["delay_ms"] / 1000)
+                            # Recursively call parse_and_execute to run the macro action
+                            # Setting a flag to prevent infinite macro loops
+                            if "macro_loop" not in action:
+                                r = await self.parse_and_execute(action)
+                                results.append(r.get("result", ""))
+                        
+                        return {
+                            "intent": "execute_workflow",
+                            "parameters": {"name": wf.name},
+                            "result": f"Executed macro '{wf.name}'. Steps: {len(results)}",
+                            "status": "success",
+                            "duration_ms": (time.perf_counter() - start) * 1000,
+                            "is_fallback": False
+                        }
+        except Exception as e:
+            logger.error(f"Failed to check macros: {e}")
+
+        # 1. Check for conversational pending actions
         if hasattr(self, "_pending_action") and self._pending_action:
             pending = self._pending_action
             self._pending_action = None
@@ -83,18 +117,23 @@ class CommandService:
                 # Skip normal classification and go straight to execution
                 return await self._execute_intent(intent_name, params, text, start)
 
-        # 1. Attempt to split into compound commands (e.g., "open notepad and type hello")
-        # Check for explicit conjunctions first
-        if re.search(r'(?i)\s+(?:and|then)\s+', text):
-            parts = re.split(r'(?i)\s+(?:and|then)\s+', text)
-        else:
-            # Handle run-on sentences WITHOUT conjunctions like "open notepad type hello"
-            run_on_match = re.match(r"^(open\s+.+?)\s+(type\s+.+|write\s+.+|search\s+.+|close\s+.+|maximize\s+.+|minimize\s+.+|create\s+.+)$", text, re.IGNORECASE)
-            if run_on_match:
-                parts = [run_on_match.group(1), run_on_match.group(2)]
-            else:
-                parts = [text]
+        # 0.5. Check if the full text perfectly matches a known compound-aware intent FIRST
+        initial_intent, initial_params = self._regex_match(text)
+        skip_split = False
+        if initial_intent in ["search_youtube", "search_google", "open_website"]:
+            skip_split = True
             
+        # 1. Attempt to split into compound commands (e.g., "open notepad and type hello")
+        parts = [text]
+        if not skip_split:
+            if re.search(r'(?i)\s+(?:and|then)\s+', text):
+                parts = re.split(r'(?i)\s+(?:and|then)\s+', text)
+            else:
+                # Handle run-on sentences WITHOUT conjunctions like "open notepad type hello"
+                run_on_match = re.match(r"^(open\s+.+?)\s+(type\s+.+|write\s+.+|close\s+.+|maximize\s+.+|minimize\s+.+|create\s+.+)$", text, re.IGNORECASE)
+                if run_on_match:
+                    parts = [run_on_match.group(1), run_on_match.group(2)]
+
         if len(parts) > 1:
             valid_intents = []
             for part in parts:
@@ -185,11 +224,37 @@ class CommandService:
                     params.update(llm_result.get("params", {}))
                 
                 if not intent_name:
+                    # Try the dynamic Browser NLP mapper before conversational LLM
+                    from automation.ace_browser.ace_browser_controller import ACEVoiceBrowserCommands
+                    browser_cmd = ACEVoiceBrowserCommands()
+                    browser_res = await browser_cmd.execute(text)
+                    if browser_res and not browser_res.startswith("Command not recognized"):
+                        return {
+                            "intent": "dynamic_browser_command",
+                            "parameters": {"text": text},
+                            "status": "success" if "Failed" not in browser_res else "failed",
+                            "result": browser_res,
+                            "duration_ms": int((time.perf_counter() - start) * 1000),
+                        }
+                    
                     # Still no match — route to ask_llm for a conversational response
                     intent_name = "ask_llm"
                     params = {"question": text}
 
         if not intent_name:
+            # Try the dynamic Browser NLP mapper before giving up
+            from automation.ace_browser.ace_browser_controller import ACEVoiceBrowserCommands
+            browser_cmd = ACEVoiceBrowserCommands()
+            browser_res = await browser_cmd.execute(text)
+            if browser_res and not browser_res.startswith("Command not recognized"):
+                return {
+                    "intent": "dynamic_browser_command",
+                    "parameters": {"text": text},
+                    "status": "success" if "Failed" not in browser_res else "failed",
+                    "result": browser_res,
+                    "duration_ms": int((time.perf_counter() - start) * 1000),
+                }
+
             logger.warning(f"No intent matched for: '{text}'")
             # If LLM is in always_on mode but couldn't classify, still try ask_llm
             from app.services.llm.llm_service import llm_service

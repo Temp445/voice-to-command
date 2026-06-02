@@ -134,6 +134,36 @@ class WindowManager:
             logger.info(f"Closed {closed_count} window(s) matching: {title_substring}")
         return closed_count
 
+    def close_all_workspaces(self, exclude_titles: list[str] = None) -> int:
+        """
+        Safely closes all top-level windows by sending graceful close signals.
+        This ensures apps prompt to save unsaved work instead of data loss.
+        """
+        exclude_titles = [t.lower() for t in (exclude_titles or [])]
+        # Always exclude essential desktop shell components
+        system_excludes = ["program manager", "taskbar", "settings", "ace voice", "action center"]
+        
+        closed_count = 0
+        for win in Desktop(backend="win32").windows():
+            try:
+                if not win.is_visible() or not win.window_text():
+                    continue
+                    
+                win_text = win.window_text().lower()
+                
+                # Check exclusions
+                if any(ext in win_text for ext in system_excludes + exclude_titles):
+                    continue
+                
+                # Close gracefully
+                win.close()
+                closed_count += 1
+            except Exception:
+                continue
+                
+        logger.info(f"Gracefully closed {closed_count} workspace windows.")
+        return closed_count
+
     def close_window_by_title(self, title_substring: str) -> bool:
         return self.close_windows_by_title(title_substring) > 0
 

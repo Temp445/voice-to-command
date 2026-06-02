@@ -197,3 +197,56 @@ class FileOperations:
             return f"Created folder: {target_path}"
         except Exception as e:
             return f"Failed to create folder: {str(e)}"
+
+    def get_recent_files(self, limit: int = 10) -> list[dict]:
+        """Fetch the most recently accessed files from Windows Recent folder."""
+        try:
+            import win32com.client
+            shell = win32com.client.Dispatch("WScript.Shell")
+            recent_dir = Path(os.path.expandvars(r"%APPDATA%\Microsoft\Windows\Recent"))
+            
+            if not recent_dir.exists():
+                return []
+                
+            files = []
+            seen_paths = set()
+            for lnk in recent_dir.glob("*.lnk"):
+                try:
+                    shortcut = shell.CreateShortcut(str(lnk))
+                    target = shortcut.TargetPath
+                    if target and Path(target).exists() and Path(target).is_file():
+                        if target not in seen_paths:
+                            seen_paths.add(target)
+                            files.append({
+                                "name": Path(target).name,
+                                "path": target,
+                                "accessed": lnk.stat().st_mtime
+                            })
+                except Exception:
+                    continue
+                    
+            # Sort by accessed time descending
+            files.sort(key=lambda x: x["accessed"], reverse=True)
+            return files[:limit]
+        except ImportError:
+            return []
+
+    def open_latest_downloaded_file(self) -> str:
+        """Finds and opens the most recently downloaded file in the user's Downloads folder."""
+        try:
+            import win32com.client
+            shell = win32com.client.Dispatch("WScript.Shell")
+            # Resolve the actual Downloads folder location (handles OneDrive/moved folders)
+            downloads_path = Path(shell.SpecialFolders("MyDocuments")).parent / "Downloads"
+            if not downloads_path.exists():
+                downloads_path = Path.home() / "Downloads"
+                
+            files = [f for f in downloads_path.iterdir() if f.is_file() and not f.name.endswith(".crdownload") and not f.name.endswith(".part")]
+            if not files:
+                return "Your Downloads folder is empty."
+                
+            latest_file = max(files, key=lambda f: f.stat().st_mtime)
+            self._launch_and_focus_file(str(latest_file))
+            return f"Opened the latest download: {latest_file.name}"
+        except Exception as e:
+            return f"Failed to open the latest download: {str(e)}"

@@ -1648,5 +1648,17 @@
     "exe_name": "git-remote-https.exe",
     "path": "C:\\Users\\Nivin\\AppData\\Local\\Programs\\Git\\mingw64\\libexec\\git-core\\git-remote-https.exe",
     "source": "process"
+  },
+  "default-browser-agent": {
+    "name": "default-browser-agent",
+    "exe_name": "default-browser-agent.exe",
+    "path": "C:\\Program Files (x86)\\Mozilla Firefox\\default-browser-agent.exe",
+    "source": "process"
+  },
+  "rundll32": {
+    "name": "rundll32",
+    "exe_name": "rundll32.exe",
+    "path": "C:\\Windows\\System32\\rundll32.exe",
+    "source": "process"
   }
 }

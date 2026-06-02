@@ -30,14 +30,27 @@ class GeminiAdapter(LLMProvider):
         return _MODELS
 
     def _to_gemini_format(self, messages: list[dict]) -> tuple[str, list]:
-        """Convert OpenAI-style messages to Gemini format."""
+        """Convert OpenAI-style messages to Gemini format, including multimodal images."""
         system = ""
         history = []
         for m in messages:
             if m["role"] == "system":
                 system = m["content"]
             elif m["role"] == "user":
-                history.append({"role": "user", "parts": [m["content"]]})
+                if isinstance(m["content"], list):
+                    parts = []
+                    for part in m["content"]:
+                        if part.get("type") == "text":
+                            parts.append(part.get("text", ""))
+                        elif part.get("type") == "image_url":
+                            url = part.get("image_url", {}).get("url", "")
+                            if url.startswith("data:"):
+                                mime_type = url.split(";")[0].split(":")[1]
+                                b64_data = url.split(",")[1]
+                                parts.append({"mime_type": mime_type, "data": b64_data})
+                    history.append({"role": "user", "parts": parts})
+                else:
+                    history.append({"role": "user", "parts": [m["content"]]})
             elif m["role"] == "assistant":
                 history.append({"role": "model", "parts": [m["content"]]})
         return system, history

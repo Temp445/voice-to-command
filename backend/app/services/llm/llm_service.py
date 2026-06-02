@@ -137,6 +137,13 @@ class LLMService:
         self._history.clear()
 
     def _build_messages(self, system: str, user_prompt: str) -> list[dict]:
+        from app.services.context_state import get_context
+        ctx = get_context().get_all()
+        # Only inject if there's meaningful context (not all None)
+        if any(v is not None for v in ctx.values()):
+            import json
+            system += f"\n\n[SYSTEM CONTEXT STATE]\n{json.dumps(ctx, indent=2)}\nUse this state to resolve ambiguous pronouns (it, this, that)."
+        
         msgs: list[dict] = [{"role": "system", "content": system}]
         msgs.extend(self._history)
         msgs.append({"role": "user", "content": user_prompt})

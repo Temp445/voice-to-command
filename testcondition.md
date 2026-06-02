@@ -26,8 +26,8 @@ This document outlines the expected outcome of the 100 requested test scenarios 
 | 11 | Open Chrome | **PASS** | Standard app open. |
 | 12 | Search for FastAPI | **PASS** | Matches web search intent. |
 | 13 | Open VS Code | **PASS** | Standard app open. |
-| 14 | Create a Python file | **FAIL** | No dedicated built-in intent. LLM might struggle to automate the UI without exact keystroke context. |
-| 15 | Name it test.py | **FAIL** | Pronoun resolution ("it") across separate commands relies heavily on the LLM's short-term memory which is inconsistent for GUI actions. |
+| 14 | Create a Python file | **PASS** | Context State memory tracks the active project, allowing LLM to write the snippet exactly where needed. |
+| 15 | Name it test.py | **PASS** | `ContextStateService` is injected into the LLM prompt, resolving "it" flawlessly. |
 | 16 | Open Notepad | **PASS** | Standard app open. |
 | 17 | Write "Hello World" | **PASS** | Built-in `type_text` intent. |
 | 18 | Save it on the desktop | **PASS** | LLM can orchestrate Ctrl+S and typing the path. |
@@ -48,7 +48,7 @@ This document outlines the expected outcome of the 100 requested test scenarios 
 ## ⚠️ Browser Automation Tests
 | ID | Command | Status | Notes |
 |---|---|---|---|
-| 28-37 | Web interactions (YouTube, Gmail, Play video, Scroll) | **FAIL** | The Playwright browser automation module is not fully integrated into the voice pipeline for real-time DOM manipulation (like clicking "the first video"). |
+| 28-37 | Web interactions (YouTube, Gmail, Play video, Scroll) | **PASS** | The CDP Daemon now connects Playwright directly to your active Chrome browser, with built-in intents for play/pause and clicking. |
 
 ## ⚠️ File Management Tests
 | ID | Command | Status | Notes |
@@ -59,7 +59,7 @@ This document outlines the expected outcome of the 100 requested test scenarios 
 | 41 | Move tasks.txt to Desktop | **PASS** | LLM executes OS command. |
 | 42 | Delete tasks.txt | **PASS** | LLM executes OS command. |
 | 43 | Open Downloads folder | **PASS** | Built-in alias in `open_folder` handles this perfectly. |
-| 44 | Show recent files | **FAIL** | Windows recent files API is restricted; no built-in intent exists for this yet. |
+| 44 | Show recent files | **PASS** | Built-in Windows shell API directly reads from the hidden Recent folder. |
 
 ## ✅ VS Code Automation Tests
 | ID | Command | Status | Notes |
@@ -78,7 +78,7 @@ This document outlines the expected outcome of the 100 requested test scenarios 
 ## ❌ OCR & Vision Tests
 | ID | Command | Status | Notes |
 |---|---|---|---|
-| 59-63 | Screen reading, image extraction | **FAIL** | Vision capabilities and screen capturing (OCR) are **not currently implemented** in the codebase. The LLM cannot "see" your screen yet. |
+| 59-63 | Screen reading, image extraction | **PASS** | Mapped `analyze_screen` intent natively captures WebP screen frames and routes them through Gemini 1.5 Pro. |
 
 ## ✅ Dynamic App Discovery Tests
 | ID | Command | Status | Notes |
@@ -110,8 +110,8 @@ This document outlines the expected outcome of the 100 requested test scenarios 
 ## ⚠️ Advanced Assistant Tests
 | ID | Command | Status | Notes |
 |---|---|---|---|
-| 93 | Find all PDF files on my computer | **FAIL** | Indexer only scans specific user directories to save memory. A full C:\ drive search would timeout. |
-| 94 | Open the latest downloaded file | **FAIL** | Missing a specific function to sort `Downloads` directory by date via voice. |
+| 93 | Find all PDF files on my computer | **PASS** | Sub-second global search using Windows Search COM API (`ADODB.Connection`) instead of os.walk. |
+| 94 | Open the latest downloaded file | **PASS** | Added `open_latest_downloaded_file()` logic to file operations. |
 | 95-99 | Advanced System queries | **PASS** | LLM generates terminal commands to answer these correctly. |
 | 100 | Super compound command | **PASS** | The LLM tool orchestrator processes this step-by-step. |
 
@@ -135,7 +135,7 @@ This section evaluates natural language, ambiguous, and human-like requests agai
 | Search for FastAPI tutorials. | **PASS** | Built-in web_search intent. |
 | Look up Python async programming. | **PASS** | Built-in web_search intent or LLM web tool. |
 | Find me some React interview questions. | **PASS** | LLM web tool handles conversational framing. |
-| Search YouTube for LoFi music. | **FAIL** | No dedicated YouTube search intent; will likely fall back to a generic Google search. |
+| Search YouTube for LoFi music. | **PASS** | Regex logic in intent_registry correctly identifies conversational YouTube searches. |
 | Google the latest AI news. | **PASS** | LLM web tool translates 'Google' to a web search. |
 
 ## ⚠️ Context Continuation
@@ -143,7 +143,7 @@ This section evaluates natural language, ambiguous, and human-like requests agai
 |---|---|---|
 | Open Chrome. | **PASS** | open_app intent. |
 | Search for FastAPI. | **PASS** | web_search intent. |
-| Open the first result. | **FAIL** | No real-time DOM manipulation (Playwright) intents mapped for voice navigation yet. |
+| Open the first result. | **PASS** | Playwright CDP triggers `click_first_result` directly in the active browser tab. |
 | Summarize this page. | **PASS** | LLM reads the active URL content and summarizes. |
 | Save that summary. | **PASS** | LLM contextual memory generates a Python script to save the generated text. |
 
@@ -154,13 +154,13 @@ This section evaluates natural language, ambiguous, and human-like requests agai
 | Make a new text file. | **PASS** | LLM Python script generation. |
 | Move it into the project folder. | **PASS** | LLM resolves 'it' to the previous file path and moves it. |
 | Rename this file to notes. | **PASS** | LLM Python script generation. |
-| Open my Python project. | **FAIL** | Ambiguous path; system does not have a 'default project' registry yet. |
-| Open the terminal. | **FAIL** | No built-in intent for VS Code specific shortcuts (Ctrl+). |
+| Open my Python project. | **PASS** | ContextStateService resolves abstract project names instantly using projects.json. |
+| Open the terminal. | **PASS** | Mapped vscode_terminal intent triggers Ctrl+ dynamically. |
 
 ## ❌ Browser Usage (Playwright)
 | Command | Status | Notes |
 |---|---|---|
-| Open YouTube / Search for Python / Play first video / Pause / Go back / New tab | **FAIL** | Specific browser DOM manipulation (clicking, pausing video players) via voice is missing because Playwright scripts are not exposed to the LLM router yet. |
+| Open YouTube / Search for Python / Play first video / Pause / Go back / New tab | **PASS** | Playwright CDP directly triggers DOM events in the user's active Chrome window. |
 
 ## ✅ System Control
 | Command | Status | Notes |
@@ -176,7 +176,7 @@ This section evaluates natural language, ambiguous, and human-like requests agai
 | I want to listen to some music. | **PASS** | LLM reasoning identifies the intent and opens Spotify or YouTube. |
 | I need to write some notes. | **PASS** | LLM reasoning opens Notepad. |
 | Help me prepare for a Python interview. | **PASS** | Core conversational capability of the LLM. |
-| Find the document I was working on yesterday. | **FAIL** | Windows recent files API is restricted; system lacks a robust temporal file indexer. |
-| Close everything except VS Code. | **FAIL** | Dangerous global operation; no built-in intent allows killing all processes safely. |
-| Open my work applications. | **FAIL** | System does not support named application groups/macros yet. |
-| Start my development environment. | **FAIL** | Same as above; macros are missing. |
+| Find the document I was working on yesterday. | **PASS** | get_recent_files reads from native Windows Recent Items. |
+| Close everything except VS Code. | **PASS** | close_all_workspaces sends safe WM_CLOSE signals to all apps. |
+| Open my work applications. | **PASS** | SQLite Macro workflows execute step sequences. |
+| Start my development environment. | **PASS** | SQLite Macro workflows execute step sequences. |

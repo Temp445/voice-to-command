@@ -114,6 +114,12 @@ class AppController:
         if not abs_exe:
             return False
 
+        if "chrome.exe" in abs_exe.lower():
+            import subprocess
+            subprocess.Popen([abs_exe, "--remote-debugging-port=9222"], shell=False, creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP)
+            logger.info(f"Launched Chrome with CDP: {abs_exe}")
+            return True
+
         # Native OS launch (automatically focuses window on Windows)
         try:
             os.startfile(abs_exe)
