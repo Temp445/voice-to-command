@@ -7,24 +7,32 @@ from loguru import logger
 from voice.tts.base import TTSProvider
 
 
+_cached_providers: dict[str, TTSProvider] = {}
+
 async def get_tts_provider() -> TTSProvider:
     """
     Return the active TTS provider based on current settings.
-    Hot-reloads on every call so settings changes take effect immediately.
+    Caches provider instances to avoid reloading models from disk every time.
     """
-    from app.config import settings  # re-read each time for hot-swap
+    from app.config import settings
 
-    provider = settings.tts_provider.lower()
+    provider_type = settings.tts_provider.lower()
 
-    if provider == "gtts":
-        from voice.tts.gtts_synthesizer import GTTSSynthesizer
-        instance = GTTSSynthesizer()
-        if not instance.is_configured():
-            logger.warning("gTTS selected but API key not set — using Piper TTS")
+    if provider_type not in _cached_providers:
+        if provider_type == "gtts":
+            from voice.tts.gtts_synthesizer import GTTSSynthesizer
+            _cached_providers[provider_type] = GTTSSynthesizer()
+        else:
+            # Default: Piper TTS
             from voice.tts.piper_synthesizer import PiperSynthesizer
-            return PiperSynthesizer()
-        return instance
+            # Use 'piper' as key even if it's not strictly 'piper' in settings
+            provider_type = "piper"
+            _cached_providers[provider_type] = PiperSynthesizer()
 
-    # Default: Piper TTS
-    from voice.tts.piper_synthesizer import PiperSynthesizer
-    return PiperSynthesizer()
+    provider = _cached_providers[provider_type]
+    
+    # Hot-reload specific settings onto the cached instance
+    if provider_type == "piper":
+        provider.voice = settings.piper_voice
+
+    return provider

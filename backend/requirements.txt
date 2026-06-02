@@ -53,12 +53,13 @@ faster-whisper
 openwakeword
 piper-tts
 pyaudio
-sounddevice
 numpy
 webrtcvad
 pygame
 # google-cloud-texttospeech
 gTTS
+pyrnnoise
+psutil
 
 # ============================================================
 # Automation Stack — install separately:

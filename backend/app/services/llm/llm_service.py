@@ -60,6 +60,7 @@ class LLMService:
         self._temperature: float = 0.7
         self._enabled: bool = False
         self._mode: str = "fallback"  # "fallback" | "always_on"
+        self.last_error: str | None = "Not configured."
         # Rolling conversation history (max 10 exchanges = 20 messages + system)
         self._history: deque[dict] = deque(maxlen=20)
 
@@ -89,20 +90,23 @@ class LLMService:
             self._temperature = temperature
             self._mode = mode
             self._enabled = enabled
+            self.last_error = None
             self._history.clear()   # Clear memory on provider switch
             logger.info(f"✅ LLM provider set: {provider_name} / {model} (mode={mode})")
         except ImportError as e:
-            raise RuntimeError(
-                f"Provider '{provider_name}' SDK not installed. "
-                f"Run: pip install {self._install_hint(provider_name)}\n{e}"
-            )
+            msg = f"Provider '{provider_name}' SDK not installed. Run: pip install {self._install_hint(provider_name)}"
+            self.last_error = msg
+            raise RuntimeError(msg)
         except Exception as e:
-            raise RuntimeError(f"Failed to initialize provider '{provider_name}': {e}")
+            msg = f"Failed to initialize provider '{provider_name}': {e}"
+            self.last_error = msg
+            raise RuntimeError(msg)
 
-    def disable(self) -> None:
+    def disable(self, reason: str = "Not configured.") -> None:
         self._enabled = False
         self._provider = None
-        logger.info("LLM service disabled.")
+        self.last_error = reason
+        logger.info(f"LLM service disabled: {reason}")
 
     def _install_hint(self, provider: str) -> str:
         return {"groq": "groq", "openai": "openai", "gemini": "google-generativeai",

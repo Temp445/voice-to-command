@@ -30,6 +30,8 @@ def _build_response(s: UserSettings) -> SettingsResponse:
     return SettingsResponse(
         wake_word=s.wake_word,
         whisper_model=s.whisper_model,
+        stt_provider=s.stt_provider,
+        stt_noise_cancellation=s.stt_noise_cancellation,
         tts_provider=s.tts_provider,
         piper_voice=s.piper_voice,
         theme=s.theme,
@@ -64,6 +66,10 @@ async def update_settings(body: SettingsUpdate, db: AsyncSession = Depends(get_d
             s.llm_api_key_encrypted = encrypt_api_key(value)
         elif hasattr(s, field):
             setattr(s, field, value)
+            # Sync to in-memory config so that TTS and STT factories see the update immediately
+            from app.config import settings as global_settings
+            if hasattr(global_settings, field):
+                setattr(global_settings, field, value)
 
     await db.commit()
 
@@ -81,7 +87,7 @@ def _apply_llm_settings(s: UserSettings) -> None:
     """Hot-swap the LLM provider based on current settings."""
     from app.services.llm.llm_service import llm_service
     if not s.llm_enabled or not s.llm_api_key_encrypted:
-        llm_service.disable()
+        llm_service.disable("LLM provider not enabled or missing API key. Go to Settings → AI Assistant.")
         return
     try:
         api_key = decrypt_api_key(s.llm_api_key_encrypted)
@@ -95,3 +101,4 @@ def _apply_llm_settings(s: UserSettings) -> None:
         )
     except Exception as e:
         logger.error(f"Failed to apply LLM settings: {e}")
+        llm_service.disable(f"Initialization Failed: {e}")

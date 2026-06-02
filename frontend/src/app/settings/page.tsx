@@ -23,12 +23,17 @@ export default function SettingsPage() {
   const [saving,  setSaving]  = useState(false);
   const [saved,   setSaved]   = useState(false);
   const [remoteUrl, setRemoteUrl] = useState("");
+  const [initialLoaded, setInitialLoaded] = useState(false);
   
   // LLM State
   const [providers, setProviders] = useState<{ id: string; name: string; models: string[] }[]>([]);
   const [showApiKey, setShowApiKey] = useState(false);
   const [testingLlm, setTestingLlm] = useState(false);
   const [testResult, setTestResult] = useState<{ ok: boolean; msg: string } | null>(null);
+
+  // TTS State
+  const [testTtsText, setTestTtsText] = useState("Hello, I am your desktop assistant.");
+  const [testingTts, setTestingTts] = useState(false);
 
   useEffect(() => {
     setRemoteUrl(window.location.origin + "/remote");
@@ -41,7 +46,10 @@ export default function SettingsPage() {
     // Sync current settings from backend
     api.getSettings().then((data: any) => {
       settings.update({
-        wakeWord: data.wake_word, whisperModel: data.whisper_model,
+        wakeWord: data.wake_word, 
+        sttProvider: data.stt_provider,
+        sttNoiseCancellation: data.stt_noise_cancellation,
+        whisperModel: data.whisper_model,
         ttsProvider: data.tts_provider, piperVoice: data.piper_voice,
         browserType: data.browser_type, startupOnBoot: data.startup_on_boot,
         minimizeToTray: data.minimize_to_tray, theme: data.theme,
@@ -50,8 +58,24 @@ export default function SettingsPage() {
         llmTemperature: data.llm_temperature,
       });
       if (!data.gtts_configured) settings.setGttsApiKey("");
+      setInitialLoaded(true);
     }).catch(err => console.error("Failed to sync settings", err));
   }, []);
+
+  useEffect(() => {
+    if (!initialLoaded) return;
+    const timer = setTimeout(() => {
+      handleSave();
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [
+    initialLoaded,
+    settings.wakeWord, settings.sttProvider, settings.sttNoiseCancellation,
+    settings.whisperModel, settings.ttsProvider, settings.piperVoice,
+    settings.theme, settings.browserType, settings.startupOnBoot,
+    settings.minimizeToTray, settings.llmEnabled, settings.llmProvider,
+    settings.llmModel, settings.llmMode, settings.llmTemperature, settings.llmApiKey
+  ]);
 
   const handleTestLlm = async () => {
     setTestingLlm(true);
@@ -67,11 +91,39 @@ export default function SettingsPage() {
     }
   };
 
+  const handleTestTts = async () => {
+    if (!testTtsText.trim()) return;
+    setTestingTts(true);
+    try {
+      const response = await fetch("http://localhost:8000/api/voice/test-tts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          text: testTtsText, 
+          provider: settings.ttsProvider,
+          piper_voice: settings.piperVoice 
+        }),
+      });
+      if (!response.ok) throw new Error("TTS request failed");
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      audio.play();
+    } catch (err) {
+      console.error("Test TTS failed:", err);
+    } finally {
+      setTestingTts(false);
+    }
+  };
+
   const handleSave = async () => {
     setSaving(true);
     try {
       const patch: Record<string, unknown> = {
-        wake_word: settings.wakeWord, whisper_model: settings.whisperModel,
+        wake_word: settings.wakeWord, 
+        stt_provider: settings.sttProvider,
+        stt_noise_cancellation: settings.sttNoiseCancellation,
+        whisper_model: settings.whisperModel,
         tts_provider: settings.ttsProvider, piper_voice: settings.piperVoice,
         browser_type: settings.browserType, startup_on_boot: settings.startupOnBoot,
         minimize_to_tray: settings.minimizeToTray, theme: settings.theme,
@@ -84,7 +136,6 @@ export default function SettingsPage() {
         patch.llm_api_key = settings.llmApiKey;
       }
       await api.updateSettings(patch);
-      settings.update({ llmApiKey: "" }); // clear from UI after save
       setSaved(true); setTimeout(() => setSaved(false), 2500);
     } finally { setSaving(false); }
   };
@@ -122,16 +173,51 @@ export default function SettingsPage() {
                   <p style={sub}>Currently: <span style={{ color: "var(--foreground)", fontFamily: "var(--font-mono)" }}>&quot;{settings.wakeWord}&quot;</span></p>
                 </div>
                 <div>
-                  <p style={lbl}>Whisper Model</p>
-                  <div style={{ display: "flex", gap: "0.5rem" }}>
-                    {(["tiny", "base", "small"] as const).map((m) => (
-                      <button key={m} onClick={() => settings.update({ whisperModel: m })}
-                        style={settings.whisperModel === m ? btnA : btnI}>
-                        {m.charAt(0).toUpperCase() + m.slice(1)}
-                      </button>
-                    ))}
+                  <p style={lbl}>STT Provider</p>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem", marginBottom: "1.25rem" }}>
+                    {[
+                      { key: "whisper", label: "Whisper", badge: "Local", desc: "Private, works offline" },
+                      { key: "gstt",  label: "Google STT", badge: "Cloud", desc: "Highly accurate, requires internet" },
+                    ].map(({ key, label, desc }) => {
+                      const active = settings.sttProvider === key;
+                      return (
+                        <button key={key} onClick={() => settings.update({ sttProvider: key as "whisper" | "gstt" })}
+                          style={{ textAlign: "left", padding: "1rem", borderRadius: "0.625rem", cursor: "pointer", transition: "all 0.15s", background: active ? "var(--secondary)" : "transparent", border: active ? "1px solid var(--ring)" : "1px solid var(--border)" }}>
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.375rem" }}>
+                            <span style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--foreground)" }}>{label}</span>
+                          </div>
+                          <p style={{ fontSize: "0.75rem", color: "var(--muted-foreground)" }}>{desc}</p>
+                          {active && <div style={{ marginTop: "0.5rem", display: "flex", alignItems: "center", gap: "0.25rem", color: "var(--foreground)", fontSize: "0.75rem" }}><CheckCircle2 style={{ width: "0.75rem", height: "0.75rem" }} /> Selected</div>}
+                        </button>
+                      );
+                    })}
                   </div>
-                  <p style={sub}>Tiny = fastest · Small = most accurate</p>
+                </div>
+
+                {settings.sttProvider === "whisper" && (
+                  <div>
+                    <p style={lbl}>Whisper Model</p>
+                    <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+                      {(["tiny", "base", "small", "large-v2", "large-v3"] as const).map((m) => (
+                        <button key={m} onClick={() => settings.update({ whisperModel: m })}
+                          style={settings.whisperModel === m ? btnA : btnI}>
+                          {m.charAt(0).toUpperCase() + m.slice(1)}
+                        </button>
+                      ))}
+                    </div>
+                    <p style={sub}>Tiny = fastest · Small = accurate · Large = highly accurate but slow</p>
+                  </div>
+                )}
+                
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "0.5rem" }}>
+                  <div>
+                    <p style={{ fontSize: "0.875rem", fontWeight: 500, color: "var(--foreground)" }}>Noise Cancellation</p>
+                    <p style={{ fontSize: "0.75rem", color: "var(--muted-foreground)", marginTop: "0.125rem" }}>Aggressively filter background noise using VAD</p>
+                  </div>
+                  <button onClick={() => settings.update({ sttNoiseCancellation: !settings.sttNoiseCancellation })}
+                    style={{ width: "2.75rem", height: "1.5rem", borderRadius: "9999px", border: settings.sttNoiseCancellation ? "1px solid var(--ring)" : "1px solid var(--border)", background: settings.sttNoiseCancellation ? "var(--primary)" : "var(--secondary)", position: "relative", flexShrink: 0, cursor: "pointer", transition: "all 0.2s" }}>
+                    <span style={{ position: "absolute", top: "0.2rem", width: "1.1rem", height: "1.1rem", background: settings.sttNoiseCancellation ? "var(--primary-foreground)" : "var(--muted-foreground)", borderRadius: "9999px", transition: "transform 0.2s", transform: settings.sttNoiseCancellation ? "translateX(1.45rem)" : "translateX(0.2rem)" }} />
+                  </button>
                 </div>
               </div>
             </section>
@@ -171,13 +257,33 @@ export default function SettingsPage() {
                 {settings.ttsProvider === "piper" && (
                   <div>
                     <p style={lbl}>Piper Voice</p>
-                    <input style={{ ...inp, maxWidth: "22rem" }} value={settings.piperVoice}
+                    <select style={{ ...inp, maxWidth: "22rem" }} value={settings.piperVoice}
                       onChange={(e) => settings.update({ piperVoice: e.target.value })}
-                      onFocus={(e) => { (e.target as HTMLInputElement).style.borderColor = "var(--ring)"; }}
-                      onBlur={(e)  => { (e.target as HTMLInputElement).style.borderColor  = "var(--border)"; }}
-                    />
+                      onFocus={(e) => { (e.target as HTMLSelectElement).style.borderColor = "var(--ring)"; }}
+                      onBlur={(e)  => { (e.target as HTMLSelectElement).style.borderColor  = "var(--border)"; }}
+                    >
+                      <option value="en_US-lessac-medium">Lessac (Female)</option>
+                      <option value="en_US-ryan-medium">Ryan (Male)</option>
+                      <option value="en_US-hfc_male-medium">HFC Male (Male)</option>
+                      <option value="en_US-hfc_female-medium">HFC Female (Female)</option>
+                      <option value="en_US-libritts_r-medium">LibriTTS (Multi-speaker)</option>
+                    </select>
                   </div>
                 )}
+                
+                <div style={{ marginTop: "1rem", padding: "1.25rem", background: "var(--secondary)", borderRadius: "0.5rem", border: "1px solid var(--border)" }}>
+                  <p style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--foreground)", marginBottom: "0.25rem" }}>Test Voice Output</p>
+                  <p style={{ fontSize: "0.75rem", color: "var(--muted-foreground)", marginBottom: "1rem" }}>Listen to how the assistant will sound</p>
+                  
+                  <div style={{ display: "flex", gap: "0.5rem" }}>
+                    <input style={{ ...inp, flex: 1 }} value={testTtsText} onChange={(e) => setTestTtsText(e.target.value)} placeholder="Enter text to synthesize..." />
+                    <button onClick={handleTestTts} disabled={testingTts}
+                      style={{ padding: "0.5rem 1.25rem", borderRadius: "0.375rem", fontSize: "0.8125rem", fontWeight: 600, cursor: "pointer", background: "var(--primary)", color: "var(--primary-foreground)", border: "none", display: "flex", alignItems: "center", gap: "0.5rem", opacity: testingTts ? 0.7 : 1 }}>
+                      {testingTts ? <Loader2 size={16} className="animate-spin" /> : <Volume2 size={16} />}
+                      Play
+                    </button>
+                  </div>
+                </div>
               </div>
             </section>
 
@@ -199,12 +305,17 @@ export default function SettingsPage() {
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1.25rem" }}>
                     <div>
                       <p style={lbl}>Provider</p>
-                      <select style={inp} value={settings.llmProvider}
+                      <select style={inp} value={settings.llmProvider || ""}
                         onChange={(e) => {
                           const prov = e.target.value;
+                          if (!prov) {
+                            settings.update({ llmProvider: "", llmModel: "" });
+                            return;
+                          }
                           const pObj = providers.find(p => p.id === prov);
                           settings.update({ llmProvider: prov, llmModel: pObj?.models[0] || "" });
                         }}>
+                        <option value="">None</option>
                         {providers.map(p => (
                           <option key={p.id} value={p.id}>{p.name}</option>
                         ))}
@@ -212,7 +323,8 @@ export default function SettingsPage() {
                     </div>
                     <div>
                       <p style={lbl}>Model</p>
-                      <select style={inp} value={settings.llmModel} onChange={(e) => settings.update({ llmModel: e.target.value })}>
+                      <select style={inp} value={settings.llmModel || ""} onChange={(e) => settings.update({ llmModel: e.target.value })}>
+                        <option value="">None</option>
                         {providers.find(p => p.id === settings.llmProvider)?.models.map(m => (
                           <option key={m} value={m}>{m}</option>
                         ))}
@@ -367,12 +479,9 @@ export default function SettingsPage() {
               </div>
             </section>
 
-            {/* Save */}
-            <motion.button whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.99 }}
-              onClick={handleSave} disabled={saving}
-              style={{ width: "100%", padding: "0.875rem", borderRadius: "0.625rem", border: "1px solid var(--ring)", cursor: "pointer", background: saved ? "var(--secondary)" : "var(--primary)", color: saved ? "var(--foreground)" : "var(--primary-foreground)", fontSize: "0.9375rem", fontWeight: 700, transition: "all 0.2s", display: "flex", alignItems: "center", justifyContent: "center", gap: "0.5rem", opacity: saving ? 0.7 : 1 }}>
-              {saved ? <><CheckCircle2 style={{ width: "1.1rem", height: "1.1rem" }} /> Saved!</> : saving ? "Saving…" : "Save Settings"}
-            </motion.button>
+            {/* Status Indicator */}
+            {saving && <div style={{ textAlign: "center", color: "var(--muted-foreground)", fontSize: "0.875rem" }}>Saving...</div>}
+            {saved && !saving && <div style={{ textAlign: "center", color: "var(--primary)", fontSize: "0.875rem", display: "flex", alignItems: "center", justifyContent: "center", gap: "0.25rem" }}><CheckCircle2 size={16} /> Saved</div>}
           </div>
         </main>
       </div>

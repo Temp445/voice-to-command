@@ -1624,5 +1624,17 @@
     "exe_name": "UltraViewer_Desktop.exe",
     "path": "C:\\Program Files (x86)\\UltraViewer\\UltraViewer_Desktop.exe",
     "source": "process"
+  },
+  "crashhelper": {
+    "name": "crashhelper",
+    "exe_name": "crashhelper.exe",
+    "path": "C:\\Program Files (x86)\\Mozilla Firefox\\crashhelper.exe",
+    "source": "process"
+  },
+  "systemsettings": {
+    "name": "SystemSettings",
+    "exe_name": "SystemSettings.exe",
+    "path": "C:\\Windows\\ImmersiveControlPanel\\SystemSettings.exe",
+    "source": "process"
   }
 }

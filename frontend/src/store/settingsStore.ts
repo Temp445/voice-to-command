@@ -4,7 +4,9 @@ import { persist } from "zustand/middleware";
 
 interface SettingsStore {
   wakeWord: string;
-  whisperModel: "tiny" | "base" | "small";
+  sttProvider: "whisper" | "gstt";
+  sttNoiseCancellation: boolean;
+  whisperModel: "tiny" | "base" | "small" | "large-v2" | "large-v3";
   ttsProvider: "piper" | "gtts";
   piperVoice: string;
   theme: "dark" | "light";
@@ -28,6 +30,8 @@ export const useSettingsStore = create<SettingsStore>()(
   persist(
     (set) => ({
       wakeWord:       "alexa",
+      sttProvider:    "whisper",
+      sttNoiseCancellation: true,
       whisperModel:   "base",
       ttsProvider:    "piper",
       piperVoice:     "en_US-lessac-medium",

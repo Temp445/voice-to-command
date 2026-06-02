@@ -69,6 +69,8 @@ class UserSettings(Base):
 
     # Voice
     wake_word: Mapped[str] = mapped_column(String(100), default="alexa")
+    stt_provider: Mapped[str] = mapped_column(String(20), default="whisper")
+    stt_noise_cancellation: Mapped[bool] = mapped_column(Boolean, default=True)
     whisper_model: Mapped[str] = mapped_column(String(20), default="base")
 
     # TTS

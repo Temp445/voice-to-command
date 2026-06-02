@@ -132,9 +132,17 @@ async def lifespan(app: FastAPI):
         async with AsyncSessionLocal() as db:
             result = await db.execute(select(UserSettings).limit(1))
             s = result.scalar_one_or_none()
-            if s and s.llm_api_key_encrypted:
-                _apply_llm_settings(s)
-                logger.info("✅ LLM settings restored from database")
+            if s:
+                from app.config import settings as global_settings
+                # Sync all fields from DB to in-memory config
+                for field in s.__dict__:
+                    if not field.startswith('_') and hasattr(global_settings, field):
+                        setattr(global_settings, field, getattr(s, field))
+                
+                # Apply LLM specific initializations
+                if s.llm_api_key_encrypted:
+                    _apply_llm_settings(s)
+                logger.info("✅ All settings restored from database")
     except Exception as e:
         logger.warning(f"⚠️  Could not restore LLM settings from DB: {e}")
 

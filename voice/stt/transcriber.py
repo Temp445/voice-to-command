@@ -42,6 +42,14 @@ class Transcriber:
         # Convert raw bytes → float32 numpy array
         audio_np = np.frombuffer(audio_bytes, dtype=np.int16).astype(np.float32) / 32768.0
 
+        # Dynamically build initial prompt from registered intents to dramatically improve accuracy
+        try:
+            from app.services.command_service import command_service
+            intents = [i["name"].replace("_", " ") for i in command_service.list_intents()]
+            dynamic_prompt = "desktop assistant commands: " + ", ".join(intents) + "."
+        except Exception:
+            dynamic_prompt = "desktop assistant commands: open application, close application, system settings, minimize window."
+
         segments, info = model.transcribe(
             audio_np,
             beam_size=5,
@@ -49,6 +57,7 @@ class Transcriber:
             condition_on_previous_text=False,
             vad_filter=True,              # Built-in VAD silences noise
             vad_parameters={"min_silence_duration_ms": 500},
+            initial_prompt=dynamic_prompt,
         )
 
         text = " ".join(s.text.strip() for s in segments).strip()

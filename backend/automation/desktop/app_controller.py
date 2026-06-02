@@ -223,7 +223,7 @@ class AppController:
             app_names = ", ".join(unique)
 
             if still_alive and not force:
-                return f"{app_names} has unsaved changes. Please say 'save', 'don't save', or 'cancel'."
+                return f"{app_names} has unsaved changes. Please say 'Save'. 'Don't Save'. Or 'Cancel'."
             return f"Closed {app_names}"
             
         raise AppNotFound(clean)

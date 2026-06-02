@@ -32,6 +32,8 @@ class TokenResponse(BaseModel):
 class SettingsUpdate(BaseModel):
     wake_word: str | None = None
     whisper_model: str | None = None
+    stt_provider: str | None = None
+    stt_noise_cancellation: bool | None = None
     tts_provider: str | None = None
     gtts_api_key: str | None = None       # raw; encrypted before storage
     piper_voice: str | None = None
@@ -51,6 +53,8 @@ class SettingsUpdate(BaseModel):
 class SettingsResponse(BaseModel):
     wake_word: str
     whisper_model: str
+    stt_provider: str
+    stt_noise_cancellation: bool
     tts_provider: str
     piper_voice: str
     theme: str
@@ -130,6 +134,7 @@ class TranscriptEvent(BaseModel):
 class TTSRequest(BaseModel):
     text: str
     provider: str | None = None   # override active provider
+    piper_voice: str | None = None
 
 
 class VoiceStatusResponse(BaseModel):

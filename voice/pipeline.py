@@ -15,7 +15,7 @@ import numpy as np
 from loguru import logger
 from voice.wake_word.detector import WakeWordDetector
 from voice.stt.audio_capture import AudioCapture
-from voice.stt.transcriber import Transcriber
+from voice.stt.provider_factory import get_stt_provider
 from voice.tts.provider_factory import get_tts_provider
 from app.config import settings
 
@@ -48,7 +48,6 @@ class VoicePipeline:
 
         self._state = PipelineState.IDLE
         self._audio_capture = AudioCapture()
-        self._transcriber = Transcriber()
         self._wake_word = WakeWordDetector(
             wake_word=settings.wake_word,
             on_detected=self._on_wake_word,
@@ -77,6 +76,21 @@ class VoicePipeline:
         # Only start wake word detector initially (mutually exclusive mic access)
         self._wake_word.start()
         logger.info("🎙️ Voice pipeline started")
+
+        # Async preload TTS engine so the first command is instant
+        asyncio.run_coroutine_threadsafe(self._preload_tts(), self._loop)
+
+    async def _preload_tts(self) -> None:
+        try:
+            logger.info("⚙️ Preloading TTS engine in background...")
+            provider = await get_tts_provider()
+            # Force model load
+            audio_bytes = await provider.synthesize("System initialized and ready.")
+            # Optional: play the welcome sound
+            # await asyncio.get_event_loop().run_in_executor(None, lambda: self._play_audio(audio_bytes))
+            logger.info("✅ TTS engine preloaded successfully.")
+        except Exception as e:
+            logger.warning(f"Failed to preload TTS engine: {e}")
 
     def stop(self) -> None:
         self._running = False
@@ -150,12 +164,15 @@ class VoicePipeline:
 
             # 4. Transcribe
             self._set_state(PipelineState.PROCESSING)
+            stt_provider = get_stt_provider()
             text = await asyncio.get_event_loop().run_in_executor(
                 None,
-                lambda: self._transcriber.transcribe(audio_bytes),
+                lambda: stt_provider.transcribe(audio_bytes),
             )
 
             if not text.strip():
+                # If they just said the wake word without a command, prompt them.
+                await self._speak("How can I help you?")
                 self._set_state(PipelineState.IDLE)
                 self._wake_word.start()
                 return

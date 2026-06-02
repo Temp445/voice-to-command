@@ -25,7 +25,8 @@ async def get_status():
 async def test_connection():
     """Send a quick ping to verify the configured provider is reachable."""
     if not llm_service.is_ready:
-        return {"ok": False, "error": "LLM provider not configured. Go to Settings → AI Assistant."}
+        err_msg = llm_service.last_error or "LLM provider not configured. Go to Settings → AI Assistant."
+        return {"ok": False, "error": err_msg}
     try:
         reply = await llm_service._provider.chat(
             [{"role": "user", "content": "Reply with exactly: OK"}],

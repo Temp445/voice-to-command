@@ -32,15 +32,29 @@ class AudioCapture:
     Pushes speech frames into a thread-safe queue.
     """
 
-    def __init__(self, vad_aggressiveness: int = 2):
-        """
-        vad_aggressiveness: 0-3 (0=permissive, 3=aggressive noise filtering)
-        """
+    def __init__(self):
+        from app.config import settings
+        # Use level 3 (aggressive) if noise cancellation is enabled, otherwise 1 (permissive)
+        noise_cancelling = getattr(settings, 'stt_noise_cancellation', True)
+        vad_aggressiveness = 3 if noise_cancelling else 1
+        
         self._vad = webrtcvad.Vad(vad_aggressiveness)
         self._audio = pyaudio.PyAudio()
         self._queue: queue.Queue[bytes] = queue.Queue()
         self._running = False
         self._thread: threading.Thread | None = None
+        self._noise_cancelling = noise_cancelling
+        
+        if self._noise_cancelling:
+            try:
+                from pyrnnoise import RNNoise
+                self._denoiser = RNNoise(sample_rate=SAMPLE_RATE)
+                logger.info("✅ RNNoise initialized for noise cancellation")
+            except Exception as e:
+                logger.warning(f"⚠️ Failed to init RNNoise: {e}")
+                self._denoiser = None
+        else:
+            self._denoiser = None
 
     def start(self) -> None:
         if self._running:
@@ -67,6 +81,24 @@ class AudioCapture:
         try:
             while self._running:
                 raw = stream.read(CHUNK_SIZE, exception_on_overflow=False)
+                
+                # Apply pyrnnoise if enabled
+                if self._noise_cancelling and self._denoiser:
+                    try:
+                        # Convert to numpy array for pyrnnoise
+                        chunk_np = np.frombuffer(raw, dtype=np.int16)
+                        
+                        denoised_frames = []
+                        # denoise_chunk yields (speech_prob, denoised_frame)
+                        for _, frame in self._denoiser.denoise_chunk(chunk_np):
+                            denoised_frames.append(frame)
+                            
+                        if denoised_frames:
+                            raw = np.concatenate(denoised_frames).tobytes()
+                    except Exception as e:
+                        # Fallback to original raw audio if it fails
+                        logger.error(f"RNNoise processing error: {e}")
+                
                 try:
                     is_speech = self._vad.is_speech(raw, SAMPLE_RATE)
                 except Exception:

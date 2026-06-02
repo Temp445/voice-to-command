@@ -16,8 +16,10 @@ from app.websocket.manager import ws_manager
 router = APIRouter()
 
 
+from fastapi import APIRouter, Depends, HTTPException, Request, BackgroundTasks
+
 @router.post("/execute", response_model=CommandResultResponse)
-async def execute_command(body: ExecuteCommandRequest, db: AsyncSession = Depends(get_db)):
+async def execute_command(request: Request, body: ExecuteCommandRequest, background_tasks: BackgroundTasks, db: AsyncSession = Depends(get_db)):
     """Parse and execute a text or voice command."""
     logger.info(f"Executing command [{body.source}]: '{body.text}'")
 
@@ -47,6 +49,16 @@ async def execute_command(body: ExecuteCommandRequest, db: AsyncSession = Depend
         "result": entry.result,
         "source": entry.source,
     })
+
+    # Speak the response using the TTS system (if triggered via text/console)
+    if body.source == "text" and result.get("status") == "success" and result.get("result"):
+        try:
+            pipeline = request.app.state.pipeline
+            # Run the speaking in background so we return the HTTP response immediately
+            import asyncio
+            asyncio.create_task(pipeline._speak(result.get("result")))
+        except Exception as e:
+            logger.warning(f"Failed to play TTS for text command: {e}")
 
     return entry
 

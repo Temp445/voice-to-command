@@ -43,7 +43,32 @@ async def synthesize_speech(body: TTSRequest):
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"TTS error: {e}")
-
+@router.post("/test-tts")
+async def test_tts(body: TTSRequest):
+    """Test specific TTS configurations before saving them."""
+    if body.provider == "piper":
+        from voice.tts.piper_synthesizer import PiperSynthesizer
+        provider = PiperSynthesizer()
+        if body.piper_voice:
+            provider.voice = body.piper_voice
+    elif body.provider == "gtts":
+        from voice.tts.gtts_synthesizer import GTTSSynthesizer
+        provider = GTTSSynthesizer()
+    else:
+        from voice.tts.provider_factory import get_tts_provider
+        provider = await get_tts_provider()
+        
+    try:
+        audio_bytes = await provider.synthesize(body.text)
+        return StreamingResponse(
+            io.BytesIO(audio_bytes),
+            media_type="audio/wav",
+            headers={"Content-Disposition": "inline; filename=test_speech.wav"},
+        )
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"TTS error: {e}")
 
 @router.post("/activate")
 async def activate_listening(request: Request):

@@ -251,6 +251,25 @@ async def handle_minimize_app(app: str = "", **_) -> str:
     return f"Could not find open window for {clean}"
 
 
+async def handle_save(app_name: str = "", **_) -> str:
+    from automation.input.keyboard_controller import KeyboardController
+    KeyboardController().press_enter()
+    return "Saving..."
+
+
+async def handle_dont_save(app_name: str = "", **_) -> str:
+    from automation.input.keyboard_controller import KeyboardController
+    from pynput.keyboard import Key
+    KeyboardController().press(Key.alt, 'n')
+    return "Changes discarded."
+
+
+async def handle_cancel(app_name: str = "", **_) -> str:
+    from automation.input.keyboard_controller import KeyboardController
+    KeyboardController().press_escape()
+    return "Canceled."
+
+
 async def handle_maximize_app(app: str = "", **_) -> str:
     from automation.desktop.app_controller import AppController
     from automation.desktop.window_manager import WindowManager
