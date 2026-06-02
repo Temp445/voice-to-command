@@ -5,39 +5,51 @@ import { useVoiceStore } from "@/store/voiceStore";
 import { useCommandStore } from "@/store/commandStore";
 import { create } from "zustand";
 
-interface WSStore { connected: boolean; setConnected: (v: boolean) => void; }
+interface WSStore { 
+  connected: boolean; 
+  setConnected: (v: boolean) => void; 
+  sendBytes: (data: ArrayBuffer | ArrayBufferView) => void;
+  setSendBytes: (fn: (data: ArrayBuffer | ArrayBufferView) => void) => void;
+}
 export const useWSStore = create<WSStore>((set) => ({
   connected: false,
   setConnected: (v) => set({ connected: v }),
+  sendBytes: () => {},
+  setSendBytes: (fn) => set({ sendBytes: fn }),
 }));
 
 export function useWebSocket() {
   const wsRef = useRef<WebSocket | null>(null);
   const { setPipelineState, setTranscript, setWakeWordActive } = useVoiceStore();
   const { addEntry, updateEntry } = useCommandStore();
-  const { connected, setConnected } = useWSStore();
+    const { connected, setConnected, setSendBytes } = useWSStore();
 
-  const connect = useCallback(() => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) return;
+    const connect = useCallback(() => {
+      if (wsRef.current?.readyState === WebSocket.OPEN) return;
 
-    let wsUrl = "ws://127.0.0.1:8000/ws";
-    
-    if (process.env.NEXT_PUBLIC_API_URL) {
-      const baseUrl = process.env.NEXT_PUBLIC_API_URL.replace(/\/api$/, "");
-      wsUrl = baseUrl.replace(/^http/, "ws") + "/ws";
-    } else if (typeof window !== "undefined" && window.location.hostname.includes("devtunnels.ms")) {
-      const isHttps = window.location.protocol === "https:";
-      const host = window.location.host.replace("-3000", "-8000");
-      wsUrl = `${isHttps ? "wss" : "ws"}://${host}/ws`;
-    }
+      let wsUrl = "ws://127.0.0.1:8000/ws";
+      
+      if (process.env.NEXT_PUBLIC_API_URL) {
+        const baseUrl = process.env.NEXT_PUBLIC_API_URL.replace(/\/api$/, "");
+        wsUrl = baseUrl.replace(/^http/, "ws") + "/ws";
+      } else if (typeof window !== "undefined" && window.location.hostname.includes("devtunnels.ms")) {
+        const isHttps = window.location.protocol === "https:";
+        const host = window.location.host.replace("-3000", "-8000");
+        wsUrl = `${isHttps ? "wss" : "ws"}://${host}/ws`;
+      }
 
-    const ws = new WebSocket(wsUrl);
-    wsRef.current = ws;
+      const ws = new WebSocket(wsUrl);
+      wsRef.current = ws;
 
-    ws.onopen = () => {
-      setConnected(true);
-      console.log("✅ WebSocket connected");
-    };
+      ws.onopen = () => {
+        setConnected(true);
+        setSendBytes((data) => {
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(data);
+          }
+        });
+        console.log("✅ WebSocket connected");
+      };
 
     ws.onmessage = (e) => {
       try {

@@ -444,8 +444,17 @@ async def handle_set_filename(text: str = "", app_name: str = "", **_) -> str:
     try:
         desktop = pywinauto.Desktop(backend="win32")
         
-        # Poll for up to 1.5 seconds to allow the dialog to spawn (crucial for compound LLM commands)
-        dialogs = []
+        # 1. Check if a Save dialog is ALREADY open
+        dialogs = [w for w in desktop.windows() if w.window_text() in ("Save As", "Save", "Open", "Confirm Save As")]
+        
+        # 2. If not open, trigger it (handles one-shot commands like "save the file as demo44")
+        if not dialogs:
+            if app_name:
+                WindowManager().focus_by_title(app_name)
+            KeyboardController().save() # Presses Ctrl+S
+            await asyncio.sleep(0.5)
+            
+        # 3. Poll for up to 1.5 seconds to allow the dialog to spawn
         for _ in range(15):
             dialogs = [w for w in desktop.windows() if w.window_text() in ("Save As", "Save", "Open", "Confirm Save As")]
             if dialogs:
@@ -632,7 +641,7 @@ def register_all_intents() -> None:
         Intent(
             name="search_file",
             patterns=[
-                r"(?:search|find|locate|open)\s+(?:for\s+)?(?:the\s+)?(?:file|pdf|document|doc|image|video|spreadsheet)\s+(?P<file_name>.+)",
+                r"(?:search|find|locate|open)\s+(?:for\s+)?(?:the\s+)?(?:file|pdf|document|doc|image|video|spreadsheet|notepad|excel|word|powerpoint|text)\s+(?P<file_name>.+)",
                 r"(?:search|find|locate)\s+(?:for\s+)?(?:the\s+)?(?P<file_name>.+)",
             ],
             handler=handle_search_file,
@@ -857,12 +866,15 @@ def register_all_intents() -> None:
         Intent(
             name="set_filename",
             patterns=[
+                r"save\s+(?:the\s+)?(?P<app_name>(?!file\b|document\b|changes\b)[\w\s]+?)\s+(?:as|name\s+it|call\s+it)\s+(?P<text>.+)",
+                r"(?:save\s+(?:the\s+)?(?:file|document|changes)?\s*)?(?:as|name\s+it|call\s+it)\s+(?P<text>.+)",
+                r"(?:name|call)\s+(?:it|the\s+file)\s+(?P<text>.+)",
                 r"(?:enter|set|give)\s+(?:the\s+)?(?:file\s+name|name)\s+(?:to\s+)?(?:as\s+)?(?P<text>.+)",
                 r"file\s+name\s+(?P<text>.+)",
             ],
             handler=handle_set_filename,
             description="Type a file name and confirm the save",
-            examples=["file name document1", "set the file name to report"],
+            examples=["save the file as document1", "name it report", "set the file name to report"],
             param_names=["text", "app_name"],
         ),
         Intent(

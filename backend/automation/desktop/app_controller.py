@@ -118,15 +118,12 @@ class AppController:
         try:
             os.startfile(abs_exe)
         except AttributeError:
-            subprocess.Popen([abs_exe], shell=False)
+            import subprocess
+            subprocess.Popen([abs_exe], shell=False, creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP)
         except Exception as e:
             logger.error(f"Failed to launch via OS native methods: {e}")
-            # Fallback to subprocess if startfile fails for any reason
-            subprocess.Popen([abs_exe], shell=False)
-
-        # Force focus to prevent taskbar blinking
-        from automation.desktop.window_manager import WindowManager
-        WindowManager().force_focus_by_exe(abs_exe)
+            import subprocess
+            subprocess.Popen([abs_exe], shell=False, creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP)
 
         logger.info(f"Launched: {abs_exe}")
         return True
@@ -161,7 +158,15 @@ class AppController:
         key = clean.lower()
         killed: list[str] = []
 
-        # Collect candidate exe names
+        # 1. Try to close by specific window title FIRST
+        from automation.desktop.window_manager import WindowManager
+        wm = WindowManager()
+        closed_count = wm.close_windows_by_title(key)
+        if closed_count > 0 and not force:
+            await asyncio.sleep(0.6)
+            return f"Closed {closed_count} window(s) matching '{clean}'"
+
+        # Collect candidate exe names for global kill fallback
         exe_names: list[str] = []
         entry = scanner.find(key)
         if entry:

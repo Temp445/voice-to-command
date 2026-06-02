@@ -33,11 +33,16 @@ class WindowManager:
         return aliases.get(title.lower().strip(), title.lower().strip())
 
     def _find_window_by_title(self, title_substring: str):
-        title_substring = self._resolve_title_alias(title_substring).replace("the ", "").strip()
-        for win in Desktop(backend="uia").windows():
+        title_substring = self._resolve_title_alias(title_substring).lower()
+        filler_words = {"the", "a", "an", "my", "this", "file", "folder", "app", "application", "document"}
+        search_words = [w for w in title_substring.split() if w not in filler_words]
+        # Use win32 backend for lightning fast top-level window enumeration
+        for win in Desktop(backend="win32").windows():
             try:
-                title = win.window_text()
-                if title and title_substring in title.lower():
+                if not win.is_visible() or not win.window_text():
+                    continue
+                win_text = win.window_text().lower()
+                if win_text and all(word in win_text for word in search_words):
                     return win
             except Exception:
                 continue
@@ -62,12 +67,30 @@ class WindowManager:
     def focus_by_title(self, title_substring: str) -> bool:
         win = self._find_window_by_title(title_substring)
         if win:
+            import ctypes
             try:
-                # Connect to the app's process to ensure we focus the active top-level window (e.g., a modal dialog)
-                app = pywinauto.Application(backend="uia").connect(process=win.process_id())
-                top_win = app.top_window()
-                top_win.set_focus()
-                logger.info(f"Focused top window of application matching: {title_substring}")
+                user32 = ctypes.windll.user32
+                hwnd = win.handle
+                if user32.IsIconic(hwnd):
+                    user32.ShowWindow(hwnd, 9) # SW_RESTORE
+                
+                # Use AttachThreadInput trick to force foreground
+                foreground_hwnd = user32.GetForegroundWindow()
+                if hwnd != foreground_hwnd:
+                    foreground_thread = user32.GetWindowThreadProcessId(foreground_hwnd, None)
+                    current_thread = ctypes.windll.kernel32.GetCurrentThreadId()
+                    
+                    if foreground_thread != current_thread:
+                        user32.AttachThreadInput(current_thread, foreground_thread, True)
+                        user32.SetForegroundWindow(hwnd)
+                        user32.SetFocus(hwnd)
+                        user32.AttachThreadInput(current_thread, foreground_thread, False)
+                    else:
+                        user32.SetForegroundWindow(hwnd)
+                else:
+                    user32.SetForegroundWindow(hwnd)
+                    
+                logger.info(f"Focused window matching: {title_substring}")
                 return True
             except Exception as e:
                 logger.warning(f"Could not focus {title_substring}: {e}")
@@ -93,18 +116,26 @@ class WindowManager:
         win.restore()
         logger.info("Window restored")
 
-    def close_window_by_title(self, title_substring: str) -> bool:
-        title_substring = self._resolve_title_alias(title_substring)
+    def close_windows_by_title(self, title_substring: str) -> int:
+        title_substring = self._resolve_title_alias(title_substring).lower()
+        # Remove common filler words that the user might say
+        filler_words = {"the", "a", "an", "my", "this", "file", "folder", "app", "application", "document"}
+        search_words = [w for w in title_substring.split() if w not in filler_words]
+        closed_count = 0
         for win in Desktop(backend="uia").windows():
             try:
-                title = win.window_text()
-                if title and title_substring in title.lower():
+                win_text = win.window_text().lower()
+                if win_text and all(word in win_text for word in search_words):
                     win.close()
-                    logger.info(f"Closed window matching: {title_substring}")
-                    return True
+                    closed_count += 1
             except Exception:
                 continue
-        return False
+        if closed_count > 0:
+            logger.info(f"Closed {closed_count} window(s) matching: {title_substring}")
+        return closed_count
+
+    def close_window_by_title(self, title_substring: str) -> bool:
+        return self.close_windows_by_title(title_substring) > 0
 
     def force_focus_by_title(self, title_substring: str) -> None:
         """Asynchronously wait for a window with the given title and force it to foreground."""

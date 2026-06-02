@@ -25,6 +25,9 @@ class PiperSynthesizer(TTSProvider):
     Model is auto-downloaded on first use via scripts/download_models.py.
     """
 
+    _cached_piper_voice = None
+    _cached_loaded_voice = ""
+
     def __init__(self):
         models_dir_path = Path(settings.piper_models_dir)
         if not models_dir_path.is_absolute():
@@ -34,8 +37,7 @@ class PiperSynthesizer(TTSProvider):
         self.voice = settings.piper_voice
         self.models_dir.mkdir(parents=True, exist_ok=True)
         
-        self._piper_voice = None
-        self._loaded_voice = ""
+        self._piper_voice = PiperSynthesizer._cached_piper_voice
 
     def requires_api_key(self) -> bool:
         return False
@@ -54,11 +56,13 @@ class PiperSynthesizer(TTSProvider):
             logger.error(f"Piper model not found: {model_path}. Run scripts/download_models.py")
             raise FileNotFoundError(f"Piper voice model not found: {model_path}")
 
-        if self._piper_voice is None or self._loaded_voice != self.voice:
+        if PiperSynthesizer._cached_piper_voice is None or PiperSynthesizer._cached_loaded_voice != self.voice:
             logger.info(f"Loading Piper voice model into memory: {self.voice} (this may take ~10 seconds...)")
-            self._piper_voice = PiperVoice.load(str(model_path))
-            self._loaded_voice = self.voice
+            PiperSynthesizer._cached_piper_voice = PiperVoice.load(str(model_path))
+            PiperSynthesizer._cached_loaded_voice = self.voice
             logger.info(f"Successfully loaded Piper voice: {self.voice}")
+            
+        self._piper_voice = PiperSynthesizer._cached_piper_voice
 
     async def synthesize(self, text: str) -> bytes:
         """Run Piper synthesis in a thread pool (CPU-bound)."""

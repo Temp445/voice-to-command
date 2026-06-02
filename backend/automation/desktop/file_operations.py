@@ -125,13 +125,33 @@ class FileOperations:
         """Search for a file using FileIndexer and open it."""
         from automation.desktop.file_indexer import get_indexer
         import os
+        from pathlib import Path
         
         indexer = get_indexer()
         results = indexer.search(file_name, is_folder=False, limit=5)
         
         if not results:
+            # Fallback: Check immediate working directories and common locations
+            try:
+                base = Path(os.getcwd())
+                fallback_dirs = [base, base.parent, base.parent.parent, Path.home() / "Downloads", Path.home() / "Documents", Path.home() / "Desktop"]
+                for root_dir in set(fallback_dirs):
+                    if not root_dir.exists(): continue
+                    for f in os.listdir(str(root_dir)):
+                        if file_name.lower() in f.lower() and os.path.isfile(os.path.join(str(root_dir), f)):
+                            results.append({"name": f, "path": os.path.join(str(root_dir), f)})
+            except Exception:
+                pass
+
+        if not results:
             return f"Could not find any file named {file_name}"
             
+        # 1. Check for an exact name match (e.g., if user specifically asked for "demo45.txt")
+        exact_matches = [r for r in results if r["name"].lower() == file_name.lower()]
+        if exact_matches:
+            results = exact_matches
+            
+        # 2. If we only have 1 result now, open it
         if len(results) == 1:
             file_path = results[0]["path"]
             try:
@@ -140,13 +160,21 @@ class FileOperations:
             except Exception as e:
                 return f"Found {results[0]['name']} but failed to open it: {e}"
             
-        # If multiple, open the first one (we could add disambiguation here later)
-        file_path = results[0]["path"]
-        try:
-            self._launch_and_focus_file(file_path)
-            return f"Found multiple files named {file_name}. Opened the most likely one."
-        except Exception as e:
-            return f"Found multiple files but failed to open: {e}"
+        # 3. If multiple results remain, prompt the user to disambiguate
+        # Deduplicate paths in case fallback and indexer found the same file
+        unique_results = {r["path"]: r for r in results}.values()
+        top_matches = list(unique_results)[:4]
+        
+        if len(top_matches) == 1:
+            file_path = top_matches[0]["path"]
+            try:
+                self._launch_and_focus_file(file_path)
+                return f"Opened {top_matches[0]['name']}"
+            except Exception as e:
+                return f"Found {top_matches[0]['name']} but failed to open it: {e}"
+
+        names = [r["name"] for r in top_matches]
+        return f"MULTIPLE_MATCHES: I found multiple files matching '{file_name}': {', '.join(names)}. Which one do you want to open?"
 
     def create_folder(self, folder_name: str, drive: str | None = None) -> str:
         """Create a folder. Defaults to Desktop if no absolute path is given."""

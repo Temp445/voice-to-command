@@ -71,16 +71,40 @@ class AudioCapture:
         logger.info("🎤 Audio capture stopped")
 
     def _capture_loop(self) -> None:
-        stream = self._audio.open(
-            format=FORMAT,
-            channels=CHANNELS,
-            rate=SAMPLE_RATE,
-            input=True,
-            frames_per_buffer=CHUNK_SIZE,
-        )
+        stream = None
+        try:
+            stream = self._audio.open(
+                format=FORMAT,
+                channels=CHANNELS,
+                rate=SAMPLE_RATE,
+                input=True,
+                frames_per_buffer=CHUNK_SIZE,
+            )
+        except Exception as e:
+            logger.warning(f"🎤 No local microphone found ({e}). Using Remote Mic only.")
+
+        from voice.remote_mic import subscribe
+        remote_q = subscribe()
+        import queue
+        import time
+
         try:
             while self._running:
-                raw = stream.read(CHUNK_SIZE, exception_on_overflow=False)
+                raw = b""
+                try:
+                    raw = remote_q.get_nowait()
+                except queue.Empty:
+                    if stream and stream.get_read_available() >= CHUNK_SIZE:
+                        raw = stream.read(CHUNK_SIZE, exception_on_overflow=False)
+                    else:
+                        time.sleep(0.01)
+                        continue
+
+                if not raw:
+                    continue
+
+                if len(raw) % 2 != 0:
+                    raw = raw[:-(len(raw) % 2)]
                 
                 # Apply pyrnnoise if enabled
                 if self._noise_cancelling and self._denoiser:
@@ -100,14 +124,24 @@ class AudioCapture:
                         logger.error(f"RNNoise processing error: {e}")
                 
                 try:
-                    is_speech = self._vad.is_speech(raw, SAMPLE_RATE)
+                    # webrtcvad strictly requires 10, 20, or 30ms frames (960 bytes for 30ms at 16kHz)
+                    frame_len = 960
+                    is_speech = False
+                    for i in range(0, len(raw), frame_len):
+                        frame = raw[i:i+frame_len]
+                        if len(frame) == frame_len:
+                            if self._vad.is_speech(frame, SAMPLE_RATE):
+                                is_speech = True
+                                break
                 except Exception:
                     is_speech = False
+                    
                 if is_speech:
                     self._queue.put(raw)
         finally:
-            stream.stop_stream()
-            stream.close()
+            if stream:
+                stream.stop_stream()
+                stream.close()
 
     def get_speech_segment(self, silence_chunks: int = 30, timeout: float = 10.0) -> bytes:
         """

@@ -77,6 +77,14 @@ async def update_settings(body: SettingsUpdate, db: AsyncSession = Depends(get_d
     if any(f in body.model_dump(exclude_none=True) for f in ("llm_provider", "llm_model", "llm_api_key", "llm_enabled", "llm_mode", "llm_temperature")):
         _apply_llm_settings(s)
 
+    # Hot-reload STT model if it changed
+    if "whisper_model" in body.model_dump(exclude_none=True):
+        try:
+            from voice.stt.transcriber import Transcriber
+            Transcriber.reload_model()
+        except ImportError:
+            pass
+
     # Broadcast voice pipeline hot-reload signal
     await ws_manager.broadcast("settings_updated", {"tts_provider": s.tts_provider, "wake_word": s.wake_word})
 

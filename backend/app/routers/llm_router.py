@@ -35,7 +35,13 @@ async def test_connection():
         )
         return {"ok": True, "provider": llm_service._provider_name, "model": llm_service._model, "reply": reply.strip()}
     except Exception as e:
-        return {"ok": False, "error": str(e)}
+        import re
+        err_str = str(e)
+        # Try to extract a clean message from JSON dumps (e.g. OpenAI/Groq/Anthropic)
+        msg_match = re.search(r"['\"]message['\"]:\s*['\"]([^'\"]+)['\"]", err_str)
+        if msg_match:
+            err_str = msg_match.group(1)
+        return {"ok": False, "error": err_str}
 
 
 @router.post("/chat", response_model=LLMChatResponse)

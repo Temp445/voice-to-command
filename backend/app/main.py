@@ -246,10 +246,18 @@ async def websocket_endpoint(websocket: WebSocket):
             "version": settings.app_version,
         })
         while True:
-            data = await websocket.receive_json()
-            # Handle ping-pong
-            if data.get("type") == "ping":
-                await ws_manager.send_to(websocket, "pong", {})
+            message = await websocket.receive()
+            if message.get("bytes") is not None:
+                from voice.remote_mic import put_chunk
+                put_chunk(message["bytes"])
+            elif message.get("text") is not None:
+                import json
+                try:
+                    data = json.loads(message["text"])
+                    if data.get("type") == "ping":
+                        await ws_manager.send_to(websocket, "pong", {})
+                except json.JSONDecodeError:
+                    pass
     except (WebSocketDisconnect, RuntimeError) as e:
         # Client disconnected or socket closed
         await ws_manager.disconnect(websocket)

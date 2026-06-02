@@ -1636,5 +1636,17 @@
     "exe_name": "SystemSettings.exe",
     "path": "C:\\Windows\\ImmersiveControlPanel\\SystemSettings.exe",
     "source": "process"
+  },
+  "openconsole": {
+    "name": "OpenConsole",
+    "exe_name": "OpenConsole.exe",
+    "path": "D:\\Users\\Nivin\\AppData\\Local\\Programs\\Microsoft VS Code\\8761a5560c\\resources\\app\\node_modules\\node-pty\\build\\Release\\conpty\\OpenConsole.exe",
+    "source": "process"
+  },
+  "git-remote-https": {
+    "name": "git-remote-https",
+    "exe_name": "git-remote-https.exe",
+    "path": "C:\\Users\\Nivin\\AppData\\Local\\Programs\\Git\\mingw64\\libexec\\git-core\\git-remote-https.exe",
+    "source": "process"
   }
 }

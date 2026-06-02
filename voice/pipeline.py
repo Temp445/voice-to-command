@@ -96,8 +96,15 @@ class VoicePipeline:
         self._running = False
         self._audio_capture.stop()
         self._wake_word.stop()
-        if self._loop:
-            self._loop.call_soon_threadsafe(self._loop.stop)
+        if self._loop and self._loop.is_running():
+            async def _cancel_and_stop():
+                tasks = [t for t in asyncio.all_tasks(self._loop) if t is not asyncio.current_task()]
+                for task in tasks:
+                    task.cancel()
+                if tasks:
+                    await asyncio.gather(*tasks, return_exceptions=True)
+                self._loop.stop()
+            asyncio.run_coroutine_threadsafe(_cancel_and_stop(), self._loop)
         if hasattr(self, "_loop_thread") and self._loop_thread:
             self._loop_thread.join(timeout=3)
         logger.info("🎙️ Voice pipeline stopped")

@@ -76,7 +76,9 @@ class CommandService:
                     params = {"app_name": pending["params"].get("app_name", "")}
                 else:
                     intent_name = "set_filename"
-                    params = {"text": text, "app_name": pending["params"].get("app_name", "")}
+                    matched, extracted = self._get_intent("set_filename").match(text)
+                    extracted_text = extracted.get("text") if matched and extracted.get("text") else text
+                    params = {"text": extracted_text, "app_name": pending["params"].get("app_name", "")}
                     
                 # Skip normal classification and go straight to execution
                 return await self._execute_intent(intent_name, params, text, start)
@@ -137,16 +139,25 @@ class CommandService:
             params: dict[str, Any] = {}
             self._pending_action = None
         else:
-            # 3. Pronoun detection: If the command contains pronouns, bypass native regex to force LLM context resolution.
+            # 3. Native regex matching
+            intent_name, params = self._regex_match(text)
+
+            # 4. Pronoun detection: If any extracted parameter is exactly a pronoun, force LLM context resolution.
             from app.services.llm.llm_service import llm_service
-            has_pronouns = bool(re.search(r'\b(it|this|that|them|here)\b', text, re.IGNORECASE))
+            has_pronouns = False
+            if intent_name:
+                for val in params.values():
+                    if isinstance(val, str) and re.fullmatch(r'(?i)(it|this|that|them|here)', val.strip()):
+                        has_pronouns = True
+                        break
+            else:
+                # If no regex matched, we might still want LLM to catch "close it" if it didn't even match regex
+                has_pronouns = bool(re.search(r'\b(it|this|that|them|here)\b', text, re.IGNORECASE))
             
             if has_pronouns and llm_service.is_ready:
                 intent_name = None
                 params = {}
-                logger.info("Pronouns detected. Bypassing native regex to allow LLM context resolution.")
-            else:
-                intent_name, params = self._regex_match(text)
+                logger.info("Pronouns detected needing resolution. Bypassing native regex to allow LLM context resolution.")
 
             # 4. Handle pending disambiguation if no new regex matched
             if not intent_name and getattr(self, "_pending_action", None):

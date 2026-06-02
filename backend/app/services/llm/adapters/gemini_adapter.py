@@ -16,8 +16,9 @@ _MODELS = [
 class GeminiAdapter(LLMProvider):
     def __init__(self, api_key: str, model: str = "gemini-2.0-flash"):
         import google.generativeai as genai
-        genai.configure(api_key=api_key)
+        # Do not use global genai.configure to avoid caching issues
         self._genai = genai
+        self._api_key = api_key
         self._model_name = model
 
     @property
@@ -48,6 +49,7 @@ class GeminiAdapter(LLMProvider):
                 self._model_name,
                 system_instruction=system_prompt or None,
                 generation_config={"temperature": temperature, "max_output_tokens": max_tokens},
+                client_options={"api_key": self._api_key},
             )
             # Last message should be the user prompt
             last_user = next((m["parts"][0] for m in reversed(history) if m["role"] == "user"), "")
@@ -66,6 +68,7 @@ class GeminiAdapter(LLMProvider):
                 self._model_name,
                 system_instruction=system_prompt or None,
                 generation_config={"temperature": temperature, "max_output_tokens": max_tokens},
+                client_options={"api_key": self._api_key},
             )
             last_user = next((m["parts"][0] for m in reversed(history) if m["role"] == "user"), "")
             chat_history = history[:-1] if history and history[-1]["role"] == "user" else history

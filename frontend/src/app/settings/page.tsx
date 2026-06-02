@@ -81,6 +81,7 @@ export default function SettingsPage() {
     setTestingLlm(true);
     setTestResult(null);
     try {
+      await handleSave();
       const res: any = await api.testLLM();
       if (res.ok) setTestResult({ ok: true, msg: `Success! Model replied: ${res.reply}` });
       else setTestResult({ ok: false, msg: res.error || "Connection failed" });

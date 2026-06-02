@@ -59,7 +59,10 @@ class WakeWordDetector:
             )
         else:
             logger.info(f"Loading OpenWakeWord model for: '{self.wake_word}' (using '{model_name}')")
-        openwakeword.utils.download_models()   # Download if not cached
+        
+        # We explicitly omit openwakeword.utils.download_models() because it attempts to
+        # download ALL models (30+ files) which frequently causes HuggingFace connection timeouts.
+        # The OWWModel constructor will automatically download just the requested model.
         return OWWModel(wakeword_models=[model_name], inference_framework="onnx")
 
     def start(self) -> None:
@@ -77,26 +80,57 @@ class WakeWordDetector:
         logger.info("👂 Wake word detector stopped")
 
     def _detection_loop(self) -> None:
-        try:
-            if self._model is None:
+        while self._model is None and self._running:
+            try:
                 self._model = self._load_model()
-        except Exception as e:
-            logger.error(f"Failed to load wake word model: {e}")
+            except Exception as e:
+                logger.error(f"Failed to load wake word model: {e}. Retrying in 5s...")
+                import time
+                time.sleep(5)
+                continue
+        
+        if not self._running:
             return
 
-        stream = self._audio.open(
-            format=FORMAT,
-            channels=CHANNELS,
-            rate=SAMPLE_RATE,
-            input=True,
-            frames_per_buffer=CHUNK_SIZE,
-        )
+        stream = None
+        try:
+            stream = self._audio.open(
+                format=FORMAT,
+                channels=CHANNELS,
+                rate=SAMPLE_RATE,
+                input=True,
+                frames_per_buffer=CHUNK_SIZE,
+            )
+            logger.info(f"✅ Listening for wake word: '{self.wake_word}' (Local Mic Active)")
+        except Exception as e:
+            logger.warning(f"⚠️  No local microphone found ({e}). Listening via Remote Mic only.")
 
-        logger.info(f"✅ Listening for wake word: '{self.wake_word}'")
+        from voice.remote_mic import subscribe, clear_queues
+        remote_q = subscribe()
+        import queue
+        import time
 
         try:
             while self._running:
-                raw = stream.read(CHUNK_SIZE, exception_on_overflow=False)
+                raw = b""
+                # 1. Prioritize remote audio queue
+                try:
+                    raw = remote_q.get_nowait()
+                except queue.Empty:
+                    # 2. Fallback to local mic if available and has data
+                    if stream and stream.get_read_available() >= CHUNK_SIZE:
+                        raw = stream.read(CHUNK_SIZE, exception_on_overflow=False)
+                    # 3. Otherwise wait to prevent CPU spin
+                    else:
+                        time.sleep(0.01)
+                        continue
+
+                if not raw:
+                    continue
+
+                if len(raw) % 2 != 0:
+                    raw = raw[:-(len(raw) % 2)]
+
                 audio_np = np.frombuffer(raw, dtype=np.int16)
                 predictions = self._model.predict(audio_np)
 
@@ -104,9 +138,12 @@ class WakeWordDetector:
                     if score >= DETECTION_THRESHOLD:
                         logger.info(f"🔔 Wake word detected! ('{self.wake_word}', score={score:.2f})")
                         self._model.reset()   # Reset prediction buffer
+                        # NOTE: We DO NOT clear queues anymore! 
+                        # Doing so destroys the command audio that immediately follows the wake word.
                         if self.on_detected:
                             self.on_detected()
                         break
         finally:
-            stream.stop_stream()
-            stream.close()
+            if stream:
+                stream.stop_stream()
+                stream.close()
