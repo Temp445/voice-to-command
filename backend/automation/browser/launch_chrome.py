@@ -39,7 +39,7 @@ def is_cdp_open(port: int = 9222) -> bool:
     import urllib.request
     try:
         req = urllib.request.Request(f"http://localhost:{port}/json/version")
-        with urllib.request.urlopen(req, timeout=2.0) as response:
+        with urllib.request.urlopen(req, timeout=0.5) as response:
             return response.status == 200
     except Exception:
         return False
@@ -65,11 +65,15 @@ def launch_chrome(profile_dir: str, port: int = 9222):
     args = [
         exe,
         f"--remote-debugging-port={port}",
-        "--start-maximized"
+        "--start-maximized",
+        "--profile-directory=Default",
+        "--disable-blink-features=AutomationControlled",
+        "--no-first-run",
+        "--no-default-browser-check",
+        "--restore-last-session"
     ]
-    # Only specify user-data-dir if it's explicitly passed and different from default, 
-    # otherwise let Chrome use the default organically to avoid lock issues.
-    if profile_dir and profile_dir != get_default_chrome_profile():
+    
+    if profile_dir:
         args.append(f"--user-data-dir={profile_dir}")
         
     logger.info(f"Launching Chrome: {' '.join(args)}")

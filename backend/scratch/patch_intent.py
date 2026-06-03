@@ -7,7 +7,7 @@ with open(path, "r", encoding="utf-8") as f:
 
 content = content.replace(
     "from automation.browser.browser_controller import BrowserController",
-    "from automation.ace_browser.ace_browser_controller import ACEBrowserController as BrowserController"
+    "from automation.browser.browser_controller import BrowserController as BrowserController"
 )
 
 with open(path, "w", encoding="utf-8") as f:

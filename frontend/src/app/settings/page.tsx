@@ -9,14 +9,6 @@ import { TopBar } from "@/components/layout/TopBar";
 import { useSettingsStore } from "@/store/settingsStore";
 import { api } from "@/lib/api";
 
-const card    = { background: "var(--card)",      border: "1px solid var(--border)", borderRadius: "0.75rem", overflow: "hidden" };
-const hdr     = { padding: "1rem 1.25rem", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: "0.5rem" };
-const body    = { padding: "1.25rem", display: "flex", flexDirection: "column" as const, gap: "1.25rem" };
-const lbl     = { fontSize: "0.8125rem", fontWeight: 600, color: "var(--foreground)", marginBottom: "0.375rem" } as React.CSSProperties;
-const sub     = { fontSize: "0.75rem", color: "var(--muted-foreground)", marginTop: "0.25rem" };
-const inp     = { width: "100%", background: "var(--input)", border: "1px solid var(--border)", borderRadius: "0.5rem", padding: "0.625rem 0.875rem", fontSize: "0.875rem", color: "var(--foreground)", fontFamily: "var(--font-mono)", outline: "none" } as React.CSSProperties;
-const btnA    = { padding: "0.4rem 1rem", borderRadius: "0.375rem", fontSize: "0.8125rem", fontWeight: 600, cursor: "pointer", border: "1px solid var(--ring)", background: "var(--primary)", color: "var(--primary-foreground)", transition: "opacity 0.15s" } as React.CSSProperties;
-const btnI    = { padding: "0.4rem 1rem", borderRadius: "0.375rem", fontSize: "0.8125rem", fontWeight: 500, cursor: "pointer", border: "1px solid var(--border)", background: "var(--secondary)", color: "var(--muted-foreground)", transition: "background 0.15s" } as React.CSSProperties;
 
 export default function SettingsPage() {
   const settings = useSettingsStore();
@@ -142,12 +134,12 @@ export default function SettingsPage() {
   };
 
   return (
-    <div style={{ display: "flex", height: "100vh", overflow: "hidden", background: "var(--background)" }}>
+    <div className="flex h-screen overflow-hidden bg-[var(--background)]">
       <Sidebar />
-      <div style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }}>
+      <div className="flex flex-col flex-1 overflow-hidden relative">
         <TopBar />
-        <main style={{ flex: 1, overflowY: "auto", padding: "1.75rem" }}>
-          <div style={{ maxWidth: "720px", margin: "0 auto", display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+        <main className="flex-1 overflow-y-auto p-4 md:p-7">
+          <div className="max-w-3xl mx-auto flex flex-col gap-5 w-full">
 
             {/* Header */}
             <div>
@@ -158,24 +150,24 @@ export default function SettingsPage() {
             </div>
 
             {/* ── Voice Recognition ── */}
-            <section style={card}>
-              <div style={hdr}>
+            <section className="ace-card">
+              <div className="ace-card-header flex justify-between md:justify-start">
                 <Mic style={{ width: "1rem", height: "1rem", color: "var(--muted-foreground)" }} />
                 <span style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--foreground)" }}>Voice Recognition</span>
               </div>
-              <div style={body}>
+              <div className="p-4 md:p-5 flex flex-col gap-5">
                 <div>
-                  <p style={lbl}>Wake Word</p>
-                  <input style={inp} value={settings.wakeWord}
+                  <p className="text-[0.8125rem] font-semibold text-[var(--foreground)] mb-1.5">Wake Word</p>
+                  <input className="command-input" value={settings.wakeWord}
                     onChange={(e) => settings.update({ wakeWord: e.target.value })}
                     onFocus={(e) => { (e.target as HTMLInputElement).style.borderColor = "var(--ring)"; }}
                     onBlur={(e)  => { (e.target as HTMLInputElement).style.borderColor  = "var(--border)"; }}
                   />
-                  <p style={sub}>Currently: <span style={{ color: "var(--foreground)", fontFamily: "var(--font-mono)" }}>&quot;{settings.wakeWord}&quot;</span></p>
+                  <p className="text-xs text-[var(--muted-foreground)] mt-1">Currently: <span style={{ color: "var(--foreground)", fontFamily: "var(--font-mono)" }}>&quot;{settings.wakeWord}&quot;</span></p>
                 </div>
                 <div>
-                  <p style={lbl}>STT Provider</p>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem", marginBottom: "1.25rem" }}>
+                  <p className="text-[0.8125rem] font-semibold text-[var(--foreground)] mb-1.5">STT Provider</p>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "0.75rem", marginBottom: "1.25rem" }}>
                     {[
                       { key: "whisper", label: "Whisper", badge: "Local", desc: "Private, works offline" },
                       { key: "gstt",  label: "Google STT", badge: "Cloud", desc: "Highly accurate, requires internet" },
@@ -197,16 +189,16 @@ export default function SettingsPage() {
 
                 {settings.sttProvider === "whisper" && (
                   <div>
-                    <p style={lbl}>Whisper Model</p>
+                    <p className="text-[0.8125rem] font-semibold text-[var(--foreground)] mb-1.5">Whisper Model</p>
                     <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
                       {(["tiny", "base", "small", "large-v2", "large-v3"] as const).map((m) => (
                         <button key={m} onClick={() => settings.update({ whisperModel: m })}
-                          style={settings.whisperModel === m ? btnA : btnI}>
+                          style={settings.whisperModel === m ? "px-4 py-1.5 rounded-md text-[0.8125rem] font-semibold cursor-pointer border border-[var(--ring)] bg-[var(--primary)] text-[var(--primary-foreground)] transition-opacity hover:opacity-85" : "px-4 py-1.5 rounded-md text-[0.8125rem] font-medium cursor-pointer border border-[var(--border)] bg-[var(--secondary)] text-[var(--muted-foreground)] transition-colors hover:bg-[var(--muted)]"}>
                           {m.charAt(0).toUpperCase() + m.slice(1)}
                         </button>
                       ))}
                     </div>
-                    <p style={sub}>Tiny = fastest · Small = accurate · Large = highly accurate but slow</p>
+                    <p className="text-xs text-[var(--muted-foreground)] mt-1">Tiny = fastest · Small = accurate · Large = highly accurate but slow</p>
                   </div>
                 )}
                 
@@ -224,15 +216,15 @@ export default function SettingsPage() {
             </section>
 
             {/* ── TTS Engine ── */}
-            <section style={card}>
-              <div style={hdr}>
+            <section className="ace-card">
+              <div className="ace-card-header flex justify-between md:justify-start">
                 <Volume2 style={{ width: "1rem", height: "1rem", color: "var(--muted-foreground)" }} />
                 <span style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--foreground)" }}>Text-to-Speech Engine</span>
               </div>
-              <div style={body}>
+              <div className="p-4 md:p-5 flex flex-col gap-5">
                 <div>
-                  <p style={lbl}>TTS Provider</p>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
+                  <p className="text-[0.8125rem] font-semibold text-[var(--foreground)] mb-1.5">TTS Provider</p>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "0.75rem" }}>
                     {[
                       { key: "piper", label: "Piper TTS",        badge: "Offline", badgeBg: "rgba(34,197,94,0.12)",  badgeColor: "#22c55e", desc: "Fully offline · No API key · Fast" },
                       { key: "gtts",  label: "Google TTS",  badge: "Cloud",   badgeBg: "rgba(59,130,246,0.12)", badgeColor: "#3b82f6", desc: "High quality · Requires internet" },
@@ -257,8 +249,8 @@ export default function SettingsPage() {
 
                 {settings.ttsProvider === "piper" && (
                   <div>
-                    <p style={lbl}>Piper Voice</p>
-                    <select style={{ ...inp, maxWidth: "22rem" }} value={settings.piperVoice}
+                    <p className="text-[0.8125rem] font-semibold text-[var(--foreground)] mb-1.5">Piper Voice</p>
+                    <select className="command-input max-w-full md:max-w-[22rem]" value={settings.piperVoice}
                       onChange={(e) => settings.update({ piperVoice: e.target.value })}
                       onFocus={(e) => { (e.target as HTMLSelectElement).style.borderColor = "var(--ring)"; }}
                       onBlur={(e)  => { (e.target as HTMLSelectElement).style.borderColor  = "var(--border)"; }}
@@ -277,7 +269,7 @@ export default function SettingsPage() {
                   <p style={{ fontSize: "0.75rem", color: "var(--muted-foreground)", marginBottom: "1rem" }}>Listen to how the assistant will sound</p>
                   
                   <div style={{ display: "flex", gap: "0.5rem" }}>
-                    <input style={{ ...inp, flex: 1 }} value={testTtsText} onChange={(e) => setTestTtsText(e.target.value)} placeholder="Enter text to synthesize..." />
+                    <input className="command-input flex-1" value={testTtsText} onChange={(e) => setTestTtsText(e.target.value)} placeholder="Enter text to synthesize..." />
                     <button onClick={handleTestTts} disabled={testingTts}
                       style={{ padding: "0.5rem 1.25rem", borderRadius: "0.375rem", fontSize: "0.8125rem", fontWeight: 600, cursor: "pointer", background: "var(--primary)", color: "var(--primary-foreground)", border: "none", display: "flex", alignItems: "center", gap: "0.5rem", opacity: testingTts ? 0.7 : 1 }}>
                       {testingTts ? <Loader2 size={16} className="animate-spin" /> : <Volume2 size={16} />}
@@ -289,8 +281,8 @@ export default function SettingsPage() {
             </section>
 
             {/* ── AI Assistant (LLM) ── */}
-            <section style={card}>
-              <div style={{ ...hdr, justifyContent: "space-between" }}>
+            <section className="ace-card">
+              <div className="ace-card-header flex justify-between">
                 <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
                   <Bot style={{ width: "1rem", height: "1rem", color: "var(--primary)" }} />
                   <span style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--foreground)" }}>AI Assistant</span>
@@ -302,11 +294,11 @@ export default function SettingsPage() {
               </div>
               
               {settings.llmEnabled && (
-                <div style={body}>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1.25rem" }}>
+                <div className="p-4 md:p-5 flex flex-col gap-5">
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "1.25rem" }}>
                     <div>
-                      <p style={lbl}>Provider</p>
-                      <select style={inp} value={settings.llmProvider || ""}
+                      <p className="text-[0.8125rem] font-semibold text-[var(--foreground)] mb-1.5">Provider</p>
+                      <select className="command-input" value={settings.llmProvider || ""}
                         onChange={(e) => {
                           const prov = e.target.value;
                           if (!prov) {
@@ -323,8 +315,8 @@ export default function SettingsPage() {
                       </select>
                     </div>
                     <div>
-                      <p style={lbl}>Model</p>
-                      <select style={inp} value={settings.llmModel || ""} onChange={(e) => settings.update({ llmModel: e.target.value })}>
+                      <p className="text-[0.8125rem] font-semibold text-[var(--foreground)] mb-1.5">Model</p>
+                      <select className="command-input" value={settings.llmModel || ""} onChange={(e) => settings.update({ llmModel: e.target.value })}>
                         <option value="">None</option>
                         {providers.find(p => p.id === settings.llmProvider)?.models.map(m => (
                           <option key={m} value={m}>{m}</option>
@@ -334,9 +326,9 @@ export default function SettingsPage() {
                   </div>
 
                   <div>
-                    <p style={lbl}>API Key</p>
+                    <p className="text-[0.8125rem] font-semibold text-[var(--foreground)] mb-1.5">API Key</p>
                     <div style={{ position: "relative" }}>
-                      <input type={showApiKey ? "text" : "password"} style={{ ...inp, paddingRight: "3rem" }}
+                      <input type={showApiKey ? "text" : "password"} className="command-input pr-12"
                         placeholder="••••••••••••••••••••••••"
                         value={settings.llmApiKey}
                         onChange={(e) => settings.update({ llmApiKey: e.target.value })}
@@ -346,20 +338,20 @@ export default function SettingsPage() {
                         {showApiKey ? <EyeOff size={16} /> : <Eye size={16} />}
                       </button>
                     </div>
-                    <p style={sub}>Only required if changing. Saved securely in the database.</p>
+                    <p className="text-xs text-[var(--muted-foreground)] mt-1">Only required if changing. Saved securely in the database.</p>
                   </div>
 
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1.25rem" }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "1.25rem" }}>
                     <div>
-                      <p style={lbl}>Processing Mode</p>
+                      <p className="text-[0.8125rem] font-semibold text-[var(--foreground)] mb-1.5">Processing Mode</p>
                       <div style={{ display: "flex", gap: "0.5rem" }}>
-                        <button onClick={() => settings.update({ llmMode: "fallback" })} style={settings.llmMode === "fallback" ? btnA : btnI}>Fallback</button>
-                        <button onClick={() => settings.update({ llmMode: "always_on" })} style={settings.llmMode === "always_on" ? btnA : btnI}>Always-On</button>
+                        <button onClick={() => settings.update({ llmMode: "fallback" })} className={settings.llmMode === "fallback" ? "px-4 py-1.5 rounded-md text-[0.8125rem] font-semibold cursor-pointer border border-[var(--ring)] bg-[var(--primary)] text-[var(--primary-foreground)] transition-opacity hover:opacity-85" : "px-4 py-1.5 rounded-md text-[0.8125rem] font-medium cursor-pointer border border-[var(--border)] bg-[var(--secondary)] text-[var(--muted-foreground)] transition-colors hover:bg-[var(--muted)]"}>Fallback</button>
+                        <button onClick={() => settings.update({ llmMode: "always_on" })} className={settings.llmMode === "always_on" ? "px-4 py-1.5 rounded-md text-[0.8125rem] font-semibold cursor-pointer border border-[var(--ring)] bg-[var(--primary)] text-[var(--primary-foreground)] transition-opacity hover:opacity-85" : "px-4 py-1.5 rounded-md text-[0.8125rem] font-medium cursor-pointer border border-[var(--border)] bg-[var(--secondary)] text-[var(--muted-foreground)] transition-colors hover:bg-[var(--muted)]"}>Always-On</button>
                       </div>
-                      <p style={sub}>{settings.llmMode === "fallback" ? "Only calls AI if command fails (fast, cheap)" : "Routes every command to AI (smarter, slower)"}</p>
+                      <p className="text-xs text-[var(--muted-foreground)] mt-1">{settings.llmMode === "fallback" ? "Only calls AI if command fails (fast, cheap)" : "Routes every command to AI (smarter, slower)"}</p>
                     </div>
                     <div>
-                      <p style={lbl}>Temperature: {settings.llmTemperature}</p>
+                      <p className="text-[0.8125rem] font-semibold text-[var(--foreground)] mb-1.5">Temperature: {settings.llmTemperature}</p>
                       <input type="range" min="0" max="1" step="0.1"
                         value={settings.llmTemperature}
                         onChange={(e) => settings.update({ llmTemperature: parseFloat(e.target.value) })}
@@ -392,18 +384,18 @@ export default function SettingsPage() {
             </section>
 
             {/* ── Browser ── */}
-            <section style={card}>
-              <div style={hdr}>
+            <section className="ace-card">
+              <div className="ace-card-header flex justify-between md:justify-start">
                 <Globe style={{ width: "1rem", height: "1rem", color: "var(--muted-foreground)" }} />
                 <span style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--foreground)" }}>Browser Automation</span>
               </div>
-              <div style={body}>
+              <div className="p-4 md:p-5 flex flex-col gap-5">
                 <div>
-                  <p style={lbl}>Browser</p>
+                  <p className="text-[0.8125rem] font-semibold text-[var(--foreground)] mb-1.5">Browser</p>
                   <div style={{ display: "flex", gap: "0.5rem" }}>
                     {(["chromium", "firefox", "webkit"] as const).map((b) => (
                       <button key={b} onClick={() => settings.update({ browserType: b })}
-                        style={settings.browserType === b ? btnA : btnI}>
+                        className={settings.browserType === b ? "px-4 py-1.5 rounded-md text-[0.8125rem] font-semibold cursor-pointer border border-[var(--ring)] bg-[var(--primary)] text-[var(--primary-foreground)] transition-opacity hover:opacity-85" : "px-4 py-1.5 rounded-md text-[0.8125rem] font-medium cursor-pointer border border-[var(--border)] bg-[var(--secondary)] text-[var(--muted-foreground)] transition-colors hover:bg-[var(--muted)]"}>
                         {b.charAt(0).toUpperCase() + b.slice(1)}
                       </button>
                     ))}
@@ -413,12 +405,12 @@ export default function SettingsPage() {
             </section>
 
             {/* ── Mobile Remote ── */}
-            {/* <section style={card}>
-              <div style={hdr}>
+            {/* <section className="ace-card">
+              <div className="ace-card-header flex justify-between md:justify-start">
                 <Smartphone style={{ width: "1rem", height: "1rem", color: "var(--muted-foreground)" }} />
                 <span style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--foreground)" }}>Mobile Remote Controller</span>
               </div>
-              <div style={body}>
+              <div className="p-4 md:p-5 flex flex-col gap-5">
                 <div style={{ display: "flex", gap: "1.5rem", alignItems: "center" }}>
                   <div style={{ background: "white", padding: "0.5rem", borderRadius: "0.5rem", flexShrink: 0 }}>
                     {remoteUrl ? (
@@ -428,7 +420,7 @@ export default function SettingsPage() {
                     )}
                   </div>
                   <div>
-                    <p style={lbl}>Scan to control from your phone</p>
+                    <p className="text-[0.8125rem] font-semibold text-[var(--foreground)] mb-1.5">Scan to control from your phone</p>
                     <p style={{ ...sub, lineHeight: 1.5 }}>
                       Use your smartphone's microphone to send voice commands to your PC. 
                       Ensure your phone is connected to the dev tunnel URL if you're testing remotely.
@@ -442,18 +434,18 @@ export default function SettingsPage() {
             </section> */}
 
             {/* ── System ── */}
-            <section style={card}>
-              <div style={hdr}>
+            <section className="ace-card">
+              <div className="ace-card-header flex justify-between md:justify-start">
                 <Shield style={{ width: "1rem", height: "1rem", color: "var(--muted-foreground)" }} />
                 <span style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--foreground)" }}>System</span>
               </div>
-              <div style={body}>
+              <div className="p-4 md:p-5 flex flex-col gap-5">
                 <div>
-                  <p style={lbl}>Theme</p>
+                  <p className="text-[0.8125rem] font-semibold text-[var(--foreground)] mb-1.5">Theme</p>
                   <div style={{ display: "flex", gap: "0.5rem" }}>
                     {(["dark", "light"] as const).map((t) => (
                       <button key={t} onClick={() => settings.update({ theme: t })}
-                        style={settings.theme === t ? btnA : btnI}>
+                        className={settings.theme === t ? "px-4 py-1.5 rounded-md text-[0.8125rem] font-semibold cursor-pointer border border-[var(--ring)] bg-[var(--primary)] text-[var(--primary-foreground)] transition-opacity hover:opacity-85" : "px-4 py-1.5 rounded-md text-[0.8125rem] font-medium cursor-pointer border border-[var(--border)] bg-[var(--secondary)] text-[var(--muted-foreground)] transition-colors hover:bg-[var(--muted)]"}>
                         {t.charAt(0).toUpperCase() + t.slice(1)} Mode
                       </button>
                     ))}

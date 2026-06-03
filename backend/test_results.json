@@ -1,0 +1,73 @@
+[
+  {
+    "name": "Google Search Test",
+    "status": "failed",
+    "steps": [
+      {
+        "step": 1,
+        "action": "search_google",
+        "status": "passed",
+        "message": "Success"
+      },
+      {
+        "step": 2,
+        "action": "assert_text_exists",
+        "status": "failed",
+        "error": "Text 'playwright' not found in page.",
+        "screenshot": "C:\\Users\\Nivin\\AppData\\Local\\ACE\\BrowserProfile\\screenshots\\fail_Google_Search_Test.png"
+      }
+    ],
+    "error": "Failed at step 2 (assert_text_exists): Text 'playwright' not found in page."
+  },
+  {
+    "name": "Tab Management & Wikipedia",
+    "status": "passed",
+    "steps": [
+      {
+        "step": 1,
+        "action": "new_tab",
+        "status": "passed",
+        "message": "Success"
+      },
+      {
+        "step": 2,
+        "action": "assert_text_exists",
+        "status": "passed",
+        "message": "Success"
+      },
+      {
+        "step": 3,
+        "action": "scroll",
+        "status": "passed",
+        "message": "Success"
+      },
+      {
+        "step": 4,
+        "action": "switch_tab",
+        "status": "passed",
+        "message": "Success"
+      }
+    ],
+    "error": null
+  },
+  {
+    "name": "YouTube Search & Play",
+    "status": "failed",
+    "steps": [
+      {
+        "step": 1,
+        "action": "new_tab",
+        "status": "passed",
+        "message": "Success"
+      },
+      {
+        "step": 2,
+        "action": "search_youtube",
+        "status": "failed",
+        "error": "Locator.click: Timeout 30000ms exceeded.\nCall log:\n  - waiting for locator(\"input#search\").first\n",
+        "screenshot": "C:\\Users\\Nivin\\AppData\\Local\\ACE\\BrowserProfile\\screenshots\\fail_YouTube_Search_&_Play.png"
+      }
+    ],
+    "error": "Failed at step 2 (search_youtube): Locator.click: Timeout 30000ms exceeded.\nCall log:\n  - waiting for locator(\"input#search\").first\n"
+  }
+]

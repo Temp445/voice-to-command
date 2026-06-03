@@ -225,8 +225,8 @@ class CommandService:
                 
                 if not intent_name:
                     # Try the dynamic Browser NLP mapper before conversational LLM
-                    from automation.ace_browser.ace_browser_controller import ACEVoiceBrowserCommands
-                    browser_cmd = ACEVoiceBrowserCommands()
+                    from automation.browser.browser_controller import VoiceBrowserCommands
+                    browser_cmd = VoiceBrowserCommands()
                     browser_res = await browser_cmd.execute(text)
                     if browser_res and not browser_res.startswith("Command not recognized"):
                         return {
@@ -243,8 +243,8 @@ class CommandService:
 
         if not intent_name:
             # Try the dynamic Browser NLP mapper before giving up
-            from automation.ace_browser.ace_browser_controller import ACEVoiceBrowserCommands
-            browser_cmd = ACEVoiceBrowserCommands()
+            from automation.browser.browser_controller import VoiceBrowserCommands
+            browser_cmd = VoiceBrowserCommands()
             browser_res = await browser_cmd.execute(text)
             if browser_res and not browser_res.startswith("Command not recognized"):
                 return {

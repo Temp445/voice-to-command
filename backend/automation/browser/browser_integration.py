@@ -1,7 +1,7 @@
 """
-ACE Browser Integration Blueprint
+Browser Integration Blueprint
 ---------------------------------
-This file demonstrates how to wire the ACEBrowserController into a FastAPI application.
+This file demonstrates how to wire the BrowserController into a FastAPI application.
 It includes the lifespan event for startup/shutdown, WebSocket routing for real-time
 browser commands, and an example of hooking it into a faster-whisper pipeline.
 """
@@ -10,7 +10,7 @@ import asyncio
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, WebSocket, APIRouter
 from loguru import logger
-from automation.ace_browser.ace_browser_controller import ACEBrowserController, ACEBrowserLauncher, ACEVoiceBrowserCommands
+from automation.browser.browser_controller import BrowserController, BrowserLauncher, VoiceBrowserCommands
 
 # --- 1. Lifespan Integration ---
 
@@ -20,24 +20,24 @@ async def browser_lifespan(app: FastAPI):
     FastAPI lifespan manager that launches Chrome with CDP enabled
     and connects the controller on startup.
     """
-    logger.info("Starting ACE Browser Integration...")
+    logger.info("Starting Browser Integration...")
     
     # Force launch/restart Chrome with CDP port
-    success = ACEBrowserLauncher.launch(port=9222)
+    success = BrowserLauncher.launch(port=9222)
     if not success:
         logger.error("Failed to launch Chrome with CDP. Browser automation disabled.")
     else:
         # Connect the singleton controller
-        ctrl = ACEBrowserController()
+        ctrl = BrowserController()
         await ctrl.connect()
-        logger.info("ACE Browser Controller connected.")
+        logger.info("Browser Controller connected.")
         
     yield
     
     # Cleanup on shutdown
-    ctrl = ACEBrowserController()
+    ctrl = BrowserController()
     await ctrl.disconnect()
-    logger.info("ACE Browser Controller disconnected.")
+    logger.info("Browser Controller disconnected.")
 
 # Initialize app with lifespan
 app = FastAPI(lifespan=browser_lifespan)
@@ -50,14 +50,14 @@ async def execute_voice_command(transcript: str):
     """
     Example endpoint to send a raw voice transcript to the browser NLP mapper.
     """
-    commands = ACEVoiceBrowserCommands()
+    commands = VoiceBrowserCommands()
     response = await commands.execute(transcript)
     return {"status": "success", "response": response}
 
 @browser_router.get("/tabs")
 async def list_tabs():
     """Returns a list of currently open tabs."""
-    ctrl = ACEBrowserController()
+    ctrl = BrowserController()
     tabs = await ctrl.get_all_tabs()
     return {"tabs": [{"url": t.url, "title": await t.title()} for t in tabs]}
 
@@ -69,7 +69,7 @@ async def browser_websocket(websocket: WebSocket):
     Real-time WebSocket endpoint for the React frontend to control the browser.
     """
     await websocket.accept()
-    commands = ACEVoiceBrowserCommands()
+    commands = VoiceBrowserCommands()
     
     try:
         while True:
@@ -94,7 +94,7 @@ async def handle_voice_command(transcript: str):
     
     if any(kw in transcript.lower() for kw in browser_keywords):
         # 2. Route to ACEBrowserCommands
-        commands = ACEVoiceBrowserCommands()
+        commands = VoiceBrowserCommands()
         response = await commands.execute(transcript)
         
         # 3. Speak the response via TTS (piper/gtts)

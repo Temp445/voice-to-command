@@ -124,19 +124,15 @@ async def lifespan(app: FastAPI):
     register_all_intents()
     logger.info("✅ Command intents registered")
 
-    # ── Initialize ACE Browser Controller ────────────────────────────────────
+    # ── Initialize Browser Engine ─────────────────────────────────────────
     try:
-        from automation.ace_browser.ace_browser_controller import ACEBrowserLauncher, ACEBrowserController
-        logger.info("🌐 Preparing default Chrome profile (force injecting CDP port)...")
-        if ACEBrowserLauncher.launch(port=9222):
-            logger.info("✅ ACE Browser Launcher started successfully")
-            # Connect singleton in background to prepare it
-            ctrl = ACEBrowserController()
-            asyncio.create_task(ctrl.connect(port=9222))
-        else:
-            logger.warning("⚠️ Failed to launch ACE Browser")
+        # Engine is lazy-initialized when actions are performed,
+        # but we can import it here to ensure it's ready.
+        from automation.browser.browser_engine import BrowserEngine
+        engine = BrowserEngine()
+        logger.info("🌐 Browser Engine ready for lazy initialization.")
     except Exception as e:
-        logger.warning(f"⚠️ ACE Browser integration failed: {e}")
+        logger.warning(f"⚠️ Browser integration failed: {e}")
 
     # ── Initialize LLM from .env (quick-start without UI) ────────────────────
     _init_llm_from_env()

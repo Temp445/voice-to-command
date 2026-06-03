@@ -30,8 +30,8 @@ export function StatusBar() {
   };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+    <div className="flex flex-col gap-4">
+      <div className="flex justify-between items-center">
         <h3 style={{ fontSize: "0.9rem", fontWeight: 600, color: "var(--foreground)" }}>System Status</h3>
         <button 
           onClick={toggleRecording}
@@ -54,7 +54,7 @@ export function StatusBar() {
         </button>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "0.75rem" }}>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {STATS.map(({ key, icon: Icon, label, color }) => (
           <div key={key} className="stat-card">
             <div className="stat-card-icon">

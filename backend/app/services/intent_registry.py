@@ -33,48 +33,130 @@ async def handle_close_heavy_apps(**_) -> str:
 
 
 async def handle_search_google(query: str = "", browser: str | None = None, **_) -> str:
-    from automation.browser.search import BrowserSearch
-    return await BrowserSearch().google(query.strip(), browser)
+    from automation.browser.browser_engine import BrowserEngine
+    return await BrowserEngine().search_google(query.strip())
 
 
 async def handle_search_youtube(query: str = "", **_) -> str:
-    from automation.browser.search import BrowserSearch
-    return await BrowserSearch().youtube(query.strip())
+    from automation.browser.browser_engine import BrowserEngine
+    return await BrowserEngine().search_youtube(query.strip())
 
 
 async def handle_open_website(url: str = "", **_) -> str:
-    from automation.ace_browser.ace_browser_controller import ACEBrowserController as BrowserController
-    bc = BrowserController()
+    from automation.browser.browser_engine import BrowserEngine
     url = url.strip()
     if not url:
         return "Please specify a website to open."
-    # Append .com if it's just a raw name without domain or protocol
     if "." not in url and not url.startswith("http"):
         url = url + ".com"
-    await bc.navigate(url)
-    return f"Opened {url}"
+    return await BrowserEngine().navigate(url)
 
 async def handle_browser_play_pause(**_) -> str:
-    from automation.ace_browser.ace_browser_controller import ACEBrowserController as BrowserController
-    return await BrowserController().play_pause()
+    from automation.browser.browser_engine import BrowserEngine
+    return await BrowserEngine().play_pause()
 
 async def handle_browser_go_back(**_) -> str:
-    from automation.ace_browser.ace_browser_controller import ACEBrowserController as BrowserController
-    return await BrowserController().go_back()
+    from automation.browser.browser_engine import BrowserEngine
+    return await BrowserEngine().go_back()
 
 async def handle_browser_click_first_result(**_) -> str:
-    from automation.ace_browser.ace_browser_controller import ACEBrowserController as BrowserController
+    from automation.browser.browser_controller import BrowserController
     return await BrowserController().click_first_result()
 
+async def handle_browser_switch_last_tab(**_) -> str:
+    from automation.browser.browser_controller import BrowserController
+    return await BrowserController().switch_to_last_tab()
+
+async def handle_browser_close_all_tabs(**_) -> str:
+    from automation.browser.browser_controller import BrowserController
+    return await BrowserController().close_all_tabs()
+
+async def handle_browser_hover(selector: str = "", **_) -> str:
+    from automation.browser.browser_controller import BrowserController
+    return await BrowserController().hover(selector)
+
+async def handle_browser_clipboard(action: str = "", **_) -> str:
+    from automation.browser.browser_controller import BrowserController
+    clean_action = action.strip().lower().replace(" ", "_")
+    return await BrowserController().clipboard_action(clean_action)
+
+async def handle_browser_scroll_variable(direction: str = "", magnitude: str = "", **_) -> str:
+    from automation.browser.browser_controller import BrowserController
+    return await BrowserController().scroll_amount(direction.strip(), magnitude.strip())
+
+async def handle_browser_fill_form(context: str = "", **_) -> str:
+    from automation.browser.dom_agent import DOMAgent
+    from automation.browser.browser_controller import BrowserController
+    ctrl = BrowserController()
+    page = await ctrl._ensure_page()
+    return await DOMAgent(page).fill_form(context)
+
+async def handle_browser_interact_checkbox(action: str = "", **_) -> str:
+    from automation.browser.dom_agent import DOMAgent
+    from automation.browser.browser_controller import BrowserController
+    ctrl = BrowserController()
+    page = await ctrl._ensure_page()
+    return await DOMAgent(page).execute_intent(f"{action} the checkbox")
+
+async def handle_browser_summarize_page(**_) -> str:
+    from automation.browser.browser_controller import BrowserController
+    from app.services.llm.llm_service import llm_service
+    content = await BrowserController().extract_page_content()
+    prompt = f"Please summarize the following webpage content:\n\n{content[:5000]}"
+    summary = await llm_service.generate_response(prompt)
+    return f"Summary:\n{summary}"
+
+async def handle_browser_full_screenshot(**_) -> str:
+    from automation.browser.browser_controller import BrowserController
+    import os
+    path = os.path.join(os.path.expandvars(r"%LOCALAPPDATA%\ACE\BrowserProfile"), "screenshots", "full_page.png")
+    return await BrowserController().screenshot(path, full_page=True)
+
+async def handle_browser_window_state(state: str = "", **_) -> str:
+    from automation.browser.browser_controller import BrowserController
+    state = state.strip().lower()
+    if state == "restart":
+        return await BrowserController().restart_browser()
+    return await BrowserController().set_window_state(state)
+
+async def handle_browser_clear_marks(**_) -> str:
+    from automation.browser.browser_controller import BrowserController
+    return await BrowserController().clear_marks()
+
+async def handle_browser_double_click(**_) -> str:
+    from automation.browser.browser_controller import BrowserController
+    return await BrowserController().double_click()
+
+async def handle_browser_right_click(**_) -> str:
+    from automation.browser.browser_controller import BrowserController
+    return await BrowserController().right_click()
+
+async def handle_browser_press_key(key: str = "", **_) -> str:
+    from automation.browser.browser_controller import BrowserController
+    return await BrowserController().press_key(key.strip())
+
+async def handle_browser_wait_for(target: str = "", **_) -> str:
+    from automation.browser.browser_controller import BrowserController
+    return await BrowserController().wait_for(target.strip())
+
+async def handle_browser_download(**_) -> str:
+    from automation.browser.browser_controller import BrowserController
+    return await BrowserController().download_file()
+
+async def handle_browser_upload(**_) -> str:
+    from automation.browser.browser_controller import BrowserController
+    return await BrowserController().upload_file()
+
+
+
 async def handle_read_page_title(**_) -> str:
-    from automation.ace_browser.ace_browser_controller import ACEBrowserController as BrowserController
-    title = await BrowserController().get_page_title()
+    from automation.browser.browser_engine import BrowserEngine
+    title = await BrowserEngine().get_page_title()
     return f"The page title is: {title}"
 
 async def handle_extract_page_content(**_) -> str:
-    from automation.ace_browser.ace_browser_controller import ACEBrowserController as BrowserController
-    content = await BrowserController().extract_page_content()
-    # If content is huge, trim it for TTS
+    from automation.browser.browser_engine import BrowserEngine
+    content = await BrowserEngine().extract_page_content()
     if len(content) > 500:
         content = content[:500] + "... [Content truncated]"
     return f"Here is the page content:\n{content}"
@@ -211,7 +293,7 @@ async def handle_run_dev_server(cmd: str = "", **_) -> str:
 
 async def handle_open_dev_server(**_) -> str:
     from app.services.context_manager import context_manager
-    from automation.ace_browser.ace_browser_controller import ACEBrowserController as BrowserController
+    from automation.browser.browser_controller import BrowserController as BrowserController
     
     url = context_manager.last_dev_server_url
     if not url:
@@ -790,6 +872,135 @@ def register_all_intents() -> None:
             description="Create a new software project (like React, Next.js) on the Desktop",
             examples=["create a new react project", "create a next project called my website"],
             param_names=["project_type", "project_name"],
+        ),
+        Intent(
+            name="browser_switch_last_tab",
+            patterns=[r"(?:switch|go)\s+to\s+(?:the\s+)?last\s+tab"],
+            handler=handle_browser_switch_last_tab,
+            description="Switch to the last opened browser tab",
+            examples=["switch to last tab"]
+        ),
+        Intent(
+            name="browser_close_all_tabs",
+            patterns=[r"close\s+all\s+tabs"],
+            handler=handle_browser_close_all_tabs,
+            description="Close all browser tabs",
+            examples=["close all tabs"]
+        ),
+        Intent(
+            name="browser_hover",
+            patterns=[r"hover\s+over\s+(?:the\s+)?(?P<selector>.+)"],
+            handler=handle_browser_hover,
+            description="Hover over an element in the browser",
+            examples=["hover over the menu"],
+            param_names=["selector"]
+        ),
+        Intent(
+            name="browser_clipboard",
+            patterns=[
+                r"(?P<action>copy|cut|paste|select all)\s+(?:the\s+)?(?:selected\s+)?(?:text)?",
+            ],
+            handler=handle_browser_clipboard,
+            description="Perform clipboard actions in browser",
+            examples=["copy selected text", "paste", "select all"],
+            param_names=["action"]
+        ),
+        Intent(
+            name="browser_scroll_variable",
+            patterns=[r"scroll\s+(?P<direction>down|up)\s+(?:a\s+)?(?P<magnitude>little|lot|more)"],
+            handler=handle_browser_scroll_variable,
+            description="Scroll the browser by a variable amount",
+            examples=["scroll down a little", "scroll up more"],
+            param_names=["direction", "magnitude"]
+        ),
+        Intent(
+            name="browser_fill_form",
+            patterns=[r"fill\s+(?:the\s+)?form(?:\s+with\s+(?P<context>.+))?"],
+            handler=handle_browser_fill_form,
+            description="Use AI to fill out a form based on context",
+            examples=["fill the form with my details"],
+            param_names=["context"]
+        ),
+        Intent(
+            name="browser_interact_checkbox",
+            patterns=[r"(?P<action>check|uncheck)\s+(?:the\s+)?checkbox"],
+            handler=handle_browser_interact_checkbox,
+            description="Check or uncheck a checkbox",
+            examples=["check the checkbox", "uncheck the checkbox"],
+            param_names=["action"]
+        ),
+        Intent(
+            name="browser_summarize_page",
+            patterns=[r"summarize\s+(?:this\s+)?page", r"extract\s+(?:all\s+)?headings", r"read\s+(?:the\s+)?first\s+paragraph"],
+            handler=handle_browser_summarize_page,
+            description="Summarize the current page using AI",
+            examples=["summarize this page"]
+        ),
+        Intent(
+            name="browser_full_screenshot",
+            patterns=[r"take\s+(?:a\s+)?full\s+page\s+screenshot"],
+            handler=handle_browser_full_screenshot,
+            description="Take a full page screenshot",
+            examples=["take a full page screenshot"]
+        ),
+        Intent(
+            name="browser_window_state",
+            patterns=[r"(?P<state>restart|maximize|minimize|restore)\s+(?:the\s+)?(?:browser|window)"],
+            handler=handle_browser_window_state,
+            description="Change browser window state or restart",
+            examples=["restart browser", "maximize window"],
+            param_names=["state"]
+        ),
+        Intent(
+            name="browser_clear_marks",
+            patterns=[r"clear\s+highlights", r"remove\s+marks"],
+            handler=handle_browser_clear_marks,
+            description="Clear all element highlights",
+            examples=["clear highlights", "remove marks"]
+        ),
+        Intent(
+            name="browser_double_click",
+            patterns=[r"double\s+click"],
+            handler=handle_browser_double_click,
+            description="Double click the mouse",
+            examples=["double click the image"]
+        ),
+        Intent(
+            name="browser_right_click",
+            patterns=[r"right\s+click"],
+            handler=handle_browser_right_click,
+            description="Right click the mouse",
+            examples=["right click here"]
+        ),
+        Intent(
+            name="browser_press_key",
+            patterns=[r"press\s+(?P<key>enter|escape|tab|space|backspace)"],
+            handler=handle_browser_press_key,
+            description="Press a specific key",
+            examples=["press escape", "press tab"],
+            param_names=["key"]
+        ),
+        Intent(
+            name="browser_wait_for",
+            patterns=[r"wait\s+for\s+(?:the\s+)?(?P<target>.+)"],
+            handler=handle_browser_wait_for,
+            description="Wait for an element or condition",
+            examples=["wait for login button", "wait for search results"],
+            param_names=["target"]
+        ),
+        Intent(
+            name="browser_download",
+            patterns=[r"download\s+(?:this\s+)?file"],
+            handler=handle_browser_download,
+            description="Handle file download",
+            examples=["download this file"]
+        ),
+        Intent(
+            name="browser_upload",
+            patterns=[r"upload\s+(?:a\s+)?file"],
+            handler=handle_browser_upload,
+            description="Handle file upload",
+            examples=["upload a file"]
         ),
         Intent(
             name="run_dev_server",

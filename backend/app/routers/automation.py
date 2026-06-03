@@ -1,6 +1,7 @@
 """Automation router — Logs and direct action triggers."""
 
 from fastapi import APIRouter, Depends, Request
+from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc
 
@@ -52,3 +53,37 @@ async def rescan_apps(request: Request):
         "message": f"Rescan complete. {len(scanner.apps)} apps discovered.",
     }
 
+
+@router.post("/browser/screenshot", summary="Take a screenshot of the Browser")
+async def take_browser_screenshot():
+    """Takes a screenshot of the active browser page and returns the image."""
+    from automation.browser.browser_engine import BrowserEngine
+    import os
+    engine = BrowserEngine()
+    try:
+        path = await engine.screenshot("latest.png")
+        if os.path.exists(path):
+            return FileResponse(path, media_type="image/png")
+        return {"status": "error", "message": "Screenshot failed"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+@router.post("/browser/test", summary="Run a browser test suite")
+async def run_browser_tests():
+    """Runs the built-in browser test suite."""
+    from automation.browser.browser_testing import BrowserTestRunner
+    runner = BrowserTestRunner()
+    
+    # Example test suite
+    test = {
+        "name": "Google Search Test",
+        "steps": [
+            {"action": "search_google", "params": {"query": "playwright automation"}},
+            {"action": "wait_for_selector", "params": {"selector": "textarea[name='q'], input[name='q']"}},
+            {"action": "assert_text_exists", "params": {"text": "playwright"}}
+        ]
+    }
+    
+    result = await runner.run_test(test)
+    return result

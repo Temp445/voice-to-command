@@ -1660,5 +1660,41 @@
     "exe_name": "rundll32.exe",
     "path": "C:\\Windows\\System32\\rundll32.exe",
     "source": "process"
+  },
+  "screensketch": {
+    "name": "ScreenSketch",
+    "exe_name": "ScreenSketch.exe",
+    "path": "C:\\Program Files\\WindowsApps\\Microsoft.ScreenSketch_10.2008.3001.0_x64__8wekyb3d8bbwe\\ScreenSketch.exe",
+    "source": "process"
+  },
+  "onedrivesetup": {
+    "name": "OneDriveSetup",
+    "exe_name": "OneDriveSetup.exe",
+    "path": "C:\\Program Files\\Microsoft OneDrive\\StandaloneUpdater\\OneDriveSetup.exe",
+    "source": "process"
+  },
+  "opushutil": {
+    "name": "opushutil",
+    "exe_name": "opushutil.exe",
+    "path": "C:\\Program Files (x86)\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX86\\Microsoft Shared\\Office16\\opushutil.exe",
+    "source": "process"
+  },
+  "vsixconfigurationupdater": {
+    "name": "VSIXConfigurationUpdater",
+    "exe_name": "VSIXConfigurationUpdater.exe",
+    "path": "C:\\Program Files (x86)\\Microsoft Visual Studio\\Installer\\resources\\app\\ServiceHub\\Services\\Microsoft.VisualStudio.Setup.Service\\VSIXConfigurationUpdater.exe",
+    "source": "process"
+  },
+  "officec2rclient": {
+    "name": "OfficeC2RClient",
+    "exe_name": "OfficeC2RClient.exe",
+    "path": "C:\\Program Files\\Common Files\\microsoft shared\\ClickToRun\\OfficeC2RClient.exe",
+    "source": "process"
+  },
+  "wmiadap": {
+    "name": "WMIADAP",
+    "exe_name": "WMIADAP.exe",
+    "path": "C:\\Windows\\System32\\wbem\\WMIADAP.exe",
+    "source": "process"
   }
 }
