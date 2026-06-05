@@ -70,7 +70,7 @@ def _init_llm_from_env() -> None:
         "openai":   "gpt-4o-mini",
         "gemini":   "gemini-2.0-flash",
         "claude":   "claude-haiku-3-5",
-        "deepseek": "deepseek-chat",
+        "deepseek": "deepseek-v4-flash",
     }
     model = settings.llm_model.strip() or default_models.get(provider, "")
 

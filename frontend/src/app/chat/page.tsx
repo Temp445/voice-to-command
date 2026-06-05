@@ -27,14 +27,14 @@ export default function ChatPage() {
   };
 
   return (
-    <div className="flex h-screen overflow-hidden bg-[var(--background)] flex-col md:flex-row">
+    <div style={{ display: "flex", height: "100vh", overflow: "hidden", background: "var(--background)" }}>
       <Sidebar />
-      <div className="flex flex-col flex-1 overflow-hidden relative">
+      <div style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }}>
         <TopBar />
         
-        <main className="flex flex-col flex-1 p-4 md:p-7 max-w-4xl mx-auto w-full h-full">
+        <main style={{ flex: 1, display: "flex", flexDirection: "column", padding: "1.75rem", maxWidth: "900px", margin: "0 auto", width: "100%", height: "100%" }}>
           {/* Header */}
-          <div className="flex items-center justify-between mb-6">
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1.5rem" }}>
             <div>
               <h1 style={{ fontSize: "1.875rem", fontWeight: 800, color: "var(--foreground)", letterSpacing: "-0.02em", display: "flex", alignItems: "center", gap: "0.625rem" }}>
                 <Bot style={{ width: "1.75rem", height: "1.75rem", color: "var(--primary)" }} /> AI Assistant
@@ -52,7 +52,7 @@ export default function ChatPage() {
           </div>
 
           {/* Chat Container */}
-          <div className="flex-1 overflow-y-auto flex flex-col gap-4 pr-2 pb-4">
+          <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: "1rem", paddingRight: "0.5rem", paddingBottom: "1rem" }}>
             {messages.length === 0 ? (
               <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", color: "var(--muted-foreground)", gap: "1rem" }}>
                 <MessageSquare size={48} style={{ opacity: 0.2 }} />
@@ -103,13 +103,13 @@ export default function ChatPage() {
           </div>
 
           {/* Input Area */}
-          <form onSubmit={handleSubmit} className="mt-4 flex gap-3 bg-[var(--card)] p-3 rounded-2xl border border-[var(--border)] shadow-sm">
+          <form onSubmit={handleSubmit} style={{ marginTop: "1rem", display: "flex", gap: "0.75rem", background: "var(--card)", padding: "0.75rem", borderRadius: "1rem", border: "1px solid var(--border)", boxShadow: "0 4px 12px rgba(0,0,0,0.05)" }}>
             <input 
               type="text" 
               value={input}
               onChange={(e) => setInput(e.target.value)}
               placeholder="Ask anything..."
-              className="flex-1 bg-transparent border-none outline-none text-[var(--foreground)] p-2 text-[0.9375rem]"
+              style={{ flex: 1, background: "transparent", border: "none", outline: "none", color: "var(--foreground)", padding: "0.5rem", fontSize: "0.9375rem" }}
             />
             <button 
               type="submit"

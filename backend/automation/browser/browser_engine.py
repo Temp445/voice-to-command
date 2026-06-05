@@ -513,14 +513,16 @@ class BrowserEngine:
     async def search_google(self, query: str) -> str:
         async def _do():
             page = await self.ensure_browser()
-            await page.goto("https://www.google.com", wait_until="commit")
-            await asyncio.sleep(1.0) # Wait for elements to appear
+            logger.info(f"[search_google] Current URL: {page.url} — navigating to Google for query: '{query}'")
+            # Always navigate to Google first to avoid accidentally searching on the wrong site
+            await page.goto("https://www.google.com", wait_until="domcontentloaded", timeout=10000)
+            await asyncio.sleep(1.0)
             search_box = page.locator("textarea[name='q'], input[name='q']").first
             await search_box.click()
-            await page.keyboard.type(query, delay=random.randint(40, 100))
-            await asyncio.sleep(0.3)
+            await search_box.fill(query)
+            await asyncio.sleep(0.2)
             await page.keyboard.press("Enter")
-            await asyncio.sleep(2.0) # Wait for results to render
+            await asyncio.sleep(1.5)
             await page.wait_for_load_state("domcontentloaded")
             return f"Searched Google for '{query}'"
         return await _run_in_playwright(_do())
@@ -528,14 +530,18 @@ class BrowserEngine:
     async def search_youtube(self, query: str) -> str:
         async def _do():
             page = await self.ensure_browser()
-            await page.goto("https://www.youtube.com", wait_until="commit")
-            await asyncio.sleep(1.5) # Wait for elements
+            logger.info(f"[search_youtube] Current URL: {page.url} — navigating to YouTube for query: '{query}'")
+            if "youtube.com" not in page.url:
+                await page.goto("https://www.youtube.com", wait_until="commit")
+                await asyncio.sleep(1.5)
+            else:
+                await asyncio.sleep(0.5)
             search_box = page.locator("input#search, input[name='search_query']").first
             await search_box.click()
-            await page.keyboard.type(query, delay=random.randint(40, 100))
-            await asyncio.sleep(0.3)
+            await search_box.fill(query)
+            await asyncio.sleep(0.2)
             await page.keyboard.press("Enter")
-            await asyncio.sleep(2.0) # Wait for results to render
+            await asyncio.sleep(1.5)
             await page.wait_for_load_state("domcontentloaded")
             return f"Searched YouTube for '{query}'"
         return await _run_in_playwright(_do())
@@ -544,9 +550,18 @@ class BrowserEngine:
     async def play_pause(self) -> str:
         async def _do():
             page = await self.ensure_browser()
-            if "youtube.com" in page.url:
-                await page.keyboard.press("k")
-            else:
-                await page.evaluate("document.querySelectorAll('video').forEach(v => v.paused ? v.play() : v.pause())")
+            script = """
+                let v = document.querySelector('video');
+                if (v) { v.paused ? v.play() : v.pause(); }
+                else {
+                    let btn = document.querySelector('.ytp-play-button');
+                    if (btn) btn.click();
+                }
+            """
+            for frame in page.frames:
+                try:
+                    await frame.evaluate(script)
+                except Exception:
+                    pass
             return "Toggled playback."
         return await _run_in_playwright(_do())

@@ -129,18 +129,43 @@ class BrowserController:
 
     async def youtube_seek(self, seconds: int):
         page = await self.engine.ensure_browser()
-        key = "l" if seconds > 0 else "j"
-        await page.keyboard.press(key)
+        script = f"""
+            let v = document.querySelector('video');
+            if (v) {{ v.currentTime += {seconds}; }}
+        """
+        for frame in page.frames:
+            try: await frame.evaluate(script)
+            except: pass
         return "Seeked video"
 
     async def youtube_fullscreen(self):
         page = await self.engine.ensure_browser()
-        await page.keyboard.press("f")
+        script = """
+            let btn = document.querySelector('.ytp-fullscreen-button');
+            if (btn) btn.click();
+            else {
+                let v = document.querySelector('video');
+                if (v && v.requestFullscreen) v.requestFullscreen();
+            }
+        """
+        for frame in page.frames:
+            try: await frame.evaluate(script)
+            except: pass
         return "Toggled fullscreen"
 
     async def youtube_mute(self):
         page = await self.engine.ensure_browser()
-        await page.keyboard.press("m")
+        script = """
+            let v = document.querySelector('video');
+            if (v) { v.muted = !v.muted; }
+            else {
+                let btn = document.querySelector('.ytp-mute-button');
+                if (btn) btn.click();
+            }
+        """
+        for frame in page.frames:
+            try: await frame.evaluate(script)
+            except: pass
         return "Toggled mute"
 
     async def youtube_next(self):
@@ -203,9 +228,72 @@ class VoiceBrowserCommands:
     """Maps voice transcripts to controller methods."""
     def __init__(self):
         self.ctrl = BrowserController()
+        
+        try:
+            from automation.browser.crm_workflows import CRMMacros
+            self.crm = CRMMacros(self.ctrl.engine)
+        except ImportError:
+            self.crm = None
 
     async def execute(self, transcript: str) -> str:
         transcript = transcript.lower().strip()
+        
+        # --- CRM Workflows ---
+        if self.crm:
+            if "open my crm" in transcript or "open crm" in transcript or "open ace crm" in transcript:
+                return await self.crm.open_crm()
+            if "log in" in transcript or "login" in transcript:
+                return await self.crm.login()
+            
+            # Dynamic creation handling
+            if "new " in transcript or "create " in transcript or "add " in transcript or "make " in transcript or "generate " in transcript:
+                import re
+                m = re.search(r'(?:create|add|make|generate)(?:\s+(?:a\s+)?(?:new\s+)?)?\s+(lead|quote|quotation|contact|customer|account|opportunity|order|product|task)', transcript)
+                if not m:
+                    m = re.search(r'new\s+(lead|quote|quotation|contact|customer|account|opportunity|order|product|task)', transcript)
+                if m:
+                    entity = m.group(1)
+                    if entity == "quotation": entity = "quote"
+                    if entity == "customer": entity = "account"
+                    return await self.crm.create_entity(entity)
+            
+            # Dynamic module navigation
+            import re
+            m = re.search(r'\b(leads|contacts|opportunities|accounts|customers|quotes|quotations|orders|products|dashboard|tasks|reports|home)\b', transcript)
+            if m and not ("new " in transcript or "create " in transcript or "add " in transcript or "make " in transcript or "generate " in transcript or "search " in transcript or "edit " in transcript or "update " in transcript or "assign " in transcript):
+                if "go to" in transcript or "open" in transcript or "show" in transcript or transcript == m.group(1):
+                    mod = m.group(1)
+                    if mod == "quotations": mod = "quotes"
+                    if mod == "customers": mod = "accounts"
+                    if mod == "home": mod = "dashboard"
+                    return await self.crm.navigate_to_module(mod)
+                    
+            # Search Handling
+            if "search " in transcript:
+                import re
+                m = re.search(r'search\s+(lead|opportunity|customer|order|quote|task|account|contact)\s+(.+)', transcript)
+                if m:
+                    entity = m.group(1)
+                    query = m.group(2)
+                    if entity == "customer": entity = "account"
+                    return await self.crm.search_record(entity, query)
+                    
+            # Grid Interaction Handling
+            if "first " in transcript or "top " in transcript:
+                import re
+                m = re.search(r'(?:open|select|click)\s+(?:first|top)\s+(?:record|row|lead|opportunity|customer|order|quote|task|account|contact)', transcript)
+                if m:
+                    return await self.crm.open_first_record()
+                    
+            # Edit / Update / Assign Handling via DOMAgent fallback
+            if "edit " in transcript or "assign " in transcript or "update " in transcript:
+                from automation.browser.dom_agent import DOMAgent
+                page = await self.ctrl._ensure_page()
+                agent = DOMAgent(page)
+                return await agent.execute_intent(transcript)
+                    
+            if "cancel" in transcript:
+                return await self.ctrl.find_and_click("Cancel")
         
         # --- Tab Management ---
         if "new tab" in transcript:
@@ -258,7 +346,8 @@ class VoiceBrowserCommands:
         if "cut" in transcript: return await self.ctrl.clipboard_action("cut")
 
         # --- Media & YouTube Controls ---
-        if "play" in transcript or "pause" in transcript:
+        import re
+        if re.fullmatch(r'(?:play|pause)(?:\s+(?:the\s+)?(?:video|music|song|playback))?', transcript):
             return await self.ctrl.media_play_pause()
         if "mute" in transcript:
             return await self.ctrl.youtube_mute()
@@ -279,9 +368,50 @@ class VoiceBrowserCommands:
         if transcript.startswith("open "):
             url = transcript.replace("open ", "").strip()
             return await self.ctrl.navigate(url)
-        if transcript.startswith("search for "):
-            query = transcript.replace("search for ", "").strip()
-            return await self.ctrl.search_google(query)
+        import re
+        search_m = re.match(r"(?:search|google)\s+(?:for\s+)?(.+)", transcript)
+        if search_m:
+            return await self.ctrl.search_google(search_m.group(1).strip())
+
+        # --- Deterministic Fallbacks (Zero LLM Tokens) ---
+        try:
+            page = await self.ctrl._ensure_page()
+            import re
+            
+            # 1. Exact "click <text>"
+            if transcript.startswith("click ") and len(transcript) > 6:
+                target_text = transcript[6:].strip()
+                locators = [
+                    page.get_by_role("button", name=re.compile(f"^{re.escape(target_text)}$", re.IGNORECASE)),
+                    page.get_by_role("link", name=re.compile(f"^{re.escape(target_text)}$", re.IGNORECASE)),
+                    page.locator(f"text=\"{target_text}\"").filter(has_not=page.locator("body, html, main"))
+                ]
+                for loc in locators:
+                    try:
+                        if await loc.count() > 0:
+                            await loc.first.click(timeout=1000)
+                            return f"Clicked '{target_text}' (deterministic)"
+                    except Exception:
+                        pass
+
+            # 2. Exact "type <text> into <field>"
+            type_match = re.match(r"(?:type|enter|write)\s+(.+?)\s+(?:in|into|to|on)\s+(?:the\s+)?(.+)", transcript)
+            if type_match:
+                value = type_match.group(1).strip()
+                field = type_match.group(2).strip()
+                locators = [
+                    page.get_by_label(re.compile(f"^{re.escape(field)}$", re.IGNORECASE)),
+                    page.get_by_placeholder(re.compile(f"^{re.escape(field)}$", re.IGNORECASE)),
+                ]
+                for loc in locators:
+                    try:
+                        if await loc.count() > 0:
+                            await loc.first.fill(value, timeout=1000)
+                            return f"Typed '{value}' into '{field}' (deterministic)"
+                    except Exception:
+                        pass
+        except Exception as e:
+            logger.debug(f"Deterministic fallback failed: {e}")
 
         # --- Dynamic DOM Agent (Clicking, Typing, Interaction) ---
         try:

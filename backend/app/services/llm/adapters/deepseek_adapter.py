@@ -7,13 +7,13 @@ from loguru import logger
 _DEEPSEEK_BASE_URL = "https://api.deepseek.com"
 
 _MODELS = [
-    "deepseek-chat",
-    "deepseek-reasoner",
+    "deepseek-v4-flash",
+    "deepseek-v4-pro",
 ]
 
 
 class DeepSeekAdapter(LLMProvider):
-    def __init__(self, api_key: str, model: str = "deepseek-chat"):
+    def __init__(self, api_key: str, model: str = "deepseek-v4-flash"):
         from openai import AsyncOpenAI
         self._client = AsyncOpenAI(api_key=api_key, base_url=_DEEPSEEK_BASE_URL)
         self._model = model

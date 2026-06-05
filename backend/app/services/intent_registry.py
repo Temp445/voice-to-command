@@ -16,10 +16,82 @@ async def _get_executor():
 
 # ─── Intent Handlers ─────────────────────────────────────────────────────────
 
-async def handle_open_app(app: str = "", **_) -> str:
+# ── Known Web App URL Mappings ───────────────────────────────────────────────
+# If a desktop app is not found, check this table and open the URL in the browser instead.
+WEB_APP_URLS: dict[str, str] = {
+    "ace crm":       "https://crm.acesoftcloud.in/",
+    "crm":           "https://crm.acesoftcloud.in/",
+    "ace softcloud": "https://crm.acesoftcloud.in/",
+    "gmail":         "https://mail.google.com/",
+    "google sheets": "https://sheets.google.com/",
+    "google docs":   "https://docs.google.com/",
+    "youtube":       "https://www.youtube.com/",
+    "notion":        "https://www.notion.so/",
+    "figma":         "https://www.figma.com/",
+    "jira":          "https://jira.atlassian.com/",
+    "github":        "https://github.com/",
+    "slack":         "https://slack.com/",
+    "whatsapp":      "https://web.whatsapp.com/",
+}
+
+async def handle_open_app(app: str = "", text: str = "", **_) -> str:
     from automation.desktop.app_controller import AppController
     ctrl = AppController()
-    return await ctrl.open_application(app.strip())
+    app_name = app.strip()
+    try:
+        res = await ctrl.open_application(app_name)
+    except Exception as e:
+        res = str(e)
+    
+    if "not found" in res.lower() or "could not find" in res.lower() or "application" in res.lower():
+        # Check if it's a known web app
+        app_lower = app_name.lower()
+        url = None
+        for key, web_url in WEB_APP_URLS.items():
+            if key in app_lower or app_lower in key:
+                url = web_url
+                break
+        
+        if url:
+            logger.info(f"Desktop app '{app_name}' not found. Opening web URL: {url}")
+            from automation.browser.browser_controller import BrowserController
+            bc = BrowserController()
+            nav_result = await bc.navigate(url)
+            return f"'{app_name}' is not installed. Opened {url} in browser instead."
+            
+        # Fallback to DOMAgent if a browser is active
+        try:
+            from automation.desktop.window_manager import WindowManager
+            active_win = WindowManager()._get_active_window()
+            if active_win:
+                active_title = active_win.window_text().lower()
+                if any(b in active_title for b in ["chrome", "edge", "brave", "firefox"]):
+                    logger.info(f"App '{app_name}' not found, but browser is active. Falling back to DOMAgent for '{text}'")
+                    from automation.browser.browser_controller import BrowserController
+                    from automation.browser.dom_agent import DOMAgent
+                    bc = BrowserController()
+                    page = await bc.ctrl._ensure_page() if hasattr(bc, 'ctrl') else await bc._ensure_page()
+                    agent = DOMAgent(page)
+                    return await agent.execute_intent(text or f"start {app_name}")
+        except Exception as e:
+            logger.debug(f"Failed to fallback to DOMAgent in open_app: {e}")
+
+    return res
+
+
+async def handle_dynamic_dom_action(action: str = "", **_) -> str:
+    from automation.browser.browser_controller import BrowserController
+    try:
+        from automation.browser.dom_agent import DOMAgent
+        bc = BrowserController()
+        if bc.engine._playwright is None:
+            return "No active browser session to perform dynamic action."
+        page = await bc._ensure_page()
+        agent = DOMAgent(page)
+        return await agent.execute_intent(action)
+    except Exception as e:
+        return f"Failed to execute dynamic DOM action: {e}"
+
 
 
 async def handle_close_app(app: str = "", **_) -> str:
@@ -33,13 +105,17 @@ async def handle_close_heavy_apps(**_) -> str:
 
 
 async def handle_search_google(query: str = "", browser: str | None = None, **_) -> str:
-    from automation.browser.browser_engine import BrowserEngine
-    return await BrowserEngine().search_google(query.strip())
+    from automation.browser.browser_controller import BrowserController
+    ctrl = BrowserController()
+    logger.info(f"Searching Google for: '{query}'")
+    return await ctrl.search_google(query.strip())
 
 
 async def handle_search_youtube(query: str = "", **_) -> str:
-    from automation.browser.browser_engine import BrowserEngine
-    return await BrowserEngine().search_youtube(query.strip())
+    from automation.browser.browser_controller import BrowserController
+    ctrl = BrowserController()
+    logger.info(f"Searching YouTube for: '{query}'")
+    return await ctrl.search_youtube(query.strip())
 
 
 async def handle_open_website(url: str = "", **_) -> str:
@@ -98,6 +174,132 @@ async def handle_browser_interact_checkbox(action: str = "", **_) -> str:
     page = await ctrl._ensure_page()
     return await DOMAgent(page).execute_intent(f"{action} the checkbox")
 
+async def handle_browser_list_options(element: str = "", **_) -> str:
+    from automation.browser.browser_controller import BrowserController
+    import re
+    ctrl = BrowserController()
+    page = await ctrl._ensure_page()
+    
+    try:
+        # 1. Try semantic combobox
+        combobox = page.get_by_role('combobox', name=re.compile(element, re.IGNORECASE))
+        if await combobox.count() > 0:
+            await combobox.first.click()
+            return f"Opened {element} dropdown."
+            
+        # 2. Try finding a label and clicking it (often focuses the input) or finding the input next to it
+        label = page.locator(f"label:has-text('{element}')")
+        if await label.count() > 0:
+            for_attr = await label.first.get_attribute("for")
+            if for_attr:
+                target = page.locator(f"#{for_attr}")
+                if await target.count() > 0:
+                    await target.click()
+                    return f"Opened {element} dropdown via label."
+            # Click label as fallback
+            await label.first.click()
+            return f"Clicked label for {element}."
+
+        # 3. Fallback text search for placeholders or custom divs
+        loc = page.locator(f"text=/{element}/i").filter(has_not=page.locator("body, html, main, form"))
+        if await loc.count() > 0:
+            await loc.first.click()
+            return f"Clicked {element} to display options."
+            
+        # 4. Ultimate fallback to DOM Agent
+        from automation.browser.dom_agent import DOMAgent
+        agent = DOMAgent(page)
+        res = await agent.execute_intent(f"click the {element} dropdown")
+        if "couldn't find" not in res.lower() and "failed" not in res.lower():
+            return res
+            
+        return f"Could not find a dropdown matching '{element}' on the page."
+    except Exception as e:
+        return f"Failed to open options for {element}: {str(e)}"
+
+async def handle_browser_select_option(option: str = "", **_) -> str:
+    from automation.browser.browser_controller import BrowserController
+    import re
+    ctrl = BrowserController()
+    page = await ctrl._ensure_page()
+    
+    try:
+        opt_lower = option.strip().lower()
+        
+        # Look for standard accessible dropdown options (React/MUI/custom)
+        options = page.get_by_role('option')
+        count = await options.count()
+        
+        if count == 0:
+            # Fallback to general list items if ARIA roles are missing
+            options = page.locator('li')
+            count = await options.count()
+            
+        if count == 0:
+            from automation.browser.dom_agent import DOMAgent
+            agent = DOMAgent(page)
+            dom_res = await agent.execute_intent(f"select {option}")
+            if "couldn't find" not in dom_res.lower() and "failed" not in dom_res.lower():
+                return dom_res
+            return "No dropdown options are currently visible on the screen. Please open the dropdown first."
+            
+        async def _click_or_select(loc):
+            import asyncio
+            tag_name = await loc.evaluate("el => el.tagName")
+            if tag_name.upper() == "OPTION":
+                val = await loc.get_attribute("value")
+                parent = page.locator("select").filter(has=loc)
+                if await parent.count() > 0:
+                    if val is not None:
+                        await parent.first.select_option(value=val)
+                    else:
+                        await parent.first.select_option(label=await loc.inner_text())
+                else:
+                    await loc.evaluate("""(el) => {
+                        const select = el.closest('select');
+                        if (select) {
+                            select.value = el.value;
+                            select.dispatchEvent(new Event('change', { bubbles: true }));
+                        }
+                    }""")
+            else:
+                await loc.click()
+                
+            # Auto-close any lingering custom dropdowns (like MUI or React-Select)
+            await asyncio.sleep(0.1)
+            await page.keyboard.press("Escape")
+
+        # Positional selection
+        if opt_lower in ["last", "last option", "the last"]:
+            await _click_or_select(options.last)
+            return "Selected the last option."
+        elif opt_lower in ["first", "first option", "the first"]:
+            await _click_or_select(options.first)
+            return "Selected the first option."
+        else:
+            # Text-based selection
+            target = page.get_by_role('option', name=re.compile(opt_lower, re.IGNORECASE))
+            if await target.count() > 0:
+                await _click_or_select(target.first)
+                return f"Selected option: {option}"
+                
+            # Fallback text search
+            target = page.locator(f"text=/{opt_lower}/i").filter(has_not=page.locator("body"))
+            if await target.count() > 0:
+                await _click_or_select(target.last) # last usually hits the deepest element
+                return f"Selected option: {option}"
+                
+            from automation.browser.dom_agent import DOMAgent
+            agent = DOMAgent(page)
+            dom_res = await agent.execute_intent(f"select {option}")
+            if "couldn't find" not in dom_res.lower() and "failed" not in dom_res.lower():
+                return dom_res
+                
+            return f"Could not find an option matching '{option}'."
+            
+    except Exception as e:
+        return f"Failed to select option '{option}': {str(e)}"
+
 async def handle_browser_summarize_page(**_) -> str:
     from automation.browser.browser_controller import BrowserController
     from app.services.llm.llm_service import llm_service
@@ -147,7 +349,10 @@ async def handle_browser_upload(**_) -> str:
     from automation.browser.browser_controller import BrowserController
     return await BrowserController().upload_file()
 
-
+async def handle_crm_action(action: str = "", **_) -> str:
+    from automation.browser.browser_controller import VoiceBrowserCommands
+    cmd = VoiceBrowserCommands()
+    return await cmd.execute(action)
 
 async def handle_read_page_title(**_) -> str:
     from automation.browser.browser_engine import BrowserEngine
@@ -453,6 +658,13 @@ async def handle_system_restart(**_) -> str:
 
 
 async def handle_type_text(text: str = "", app_name: str = "", **_) -> str:
+    if not app_name:
+        from automation.browser.browser_controller import VoiceBrowserCommands
+        cmd = VoiceBrowserCommands()
+        res = await cmd.execute(f"type {text}")
+        if "couldn't find" not in res and "Command not recognized" not in res and "Failed to" not in res:
+            return res
+            
     from automation.input.keyboard_controller import KeyboardController
     if app_name:
         from automation.desktop.window_manager import WindowManager
@@ -480,8 +692,16 @@ async def handle_double_click(**_) -> str:
     return "Double clicked"
 
 async def handle_click_text(text: str = "", **_) -> str:
-    from automation.desktop.ocr_controller import OCRController
-    return OCRController().find_and_click_text(text.strip())
+    from automation.browser.browser_controller import VoiceBrowserCommands
+    cmd = VoiceBrowserCommands()
+    res = await cmd.execute(f"click {text}")
+    
+    if "couldn't find" in res or "Command not recognized" in res or "Failed to" in res:
+        # Fallback to Desktop OCR if DOM Agent fails
+        from automation.desktop.ocr_controller import OCRController
+        return await OCRController().find_and_click_text(text.strip())
+        
+    return res
 
 
 async def handle_right_click(**_) -> str:
@@ -491,15 +711,66 @@ async def handle_right_click(**_) -> str:
 
 
 async def handle_scroll_up(**_) -> str:
+    try:
+        from automation.browser.browser_controller import BrowserController
+        ctrl = BrowserController()
+        if ctrl.engine._playwright is not None:
+            await ctrl.scroll("up")
+            return "Scrolled up in browser"
+    except Exception:
+        pass
+        
     from automation.input.mouse_controller import MouseController
     MouseController().scroll_up()
     return "Scrolled up"
 
 
 async def handle_scroll_down(**_) -> str:
+    try:
+        from automation.browser.browser_controller import BrowserController
+        ctrl = BrowserController()
+        if ctrl.engine._playwright is not None:
+            await ctrl.scroll("down")
+            return "Scrolled down in browser"
+    except Exception:
+        pass
+        
     from automation.input.mouse_controller import MouseController
     MouseController().scroll_down()
     return "Scrolled down"
+
+async def handle_scroll_top(**_) -> str:
+    try:
+        from automation.browser.browser_controller import BrowserController
+        ctrl = BrowserController()
+        if ctrl.engine._playwright is not None:
+            await ctrl.scroll_to_top()
+            return "Scrolled to top in browser"
+    except Exception:
+        pass
+    
+    # Fallback to mouse scroll if not in browser (rough approximation)
+    from automation.input.mouse_controller import MouseController
+    for _ in range(5):
+        MouseController().scroll_up()
+    return "Scrolled up"
+
+async def handle_scroll_bottom(**_) -> str:
+    try:
+        from automation.browser.browser_controller import BrowserController
+        ctrl = BrowserController()
+        if ctrl.engine._playwright is not None:
+            await ctrl.scroll_to_bottom()
+            return "Scrolled to bottom in browser"
+    except Exception:
+        pass
+    
+    # Fallback to mouse scroll if not in browser (rough approximation)
+    from automation.input.mouse_controller import MouseController
+    for _ in range(5):
+        MouseController().scroll_down()
+    return "Scrolled down"
+
 
 
 async def handle_submit(app_name: str = "", **_) -> str:
@@ -713,35 +984,37 @@ async def handle_vscode_terminal(**_) -> str:
 # ─── Register All Intents ────────────────────────────────────────────────────
 
 def register_all_intents() -> None:
-    """Call this once at startup to wire up all built-in command intents."""
-
+    """Registers all built-in commands with the CommandService."""
+    command_service._intents.clear()
+    
     intents = [
+        # search_google MUST be registered before search_youtube so explicit 'search <query>' always routes to Google
+        Intent(
+            name="search_google",
+            patterns=[
+                r"^search\s+(?!.*\byoutube\b)(?P<query>.+)$",
+                r"^google\s+(?:for\s+)?(?P<query>.+)$",
+                r"^find\s+(?!.*\byoutube\b)(?P<query>.+)\s+on\s+google$",
+            ],
+            handler=handle_search_google,
+            description="Search Google in the browser",
+            examples=["search for python tutorials", "google the weather", "search ace crm"],
+            param_names=["query"],
+        ),
         Intent(
             name="search_youtube",
             patterns=[
-                r"(?:search|find|play)\s+(?P<query>.+)\s+on youtube",
+                r"(?:search|find|play)\s+(?P<query>.+)\s+on\s+youtube",
                 r"(?:open\s+)?youtube\s+(?:and\s+)?(?:search|find|play)\s+(?:for\s+)?(?P<query>.+)",
-                r"(?:search|find|play)\s+(?:on\s+)?youtube\s+(?:for\s+)?(?P<query>.+)",
-                r"youtube\s+(?P<query>.+)",
+                r"(?:search|find|play)\s+on\s+youtube\s+(?:for\s+)?(?P<query>.+)",
+                r"youtube\s+(?:search\s+)?(?P<query>.+)",
             ],
             handler=handle_search_youtube,
             description="Search YouTube in the browser",
             examples=["search lofi music on youtube", "youtube python tutorial"],
             param_names=["query"],
         ),
-        Intent(
-            name="search_google",
-            patterns=[
-                r"(?:open\s+)?(?P<browser>edge|chrome|firefox)?\s*(?:and\s+)?(?:search|find|look up)\s+(?:for\s+)?(?P<query>.+)",
-                r"(?:open\s+)?(?P<browser>edge|chrome|firefox)?\s*(?:and\s+)?google\s+(?:for\s+)?(?P<query>.+)",
-                r"(?:search|google)\s+(?:for\s+)?(?P<query>.+)",
-                r"(?:look up|find)\s+(?P<query>.+)\s+on google",
-            ],
-            handler=handle_search_google,
-            description="Search Google in the browser",
-            examples=["search for python tutorials", "google the weather", "open edge search spiderman"],
-            param_names=["query", "browser"],
-        ),
+
         Intent(
             name="open_website",
             patterns=[
@@ -930,6 +1203,26 @@ def register_all_intents() -> None:
             param_names=["action"]
         ),
         Intent(
+            name="browser_list_options",
+            patterns=[
+                r"(?:list\s+out|display|show)(?:\s+the)?\s+(?P<element>.+?)(?:\s+(?:options|list|dropdown))?$",
+            ],
+            handler=handle_browser_list_options,
+            description="Click a dropdown or select menu to display its options",
+            examples=["list out the product", "display the options", "show product list"],
+            param_names=["element"]
+        ),
+        Intent(
+            name="browser_select_option",
+            patterns=[
+                r"select\s+(?:the\s+)?(?P<option>.+?)(?:\s+(?:option|from\s+dropdown|from\s+list))?$",
+            ],
+            handler=handle_browser_select_option,
+            description="Select a specific option from a dropdown or list",
+            examples=["select the first option", "select warm", "select last option"],
+            param_names=["option"]
+        ),
+        Intent(
             name="browser_summarize_page",
             patterns=[r"summarize\s+(?:this\s+)?page", r"extract\s+(?:all\s+)?headings", r"read\s+(?:the\s+)?first\s+paragraph"],
             handler=handle_browser_summarize_page,
@@ -1003,6 +1296,27 @@ def register_all_intents() -> None:
             examples=["upload a file"]
         ),
         Intent(
+            name="crm_workflow",
+            patterns=[
+                r"(?P<action>(?:open|launch|start|go\s+to)\s+(?:my\s+)?(?:ace\s+)?crm)",
+
+                r"(?P<action>log\s*(?:in|into)(?:\s+(?:to\s+)?(?:ace\s+)?crm)?)",
+                r"(?P<action>(?:create|add|make|generate)(?:\s+(?:a\s+)?(?:new\s+)?)?\s+(?:lead|quote|quotation|contact|customer|account|opportunity|order|product|task).*)",
+                r"(?P<action>new\s+(?:lead|quote|quotation|contact|customer|account|opportunity|order|product|task).*)",
+                r"(?P<action>(?:go\s+to|open|show)\s+(?:the\s+)?(?:leads|contacts|opportunities|accounts|customers|quotes|quotations|orders|products|dashboard|tasks|reports|home)(?:\s+module|page)?)",
+                r"(?P<action>^(?:leads|contacts|opportunities|accounts|customers|quotes|quotations|orders|products|dashboard|tasks|reports|home)$)",
+                r"(?P<action>search\s+(?:lead|opportunity|customer|order|quote|task|account|contact)\s+(?:.+))",
+                r"(?P<action>(?:open|select|click)\s+(?:first|top)\s+(?:record|row|lead|opportunity|customer|order|quote|task|account|contact))",
+                r"(?P<action>(?:edit|assign)\s+(?:lead|opportunity|customer|order|quote|task|account|contact).*)",
+                r"(?P<action>update\s+(?:status|lead|opportunity|customer|order|quote|task|account|contact).*)",
+                r"(?P<action>(?:click\s+)?(?:cancel|canceled|cancelled))",
+            ],
+            handler=handle_crm_action,
+            description="Automate CRM workflows in the browser",
+            examples=["open my crm", "create a new lead", "open ace crm", "login", "create new quote", "search lead john"],
+            param_names=["action"]
+        ),
+        Intent(
             name="run_dev_server",
             patterns=[
                 r"run\s+(?:the\s+)?(?:dev\s+)?(?:server|project|app)",
@@ -1025,11 +1339,17 @@ def register_all_intents() -> None:
             examples=["open it in browser", "open the dev server in the browser"],
         ),
         Intent(
+            name="dynamic_dom_action",
+            patterns=[],
+            handler=handle_dynamic_dom_action,
+            description="Dynamically interact with the current webpage (click buttons, fill forms, sign in, start trial, etc) using the DOM agent.",
+            examples=["sign in", "start free trial", "click the login button", "submit the form"],
+            param_names=["action"]
+        ),
+        Intent(
             name="open_app",
             patterns=[
-                r"open\s+(?P<app>.+)",
-                r"launch\s+(?P<app>.+)",
-                r"start\s+(?P<app>.+)",
+                r"^(?:open|launch|start)\s+(?!(?:my\s+)?(?:ace\s+)?crm\b)(?P<app>.+)$",
             ],
             handler=handle_open_app,
             description="Open a desktop application",
@@ -1213,10 +1533,11 @@ def register_all_intents() -> None:
             patterns=[
                 r"type\s+(?:the\s+)?(?:text\s+)?(?P<text>.+)",
                 r"write\s+(?P<text>.+)",
+                r"enter\s+(?P<text>.+)",
             ],
             handler=handle_type_text,
-            description="Type specific text using the keyboard",
-            examples=["type hello world", "type my email address"],
+            description="Type specific text using the keyboard or browser DOM",
+            examples=["type hello world", "enter ace into company name"],
             param_names=["text", "app_name"],
         ),
         Intent(
@@ -1228,7 +1549,10 @@ def register_all_intents() -> None:
         ),
         Intent(
             name="click_text",
-            patterns=[r"(?:click|tap)\s+(?:on\s+)?(?P<text>.+)"],
+            patterns=[
+                r"(?:click|tap)\s+(?:on\s+)?(?P<text>.+)",
+                r"(?:go\s+to|navigate\s+to)\s+(?P<text>[^\.]+)$"
+            ],
             handler=handle_click_text,
             description="Click on specific text on the screen using OCR",
             examples=["click on submit", "tap next", "click login"],
@@ -1270,6 +1594,20 @@ def register_all_intents() -> None:
             examples=["scroll down", "go down"],
         ),
         Intent(
+            name="scroll_top",
+            patterns=[r"scroll\s+(?:to\s+)?(?:top|first)"],
+            handler=handle_scroll_top,
+            description="Scroll to the top of the screen",
+            examples=["scroll top", "scroll to top", "scroll first"],
+        ),
+        Intent(
+            name="scroll_bottom",
+            patterns=[r"scroll\s+(?:to\s+)?(?:bottom|end|last)"],
+            handler=handle_scroll_bottom,
+            description="Scroll to the bottom of the screen",
+            examples=["scroll bottom", "scroll last", "scroll end"],
+        ),
+        Intent(
             name="ask_llm",
             patterns=[
                 r"(?:ask\s+(?:ai|jarvis|ace)|tell\s+me)\s+(?P<question>.+)",
@@ -1294,8 +1632,8 @@ def register_all_intents() -> None:
         Intent(
             name="submit",
             patterns=[
-                r"(?:submit|press\s+enter|enter)\s+(?:in\s+)?(?:the\s+)?(?P<app_name>.+)",
-                r"submit", r"press\s+enter", r"enter"
+                r"(?:submit|press\s+enter)\s+(?:in\s+)?(?:the\s+)?(?P<app_name>.+)",
+                r"submit", r"press\s+enter", r"^enter$"
             ],
             handler=handle_submit,
             description="Press the Enter key",

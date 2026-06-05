@@ -116,7 +116,7 @@ class AppController:
 
         if "chrome.exe" in abs_exe.lower():
             import subprocess
-            subprocess.Popen([abs_exe, "--remote-debugging-port=9222"], shell=False, creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP)
+            subprocess.Popen([abs_exe, "--remote-debugging-port=9222", "--start-maximized"], shell=False, creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP)
             logger.info(f"Launched Chrome with CDP: {abs_exe}")
             return True
 
@@ -146,6 +146,9 @@ class AppController:
         for exe in candidates:
             try:
                 if self._launch(exe):
+                    from automation.desktop.window_manager import WindowManager
+                    if not exe.startswith("ms-"):
+                        WindowManager().force_focus_by_exe(exe)
                     # Wait for the app to spawn and steal focus so subsequent typing commands don't miss
                     await asyncio.sleep(2.0)
                     return f"Opening {clean}"

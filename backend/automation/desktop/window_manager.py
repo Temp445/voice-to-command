@@ -178,6 +178,10 @@ class WindowManager:
                     title = win.window_text()
                     if title and lower_title in title.lower():
                         win.set_focus()
+                        try:
+                            win.maximize()
+                        except Exception:
+                            pass
                         break
             except Exception:
                 pass
@@ -190,7 +194,12 @@ class WindowManager:
             time.sleep(1.5)
             try:
                 app = pywinauto.Application(backend="uia").connect(path=exe_path, timeout=3)
-                app.top_window().set_focus()
+                top = app.top_window()
+                top.set_focus()
+                try:
+                    top.maximize()
+                except Exception:
+                    pass
             except Exception:
                 pass
         threading.Thread(target=_focus, daemon=True).start()

@@ -76,3 +76,4 @@ Pillow
 mss
 pytesseract
 schedule
+winsdk

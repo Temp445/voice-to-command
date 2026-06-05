@@ -209,14 +209,34 @@ class CommandService:
                 # Clear pending action since we either got a new command or no pending action exists
                 self._pending_action = None
                 
-                # 5. Fuzzy fallback if no regex match
+                # 5. Check if browser is active, prioritize browser NLP mapper to prevent fuzzy matching desktop commands
+                if not intent_name:
+                    try:
+                        from automation.desktop.window_manager import WindowManager
+                        active_win = WindowManager()._get_active_window()
+                        active_title = active_win.window_text().lower()
+                        if any(b in active_title for b in ["chrome", "edge", "brave", "firefox"]):
+                            from automation.browser.browser_controller import VoiceBrowserCommands
+                            browser_cmd = VoiceBrowserCommands()
+                            browser_res = await browser_cmd.execute(text)
+                            if browser_res and not browser_res.startswith("Command not recognized"):
+                                return {
+                                    "intent": "dynamic_browser_command",
+                                    "parameters": {"text": text},
+                                    "status": "success" if "Failed" not in browser_res else "failed",
+                                    "result": browser_res,
+                                    "duration_ms": int((time.perf_counter() - start) * 1000),
+                                }
+                    except Exception as e:
+                        logger.debug(f"Could not check active window for browser prioritization: {e}")
+
+                # 6. Fuzzy fallback if no regex match and browser agent didn't handle it
                 if not intent_name:
                     intent_name, params = self._fuzzy_match(text)
 
-        if not intent_name:
-            # 6. LLM fallback — classify intent via AI when all else fails
+            # 6. LLM fallback — classify intent via AI ONLY when regex + fuzzy both failed
             from app.services.llm.llm_service import llm_service
-            if llm_service.is_ready and llm_service._mode == "fallback":
+            if not intent_name and llm_service.is_ready and llm_service._mode == "fallback":
                 llm_result = await llm_service.classify_intent(text, self.list_intents())
                 if llm_result:
                     intent_name = llm_result.get("intent")
@@ -240,6 +260,7 @@ class CommandService:
                     # Still no match — route to ask_llm for a conversational response
                     intent_name = "ask_llm"
                     params = {"question": text}
+
 
         if not intent_name:
             # Try the dynamic Browser NLP mapper before giving up
@@ -335,21 +356,24 @@ class CommandService:
                 return intent.name, params
         return None, {}
 
-    def _fuzzy_match(self, text: str, threshold: int = 75) -> tuple[str | None, dict]:
+    def _fuzzy_match(self, text: str, threshold: int = 85) -> tuple[str | None, dict]:
         """Match against examples using rapidfuzz. Returns best intent above threshold."""
         if not _RAPIDFUZZ_AVAILABLE:
             return None, {}
 
         candidates: list[tuple[str, str]] = []  # (example, intent_name)
         for intent in self._intents:
-            for example in intent.examples:
-                candidates.append((example, intent.name))
+            # Disable fuzzy matching for intents that require parameters, 
+            # because fuzzy matching cannot extract arguments. They must go to LLM.
+            if len(intent.param_names) == 0:
+                for example in intent.examples:
+                    candidates.append((example, intent.name))
 
         if not candidates:
             return None, {}
 
         examples_only = [c[0] for c in candidates]
-        result = process.extractOne(text, examples_only, scorer=fuzz.WRatio)
+        result = process.extractOne(text, examples_only, scorer=fuzz.QRatio)
 
         if result and result[1] >= threshold:
             matched_example = result[0]

@@ -58,11 +58,11 @@ class GeminiAdapter(LLMProvider):
     async def chat(self, messages: list[dict], *, temperature: float = 0.7, max_tokens: int = 1024) -> str:
         try:
             system_prompt, history = self._to_gemini_format(messages)
+            self._genai.configure(api_key=self._api_key)
             model = self._genai.GenerativeModel(
                 self._model_name,
                 system_instruction=system_prompt or None,
                 generation_config={"temperature": temperature, "max_output_tokens": max_tokens},
-                client_options={"api_key": self._api_key},
             )
             # Last message should be the user prompt
             last_user = next((m["parts"][0] for m in reversed(history) if m["role"] == "user"), "")
@@ -77,11 +77,11 @@ class GeminiAdapter(LLMProvider):
     async def stream_chat(self, messages: list[dict], *, temperature: float = 0.7, max_tokens: int = 1024) -> AsyncGenerator[str, None]:
         try:
             system_prompt, history = self._to_gemini_format(messages)
+            self._genai.configure(api_key=self._api_key)
             model = self._genai.GenerativeModel(
                 self._model_name,
                 system_instruction=system_prompt or None,
                 generation_config={"temperature": temperature, "max_output_tokens": max_tokens},
-                client_options={"api_key": self._api_key},
             )
             last_user = next((m["parts"][0] for m in reversed(history) if m["role"] == "user"), "")
             chat_history = history[:-1] if history and history[-1]["role"] == "user" else history

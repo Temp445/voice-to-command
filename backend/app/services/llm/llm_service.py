@@ -24,7 +24,7 @@ PROVIDER_REGISTRY: dict[str, dict] = {
     "openai":   {"class": "OpenAIAdapter",   "module": "app.services.llm.adapters.openai_adapter",   "models": ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-3.5-turbo"]},
     "gemini":   {"class": "GeminiAdapter",   "module": "app.services.llm.adapters.gemini_adapter",   "models": ["gemini-2.0-flash", "gemini-2.0-flash-lite", "gemini-1.5-pro", "gemini-1.5-flash"]},
     "claude":   {"class": "ClaudeAdapter",   "module": "app.services.llm.adapters.claude_adapter",   "models": ["claude-opus-4-5", "claude-sonnet-4-5", "claude-haiku-3-5"]},
-    "deepseek": {"class": "DeepSeekAdapter", "module": "app.services.llm.adapters.deepseek_adapter", "models": ["deepseek-chat", "deepseek-reasoner"]},
+    "deepseek": {"class": "DeepSeekAdapter", "module": "app.services.llm.adapters.deepseek_adapter", "models": ["deepseek-v4-flash", "deepseek-v4-pro"]},
 }
 
 # System prompt used when classifying intents
