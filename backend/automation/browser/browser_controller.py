@@ -180,8 +180,8 @@ class BrowserController:
     async def extract_page_content(self):
         return await self.engine.extract_page_content()
 
-    async def click_first_result(self):
-        return await self.engine.click_first_result()
+    async def click_search_result(self, index: int = 0):
+        return await self.engine.click_search_result(index)
 
     async def run_js(self, script: str):
         page = await self.engine.ensure_browser()
@@ -215,11 +215,18 @@ class BrowserController:
         return await self.engine.upload_file()
 
     async def find_and_click(self, text_or_selector: str):
+        is_selector = text_or_selector.startswith((".", "#", "[")) or ":" in text_or_selector
         try:
-            return await self.engine.click(text_or_selector)
+            if is_selector:
+                return await self.engine.click(text_or_selector)
+            else:
+                return await self.engine.click_text(text_or_selector)
         except Exception:
             try:
-                return await self.engine.click_text(text_or_selector)
+                if is_selector:
+                    return await self.engine.click_text(text_or_selector)
+                else:
+                    return await self.engine.click(text_or_selector)
             except Exception:
                 return "Failed to find element to click"
 
@@ -365,13 +372,6 @@ class VoiceBrowserCommands:
             return await self.ctrl.go_back()
         if "refresh" in transcript or "reload" in transcript:
             return await self.ctrl.refresh()
-        if transcript.startswith("open "):
-            url = transcript.replace("open ", "").strip()
-            return await self.ctrl.navigate(url)
-        import re
-        search_m = re.match(r"(?:search|google)\s+(?:for\s+)?(.+)", transcript)
-        if search_m:
-            return await self.ctrl.search_google(search_m.group(1).strip())
 
         # --- Deterministic Fallbacks (Zero LLM Tokens) ---
         try:

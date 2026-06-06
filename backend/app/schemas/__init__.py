@@ -41,6 +41,8 @@ class SettingsUpdate(BaseModel):
     browser_type: str | None = None
     startup_on_boot: bool | None = None
     minimize_to_tray: bool | None = None
+    browser_animations_enabled: bool | None = None
+    enable_desktop_overlay: bool | None = None
     # LLM
     llm_enabled: bool | None = None
     llm_provider: str | None = None
@@ -61,6 +63,8 @@ class SettingsResponse(BaseModel):
     browser_type: str
     startup_on_boot: bool
     minimize_to_tray: bool
+    browser_animations_enabled: bool
+    enable_desktop_overlay: bool
     gtts_configured: bool   # True if API key is set
     # LLM
     llm_enabled: bool

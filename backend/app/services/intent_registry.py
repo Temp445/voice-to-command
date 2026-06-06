@@ -61,18 +61,16 @@ async def handle_open_app(app: str = "", text: str = "", **_) -> str:
             
         # Fallback to DOMAgent if a browser is active
         try:
-            from automation.desktop.window_manager import WindowManager
-            active_win = WindowManager()._get_active_window()
-            if active_win:
-                active_title = active_win.window_text().lower()
-                if any(b in active_title for b in ["chrome", "edge", "brave", "firefox"]):
-                    logger.info(f"App '{app_name}' not found, but browser is active. Falling back to DOMAgent for '{text}'")
-                    from automation.browser.browser_controller import BrowserController
-                    from automation.browser.dom_agent import DOMAgent
-                    bc = BrowserController()
-                    page = await bc.ctrl._ensure_page() if hasattr(bc, 'ctrl') else await bc._ensure_page()
-                    agent = DOMAgent(page)
-                    return await agent.execute_intent(text or f"start {app_name}")
+            from automation.browser.browser_controller import BrowserController
+            bc = BrowserController()
+            if bc.engine._playwright is not None:
+                logger.info(f"App '{app_name}' not found, but browser is active. Falling back to DOMAgent for 'click {app_name}'")
+                from automation.browser.dom_agent import DOMAgent
+                page = await bc.ctrl._ensure_page() if hasattr(bc, 'ctrl') else await bc._ensure_page()
+                agent = DOMAgent(page)
+                dom_res = await agent.execute_intent(text or f"click {app_name}")
+                if "couldn't find" not in dom_res.lower() and "failed" not in dom_res.lower():
+                    return dom_res
         except Exception as e:
             logger.debug(f"Failed to fallback to DOMAgent in open_app: {e}")
 
@@ -106,9 +104,20 @@ async def handle_close_heavy_apps(**_) -> str:
 
 async def handle_search_google(query: str = "", browser: str | None = None, **_) -> str:
     from automation.browser.browser_controller import BrowserController
+    from automation.browser.browser_engine import BrowserEngine
+    import re
+    
     ctrl = BrowserController()
+    query = query.strip()
+    
+    # If the user says "search [URL]", just navigate to it directly
+    if re.match(r"^(?:https?://)?[\w\-\.]+\.\w{2,}(?:/\S*)?$", query):
+        url = query if query.startswith("http") else f"https://{query}"
+        logger.info(f"Query looks like a URL, navigating directly to: {url}")
+        return await BrowserEngine().navigate(url)
+        
     logger.info(f"Searching Google for: '{query}'")
-    return await ctrl.search_google(query.strip())
+    return await ctrl.search_google(query)
 
 
 async def handle_search_youtube(query: str = "", **_) -> str:
@@ -135,9 +144,23 @@ async def handle_browser_go_back(**_) -> str:
     from automation.browser.browser_engine import BrowserEngine
     return await BrowserEngine().go_back()
 
-async def handle_browser_click_first_result(**_) -> str:
+async def handle_browser_click_result(index: str = "first", **_) -> str:
     from automation.browser.browser_controller import BrowserController
-    return await BrowserController().click_first_result()
+    
+    mapping = {
+        "first": 0, "1st": 0, "1": 0,
+        "second": 1, "2nd": 1, "2": 1,
+        "third": 2, "3rd": 2, "3": 2,
+        "fourth": 3, "4th": 3, "4": 3,
+        "fifth": 4, "5th": 4, "5": 4,
+        "sixth": 5, "6th": 5, "6": 5,
+        "seventh": 6, "7th": 6, "7": 6,
+        "eighth": 7, "8th": 7, "8": 7,
+        "ninth": 8, "9th": 8, "9": 8,
+        "tenth": 9, "10th": 9, "10": 9
+    }
+    idx = mapping.get(index.lower().strip(), 0)
+    return await BrowserController().click_search_result(idx)
 
 async def handle_browser_switch_last_tab(**_) -> str:
     from automation.browser.browser_controller import BrowserController
@@ -184,7 +207,7 @@ async def handle_browser_list_options(element: str = "", **_) -> str:
         # 1. Try semantic combobox
         combobox = page.get_by_role('combobox', name=re.compile(element, re.IGNORECASE))
         if await combobox.count() > 0:
-            await combobox.first.click()
+            await combobox.first.click(force=True)
             return f"Opened {element} dropdown."
             
         # 2. Try finding a label and clicking it (often focuses the input) or finding the input next to it
@@ -194,16 +217,16 @@ async def handle_browser_list_options(element: str = "", **_) -> str:
             if for_attr:
                 target = page.locator(f"#{for_attr}")
                 if await target.count() > 0:
-                    await target.click()
+                    await target.click(force=True)
                     return f"Opened {element} dropdown via label."
             # Click label as fallback
-            await label.first.click()
+            await label.first.click(force=True)
             return f"Clicked label for {element}."
 
         # 3. Fallback text search for placeholders or custom divs
         loc = page.locator(f"text=/{element}/i").filter(has_not=page.locator("body, html, main, form"))
         if await loc.count() > 0:
-            await loc.first.click()
+            await loc.first.click(force=True)
             return f"Clicked {element} to display options."
             
         # 4. Ultimate fallback to DOM Agent
@@ -218,8 +241,14 @@ async def handle_browser_list_options(element: str = "", **_) -> str:
         return f"Failed to open options for {element}: {str(e)}"
 
 async def handle_browser_select_option(option: str = "", **_) -> str:
-    from automation.browser.browser_controller import BrowserController
+    from automation.desktop.app_controller import AppController
     import re
+    
+    clean_option = re.sub(r"^\s*(the file|file|the folder|folder)\s+", "", option, flags=re.IGNORECASE).strip()
+    if AppController().navigate_file_dialog(clean_option):
+        return f"Selected '{clean_option}' in the file dialog."
+
+    from automation.browser.browser_controller import BrowserController
     ctrl = BrowserController()
     page = await ctrl._ensure_page()
     
@@ -263,7 +292,7 @@ async def handle_browser_select_option(option: str = "", **_) -> str:
                         }
                     }""")
             else:
-                await loc.click()
+                await loc.click(force=True)
                 
             # Auto-close any lingering custom dropdowns (like MUI or React-Select)
             await asyncio.sleep(0.1)
@@ -346,8 +375,20 @@ async def handle_browser_download(**_) -> str:
     return await BrowserController().download_file()
 
 async def handle_browser_upload(**_) -> str:
+    from automation.browser.dom_agent import DOMAgent
     from automation.browser.browser_controller import BrowserController
-    return await BrowserController().upload_file()
+    ctrl = BrowserController()
+    try:
+        page = await ctrl._ensure_page()
+        agent = DOMAgent(page)
+        # Force a click on the file area to open the native OS file dialog for visual browsing
+        # Do NOT use the word "upload" in this string, or DOMAgent will intercept it as an auto-upload action!
+        res = await agent.execute_intent("click the file drop area")
+        if "couldn't find" not in res.lower() and "failed" not in res.lower():
+            return "Opened file upload dialog."
+        return res
+    except Exception as e:
+        return f"Failed to open upload dialog: {e}"
 
 async def handle_crm_action(action: str = "", **_) -> str:
     from automation.browser.browser_controller import VoiceBrowserCommands
@@ -991,18 +1032,22 @@ def register_all_intents() -> None:
         # search_google MUST be registered before search_youtube so explicit 'search <query>' always routes to Google
         Intent(
             name="search_google",
+            domain="browser",
             patterns=[
-                r"^search\s+(?!.*\byoutube\b)(?P<query>.+)$",
+                r"^search\s+(?:google|the\s+web)\s+(?:for\s+)?(?P<query>.+)$",
                 r"^google\s+(?:for\s+)?(?P<query>.+)$",
                 r"^find\s+(?!.*\byoutube\b)(?P<query>.+)\s+on\s+google$",
+                r"^open\s+(?:the\s+)?(?:chrome|browser|edge|google\s+chrome)\s+(?:and\s+)?search\s+(?:for\s+)?(?P<query>.+)$",
+                r"^search\s+(?:for\s+)?(?P<query>.+?)\s+(?:in|on)\s+(?:the\s+)?(?:chrome|browser|edge|google\s+chrome)$",
             ],
             handler=handle_search_google,
             description="Search Google in the browser",
-            examples=["search for python tutorials", "google the weather", "search ace crm"],
+            examples=["search for python tutorials", "google the weather", "search ace crm", "open chrome search ace payroll"],
             param_names=["query"],
         ),
         Intent(
             name="search_youtube",
+            domain="browser",
             patterns=[
                 r"(?:search|find|play)\s+(?P<query>.+)\s+on\s+youtube",
                 r"(?:open\s+)?youtube\s+(?:and\s+)?(?:search|find|play)\s+(?:for\s+)?(?P<query>.+)",
@@ -1017,6 +1062,7 @@ def register_all_intents() -> None:
 
         Intent(
             name="open_website",
+            domain="browser",
             patterns=[
                 r"(?:open|go to|visit|navigate to)\s+(?P<url>(?:https?://)?[\w\-\.]+\.\w{2,}(?:/\S*)?)",
                 r"(?:open|go to|visit)\s+(?P<url>youtube|google|github|netflix|spotify|twitter|facebook|gmail|amazon|reddit|linkedin)"
@@ -1037,6 +1083,7 @@ def register_all_intents() -> None:
         ),
         Intent(
             name="browser_go_back",
+            domain="browser",
             patterns=[
                 r"go\s+back",
                 r"previous\s+page",
@@ -1046,13 +1093,15 @@ def register_all_intents() -> None:
             examples=["go back", "go to previous page"],
         ),
         Intent(
-            name="browser_click_first_result",
+            name="browser_click_result",
+            domain="browser",
             patterns=[
-                r"(?:click|open)\s+(?:the\s+)?first\s+(?:result|video|link)",
+                r"(?:click|open)\s+(?:the\s+)?(?P<index>first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|\d+(?:st|nd|rd|th)?)\s+(?:result|link|video|item)",
             ],
-            handler=handle_browser_click_first_result,
-            description="Click the first search result in the browser",
-            examples=["open the first result", "play the first video"],
+            handler=handle_browser_click_result,
+            description="Click the nth search result on Google or YouTube",
+            examples=["click the first result", "open the fourth link", "click the 2nd video"],
+            param_names=["index"]
         ),
         Intent(
             name="read_page_title",
@@ -1088,6 +1137,7 @@ def register_all_intents() -> None:
         ),
         Intent(
             name="open_folder",
+            domain="desktop",
             patterns=[
                 # "open folder <name>" or "open directory <name>" — keyword FIRST (highest priority)
                 r"open\s+(?:the\s+)?(?:folder|directory)\s+(?P<path>.+)",
@@ -1105,9 +1155,11 @@ def register_all_intents() -> None:
         ),
         Intent(
             name="search_file",
+            domain="desktop",
+            is_fallback=True,
             patterns=[
-                r"(?:search|find|locate|open)\s+(?:for\s+)?(?:the\s+)?(?:file|pdf|document|doc|image|video|spreadsheet|notepad|excel|word|powerpoint|text)\s+(?P<file_name>.+)",
-                r"(?:search|find|locate)\s+(?:for\s+)?(?:the\s+)?(?P<file_name>.+)",
+                r"^(?:search|find|locate|open)\s+(?:for\s+)?(?:the\s+)?(?:file|pdf|document|doc|image|video|spreadsheet|notepad|excel|word|powerpoint|text)\s+(?P<file_name>.+)$",
+                r"^(?:search|find|locate)\s+(?:for\s+)?(?:the\s+)?(?P<file_name>.+)$",
             ],
             handler=handle_search_file,
             description="Search for or open a file on the computer",
@@ -1148,6 +1200,7 @@ def register_all_intents() -> None:
         ),
         Intent(
             name="browser_switch_last_tab",
+            domain="browser",
             patterns=[r"(?:switch|go)\s+to\s+(?:the\s+)?last\s+tab"],
             handler=handle_browser_switch_last_tab,
             description="Switch to the last opened browser tab",
@@ -1155,6 +1208,7 @@ def register_all_intents() -> None:
         ),
         Intent(
             name="browser_close_all_tabs",
+            domain="browser",
             patterns=[r"close\s+all\s+tabs"],
             handler=handle_browser_close_all_tabs,
             description="Close all browser tabs",
@@ -1246,6 +1300,7 @@ def register_all_intents() -> None:
         ),
         Intent(
             name="browser_clear_marks",
+            domain="browser",
             patterns=[r"clear\s+highlights", r"remove\s+marks"],
             handler=handle_browser_clear_marks,
             description="Clear all element highlights",
@@ -1283,6 +1338,7 @@ def register_all_intents() -> None:
         ),
         Intent(
             name="browser_download",
+            domain="browser",
             patterns=[r"download\s+(?:this\s+)?file"],
             handler=handle_browser_download,
             description="Handle file download",
@@ -1290,6 +1346,7 @@ def register_all_intents() -> None:
         ),
         Intent(
             name="browser_upload",
+            domain="browser",
             patterns=[r"upload\s+(?:a\s+)?file"],
             handler=handle_browser_upload,
             description="Handle file upload",
@@ -1340,6 +1397,7 @@ def register_all_intents() -> None:
         ),
         Intent(
             name="dynamic_dom_action",
+            is_fallback=True,
             patterns=[],
             handler=handle_dynamic_dom_action,
             description="Dynamically interact with the current webpage (click buttons, fill forms, sign in, start trial, etc) using the DOM agent.",
@@ -1348,6 +1406,8 @@ def register_all_intents() -> None:
         ),
         Intent(
             name="open_app",
+            domain="desktop",
+            is_fallback=True,
             patterns=[
                 r"^(?:open|launch|start)\s+(?!(?:my\s+)?(?:ace\s+)?crm\b)(?P<app>.+)$",
             ],
@@ -1358,6 +1418,7 @@ def register_all_intents() -> None:
         ),
         Intent(
             name="close_heavy_apps",
+            domain="desktop",
             patterns=[
                 r"close\s+(?:all\s+)?heavy\s+(?:applications|apps)",
                 r"free\s+(?:up\s+)?(?:some\s+)?(?:memory|ram)",
@@ -1380,6 +1441,7 @@ def register_all_intents() -> None:
         ),
         Intent(
             name="close_app",
+            domain="desktop",
             patterns=[
                 r"close\s+(?P<app>.+)",
                 r"quit\s+(?P<app>.+)",
@@ -1416,6 +1478,7 @@ def register_all_intents() -> None:
         ),
         Intent(
             name="volume_up",
+            domain="desktop",
             patterns=[r"(?:volume|turn)\s+up", r"increase\s+volume", r"louder"],
             handler=handle_volume_up,
             description="Increase system volume",
@@ -1423,6 +1486,7 @@ def register_all_intents() -> None:
         ),
         Intent(
             name="volume_down",
+            domain="desktop",
             patterns=[r"(?:volume|turn)\s+down", r"decrease\s+volume", r"quieter"],
             handler=handle_volume_down,
             description="Decrease system volume",
@@ -1444,6 +1508,7 @@ def register_all_intents() -> None:
         ),
         Intent(
             name="minimize_app",
+            domain="desktop",
             patterns=[r"minimize\s+(?:the\s+)?(?P<app>.+)"],
             handler=handle_minimize_app,
             description="Minimize a specific application by name",
@@ -1459,6 +1524,7 @@ def register_all_intents() -> None:
         ),
         Intent(
             name="maximize_app",
+            domain="desktop",
             patterns=[r"maximize\s+(?:the\s+)?(?P<app>.+)"],
             handler=handle_maximize_app,
             description="Maximize a specific application by name",
@@ -1467,6 +1533,7 @@ def register_all_intents() -> None:
         ),
         Intent(
             name="close_window",
+            domain="desktop",
             patterns=[r"close\s+(?:this\s+)?window", r"close\s+tab"],
             handler=handle_close_window,
             description="Close the active window",
@@ -1530,6 +1597,7 @@ def register_all_intents() -> None:
         ),
         Intent(
             name="type_text",
+            domain="desktop",
             patterns=[
                 r"type\s+(?:the\s+)?(?:text\s+)?(?P<text>.+)",
                 r"write\s+(?P<text>.+)",
@@ -1542,6 +1610,7 @@ def register_all_intents() -> None:
         ),
         Intent(
             name="lock_screen",
+            domain="desktop",
             patterns=[r"lock\s+(?:the\s+)?(?:screen|computer|pc)?", r"lock\s+now"],
             handler=handle_lock_screen,
             description="Lock the screen",
@@ -1549,6 +1618,7 @@ def register_all_intents() -> None:
         ),
         Intent(
             name="click_text",
+            domain="browser",
             patterns=[
                 r"(?:click|tap)\s+(?:on\s+)?(?P<text>.+)",
                 r"(?:go\s+to|navigate\s+to)\s+(?P<text>[^\.]+)$"
@@ -1631,6 +1701,7 @@ def register_all_intents() -> None:
         ),
         Intent(
             name="submit",
+            domain="desktop",
             patterns=[
                 r"(?:submit|press\s+enter)\s+(?:in\s+)?(?:the\s+)?(?P<app_name>.+)",
                 r"submit", r"press\s+enter", r"^enter$"
@@ -1642,6 +1713,7 @@ def register_all_intents() -> None:
         ),
         Intent(
             name="dont_save",
+            domain="desktop",
             patterns=[
                 r"(?:don't|do\s+not)\s+save\s+(?:in\s+)?(?:the\s+)?(?P<app_name>.+)",
                 r"don't\s+save", r"do\s+not\s+save"
@@ -1653,6 +1725,7 @@ def register_all_intents() -> None:
         ),
         Intent(
             name="save_file",
+            domain="desktop",
             patterns=[
                 r"save\s+(?:the\s+)?(?:file|document|changes)\s+(?:in\s+)?(?:the\s+)?(?P<app_name>.+)",
                 r"save\s+(?:the\s+)?(?P<app_name>(?!file|document|changes).+)",
@@ -1665,6 +1738,7 @@ def register_all_intents() -> None:
         ),
         Intent(
             name="cancel_dialog",
+            domain="desktop",
             patterns=[
                 r"(?:cancel|escape|press\s+escape)\s+(?:in\s+)?(?:the\s+)?(?P<app_name>.+)",
                 r"cancel", r"escape", r"press\s+escape"
@@ -1673,6 +1747,17 @@ def register_all_intents() -> None:
             description="Press Escape to cancel a dialog",
             examples=["cancel", "escape", "cancel in notepad"],
             param_names=["app_name"],
+        ),
+        Intent(
+            name="browser_click_link",
+            domain="browser",
+            patterns=[
+                r"open\s+(?:the\s+)?(?P<text>.+?)\s+(?:link|tab|button|element)$"
+            ],
+            handler=handle_click_text,
+            description="Open or click a specific link/tab in the browser using the DOM Agent",
+            examples=["open the linkedin link", "open the fourth tab"],
+            param_names=["text"],
         ),
     ]
 

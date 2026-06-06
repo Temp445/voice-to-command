@@ -13,6 +13,8 @@ interface SettingsStore {
   browserType: "chromium" | "firefox" | "webkit";
   startupOnBoot: boolean;
   minimizeToTray: boolean;
+  browserAnimationsEnabled: boolean;
+  enableDesktopOverlay: boolean;
   
   // LLM
   llmEnabled: boolean;
@@ -39,6 +41,8 @@ export const useSettingsStore = create<SettingsStore>()(
       browserType:    "chromium",
       startupOnBoot:  true,
       minimizeToTray: true,
+      browserAnimationsEnabled: true,
+      enableDesktopOverlay: true,
 
       // LLM Defaults
       llmEnabled:     true,

@@ -134,12 +134,83 @@ class AppController:
         logger.info(f"Launched: {abs_exe}")
         return True
 
+    def navigate_file_dialog(self, folder_path: str) -> bool:
+        """
+        Scans for an open File Dialog. If found, forces it to foreground and navigates it.
+        """
+        try:
+            from pywinauto import Desktop
+            import pyautogui
+            import time
+
+            dialog_titles = ["Open", "Save As", "Select file", "Choose File to Upload", "File Upload"]
+            
+            target_win = None
+            for win in Desktop(backend="win32").windows():
+                try:
+                    if win.is_visible() and win.window_text() in dialog_titles:
+                        target_win = win
+                        break
+                except Exception:
+                    continue
+                    
+            if target_win:
+                title = target_win.window_text()
+                logger.info(f"[navigate_file_dialog] Found file dialog '{title}'. Forcing focus and navigating to {folder_path}")
+                
+                # Force the dialog to the foreground
+                target_win.set_focus()
+                time.sleep(0.2)
+                
+                # Alt+N focuses the "File name" input box in standard Windows file dialogs
+                pyautogui.hotkey('alt', 'n')
+                time.sleep(0.1)
+                pyautogui.typewrite(str(folder_path))
+                time.sleep(0.1)
+                pyautogui.press('enter')
+                
+                # Move focus back to the file list so arrow keys work immediately
+                time.sleep(0.1)
+                pyautogui.hotkey('shift', 'tab')
+                pyautogui.hotkey('shift', 'tab')
+                
+                return True
+                
+        except Exception as e:
+            logger.debug(f"Failed to check/navigate file dialog: {e}")
+            
+        return False
+
     # ── Public API ────────────────────────────────────────────────────────────
 
     async def open_application(self, app_name: str) -> str:
         """Launch an application by friendly name."""
         clean = app_name.strip().rstrip(string.punctuation).strip()
         key = clean.lower()
+
+        # Intercept common folders to handle native File Dialog navigation
+        common_folders = {
+            "pictures": Path.home() / "Pictures",
+            "downloads": Path.home() / "Downloads",
+            "documents": Path.home() / "Documents",
+            "desktop": Path.home() / "Desktop",
+            "music": Path.home() / "Music",
+            "videos": Path.home() / "Videos",
+        }
+        
+        if key in common_folders:
+            folder_path = common_folders[key]
+            if folder_path.exists():
+                # Attempt to navigate an active file dialog first
+                if self.navigate_file_dialog(folder_path):
+                    return f"Navigated dialog to {key.title()}"
+                
+                # If no dialog is active, fallback to opening a new Explorer window
+                try:
+                    os.startfile(folder_path)
+                    return f"Opened {key.title()} folder"
+                except Exception as e:
+                    logger.error(f"Failed to open folder {folder_path}: {e}")
 
         candidates = self._resolve_candidates(key)
 

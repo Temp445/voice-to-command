@@ -25,6 +25,7 @@ PROVIDER_REGISTRY: dict[str, dict] = {
     "gemini":   {"class": "GeminiAdapter",   "module": "app.services.llm.adapters.gemini_adapter",   "models": ["gemini-2.0-flash", "gemini-2.0-flash-lite", "gemini-1.5-pro", "gemini-1.5-flash"]},
     "claude":   {"class": "ClaudeAdapter",   "module": "app.services.llm.adapters.claude_adapter",   "models": ["claude-opus-4-5", "claude-sonnet-4-5", "claude-haiku-3-5"]},
     "deepseek": {"class": "DeepSeekAdapter", "module": "app.services.llm.adapters.deepseek_adapter", "models": ["deepseek-v4-flash", "deepseek-v4-pro"]},
+    "ollama":   {"class": "OllamaAdapter",   "module": "app.services.llm.adapters.ollama_adapter",   "models": ["llama3.2", "llama3.1", "qwen2.5:3b", "qwen2.5:1.5b", "mistral", "phi3"]},
 }
 
 # System prompt used when classifying intents
@@ -110,7 +111,7 @@ class LLMService:
 
     def _install_hint(self, provider: str) -> str:
         return {"groq": "groq", "openai": "openai", "gemini": "google-generativeai",
-                "claude": "anthropic", "deepseek": "openai"}.get(provider, provider)
+                "claude": "anthropic", "deepseek": "openai", "ollama": "ollama"}.get(provider, provider)
 
     # ── Status ────────────────────────────────────────────────────────────────
 
@@ -137,6 +138,10 @@ class LLMService:
         self._history.clear()
 
     def _build_messages(self, system: str, user_prompt: str) -> list[dict]:
+        import datetime
+        current_time = datetime.datetime.now().strftime("%A, %B %d, %Y %I:%M %p")
+        system += f"\n\nThe current date and time is: {current_time}."
+        
         from app.services.context_state import get_context
         ctx = get_context().get_all()
         # Only inject if there's meaningful context (not all None)

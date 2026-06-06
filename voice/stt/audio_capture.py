@@ -55,6 +55,7 @@ class AudioCapture:
                 self._denoiser = None
         else:
             self._denoiser = None
+        self._force_stop_recording = False
 
     def start(self) -> None:
         if self._running:
@@ -143,6 +144,9 @@ class AudioCapture:
                 stream.stop_stream()
                 stream.close()
 
+    def stop_recording_early(self) -> None:
+        self._force_stop_recording = True
+
     def get_speech_segment(self, silence_chunks: int = 30, timeout: float = 10.0) -> bytes:
         """
         Collect speech until `silence_chunks` consecutive silent frames.
@@ -152,8 +156,9 @@ class AudioCapture:
         frames: list[bytes] = []
         silent = 0
         deadline = time.time() + timeout
+        self._force_stop_recording = False
 
-        while time.time() < deadline:
+        while time.time() < deadline and not self._force_stop_recording:
             try:
                 chunk = self._queue.get(timeout=0.1)
                 frames.append(chunk)
@@ -161,6 +166,8 @@ class AudioCapture:
             except queue.Empty:
                 silent += 1
                 if frames and silent >= silence_chunks:
+                    break
+                elif not frames and silent >= 40:  # Auto-stop after 4s of complete silence
                     break
 
         return b"".join(frames)

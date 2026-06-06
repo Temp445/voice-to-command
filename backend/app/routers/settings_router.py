@@ -1,6 +1,6 @@
 """Settings router — Read and update user settings."""
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
@@ -38,6 +38,8 @@ def _build_response(s: UserSettings) -> SettingsResponse:
         browser_type=s.browser_type,
         startup_on_boot=s.startup_on_boot,
         minimize_to_tray=s.minimize_to_tray,
+        browser_animations_enabled=s.browser_animations_enabled,
+        enable_desktop_overlay=s.enable_desktop_overlay,
         gtts_configured=bool(s.gtts_api_key_encrypted),
         # LLM
         llm_enabled=s.llm_enabled,
@@ -56,7 +58,7 @@ async def get_settings(db: AsyncSession = Depends(get_db)):
 
 
 @router.patch("", response_model=SettingsResponse)
-async def update_settings(body: SettingsUpdate, db: AsyncSession = Depends(get_db)):
+async def update_settings(body: SettingsUpdate, request: Request, db: AsyncSession = Depends(get_db)):
     s = await _get_settings(db)
 
     for field, value in body.model_dump(exclude_none=True).items():
@@ -84,6 +86,35 @@ async def update_settings(body: SettingsUpdate, db: AsyncSession = Depends(get_d
             Transcriber.reload_model()
         except ImportError:
             pass
+
+    # Hot-swap Desktop Overlay if it changed
+    if "enable_desktop_overlay" in body.model_dump(exclude_none=True):
+        overlay_enabled = body.enable_desktop_overlay
+        if overlay_enabled:
+            if not getattr(request.app.state, "overlay_process", None):
+                import subprocess, os, sys
+                from pathlib import Path
+                _ROOT = Path(__file__).resolve().parent.parent.parent
+                python_exe = os.path.join(str(_ROOT), ".venv", "Scripts", "python.exe")
+                if not os.path.exists(python_exe):
+                    python_exe = sys.executable
+                overlay_path = os.path.join(str(_ROOT), "automation", "desktop", "overlay.py")
+                if os.path.exists(overlay_path):
+                    request.app.state.overlay_process = subprocess.Popen(
+                        [python_exe, overlay_path],
+                        creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+                    )
+                    logger.info("🖥️ Desktop Overlay dynamically started.")
+        else:
+            proc = getattr(request.app.state, "overlay_process", None)
+            if proc:
+                try:
+                    proc.terminate()
+                    proc.wait(timeout=2)
+                    logger.info("🛑 Desktop Overlay dynamically stopped.")
+                except Exception as e:
+                    logger.warning(f"Failed to stop Desktop Overlay: {e}")
+                request.app.state.overlay_process = None
 
     # Broadcast voice pipeline hot-reload signal
     await ws_manager.broadcast("settings_updated", {"tts_provider": s.tts_provider, "wake_word": s.wake_word})

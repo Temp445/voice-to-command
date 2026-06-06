@@ -257,24 +257,29 @@ class BrowserEngine:
             return f"Clicked text '{text}'."
         return await _run_in_playwright(_do())
 
-    async def click_first_result(self) -> str:
+    async def click_search_result(self, index: int = 0) -> str:
         async def _do():
             page = await self.ensure_browser()
             # General heuristic for Google/Bing search results or generic main links
             locators = [
+                "ytd-video-renderer a#video-title", # YouTube specific
+                "div.g h3", # Google specific
                 "h3", 
                 "a h3", 
                 ".g a", 
-                "div.search-result a",
-                "ytd-video-renderer a#video-title"
+                "div.search-result a"
             ]
             for loc in locators:
                 elements = await page.locator(loc).all()
+                visible_elements = []
                 for el in elements:
                     if await el.is_visible():
-                        await el.click()
-                        return f"Clicked first search result via '{loc}'."
-            return "Could not find a clear search result to click."
+                        visible_elements.append(el)
+                        
+                if len(visible_elements) > index:
+                    await visible_elements[index].click()
+                    return f"Clicked search result {index + 1} via '{loc}'."
+            return f"Could not find search result {index + 1}."
         return await _run_in_playwright(_do())
 
     async def double_click(self, selector: str = None) -> str:
@@ -513,36 +518,43 @@ class BrowserEngine:
     async def search_google(self, query: str) -> str:
         async def _do():
             page = await self.ensure_browser()
-            logger.info(f"[search_google] Current URL: {page.url} — navigating to Google for query: '{query}'")
-            # Always navigate to Google first to avoid accidentally searching on the wrong site
-            await page.goto("https://www.google.com", wait_until="domcontentloaded", timeout=10000)
+            logger.info(f"[search_google] Current URL: {page.url} — navigating directly to Google search for query: '{query}'")
+            import urllib.parse
+            encoded_query = urllib.parse.quote_plus(query)
+            search_url = f"https://www.google.com/search?q={encoded_query}"
+            await page.goto(search_url, wait_until="domcontentloaded", timeout=15000)
+            
+            try:
+                # Defocus the URL bar by physically clicking the page's search box
+                await page.locator("[name='q']").click(force=True, timeout=3000)
+                await page.mouse.click(10, 100) # Safe click on the left margin
+                # Pressing a harmless key ensures the OS transfers focus to the web view
+                await page.keyboard.press("Control")
+            except Exception:
+                pass
+                
             await asyncio.sleep(1.0)
-            search_box = page.locator("textarea[name='q'], input[name='q']").first
-            await search_box.click()
-            await search_box.fill(query)
-            await asyncio.sleep(0.2)
-            await page.keyboard.press("Enter")
-            await asyncio.sleep(1.5)
-            await page.wait_for_load_state("domcontentloaded")
             return f"Searched Google for '{query}'"
         return await _run_in_playwright(_do())
 
     async def search_youtube(self, query: str) -> str:
         async def _do():
             page = await self.ensure_browser()
-            logger.info(f"[search_youtube] Current URL: {page.url} — navigating to YouTube for query: '{query}'")
-            if "youtube.com" not in page.url:
-                await page.goto("https://www.youtube.com", wait_until="commit")
-                await asyncio.sleep(1.5)
-            else:
-                await asyncio.sleep(0.5)
-            search_box = page.locator("input#search, input[name='search_query']").first
-            await search_box.click()
-            await search_box.fill(query)
-            await asyncio.sleep(0.2)
-            await page.keyboard.press("Enter")
-            await asyncio.sleep(1.5)
-            await page.wait_for_load_state("domcontentloaded")
+            logger.info(f"[search_youtube] Current URL: {page.url} — navigating directly to YouTube search for query: '{query}'")
+            import urllib.parse
+            encoded_query = urllib.parse.quote_plus(query)
+            search_url = f"https://www.youtube.com/results?search_query={encoded_query}"
+            await page.goto(search_url, wait_until="domcontentloaded", timeout=15000)
+            
+            try:
+                # Defocus the URL bar by physically clicking the page's search box
+                await page.locator("input#search").click(force=True, timeout=3000)
+                await page.mouse.click(10, 100) # Safe click on the left margin
+                await page.keyboard.press("Control")
+            except Exception:
+                pass
+                
+            await asyncio.sleep(1.0)
             return f"Searched YouTube for '{query}'"
         return await _run_in_playwright(_do())
 

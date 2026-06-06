@@ -54,6 +54,8 @@ class VoicePipeline:
         )
         self._running = False
         self._loop: asyncio.AbstractEventLoop | None = None
+        self._last_spoken_text: str = ""
+        self._manually_stopped: bool = False
 
         # Init pygame mixer for audio playback
         pygame.mixer.init(frequency=22050, size=-16, channels=1, buffer=512)
@@ -137,6 +139,12 @@ class VoicePipeline:
         """Manually trigger listening (from UI button or hotkey)."""
         self._on_wake_word()
 
+    def stop_listening(self) -> None:
+        """Manually stop listening if currently in LISTENING state."""
+        if self._state == PipelineState.LISTENING:
+            self._manually_stopped = True
+            self._audio_capture.stop_recording_early()
+
     def deactivate(self) -> None:
         """Force the pipeline back to IDLE state."""
         self._audio_capture.stop()
@@ -152,6 +160,7 @@ class VoicePipeline:
             self._wake_word.stop()
 
             # 2. Listen
+            self._manually_stopped = False
             self._set_state(PipelineState.LISTENING)
             self._audio_capture.start()
             self._audio_capture.clear()
@@ -163,8 +172,11 @@ class VoicePipeline:
             # 3. Stop audio capture to free the mic
             self._audio_capture.stop()
 
-            if not audio_bytes:
-                logger.debug("No speech detected — returning to idle")
+            # If user manually stopped the mic OR no audio, return to idle
+            MIN_AUDIO_BYTES = 3200  # ~0.1s of audio @ 16kHz 16-bit
+            if self._manually_stopped or not audio_bytes or len(audio_bytes) < MIN_AUDIO_BYTES:
+                logger.debug("Mic stopped manually or no speech — returning to idle")
+                self._manually_stopped = False
                 self._set_state(PipelineState.IDLE)
                 self._wake_word.start()
                 return
@@ -211,6 +223,7 @@ class VoicePipeline:
 
     async def _speak(self, text: str) -> None:
         """Synthesize and play TTS response."""
+        self._last_spoken_text = text
         self._set_state(PipelineState.SPEAKING)
         try:
             provider = await get_tts_provider()
@@ -229,3 +242,46 @@ class VoicePipeline:
         sound.play()
         while pygame.mixer.get_busy():
             time.sleep(0.05)
+
+    def replay(self) -> None:
+        """Replay the last spoken text and emit it as a websocket event."""
+        if not self._last_spoken_text:
+            if self.on_transcript:
+                self.on_transcript("__replay_empty__", True)
+            return
+        if self._state != PipelineState.IDLE:
+            return
+        # Emit the replay text as a special transcript so overlay can display it
+        if self.on_transcript:
+            self.on_transcript(f"__replay__{self._last_spoken_text}", True)
+            
+        async def _do_replay():
+            await self._speak(self._last_spoken_text)
+            self._set_state(PipelineState.IDLE)
+            
+        if self._loop:
+            asyncio.run_coroutine_threadsafe(_do_replay(), self._loop)
+            
+    def speak_suggestion(self) -> None:
+        """Fetch a random context-aware suggestion and speak it."""
+        if self._state != PipelineState.IDLE:
+            return
+
+        async def _do_suggest():
+            from app.services.command_service import command_service
+            import random
+            suggs = command_service.get_suggestions(limit=5)
+            if suggs and suggs.get("suggestions"):
+                s = random.choice(suggs["suggestions"])
+                # Emit text so overlay can display it immediately
+                if self.on_transcript:
+                    self.on_transcript(f"__suggestion__{s}", True)
+                # Also speak it
+                await self._speak(f"You can try: {s}")
+            else:
+                if self.on_transcript:
+                    self.on_transcript("__suggestion__Try saying: Hey ACE, open Chrome", True)
+            self._set_state(PipelineState.IDLE)
+
+        if self._loop:
+            asyncio.run_coroutine_threadsafe(_do_suggest(), self._loop)

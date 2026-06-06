@@ -37,7 +37,7 @@ groq
 openai
 google-generativeai
 anthropic
-# ollama  # (Phase 2 — local models)
+ollama  # (Phase 2 — local models)
 
 # --- Utilities ---
 aiofiles
@@ -77,3 +77,5 @@ mss
 pytesseract
 schedule
 winsdk
+PyQt6
+qasync

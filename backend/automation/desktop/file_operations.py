@@ -8,6 +8,11 @@ from pathlib import Path
 
 class FileOperations:
     def _launch_and_focus_folder(self, path: str, title: str) -> None:
+        from automation.desktop.app_controller import AppController
+        app_ctrl = AppController()
+        if app_ctrl.navigate_file_dialog(path):
+            return  # Successfully navigated the active file dialog
+            
         subprocess.Popen(["explorer", path])
         from automation.desktop.window_manager import WindowManager
         WindowManager().force_focus_by_title(title)
@@ -122,7 +127,12 @@ class FileOperations:
         return f"Folder '{clean}' not found."
 
     def search_file(self, file_name: str) -> str:
-        """Search for a file using FileIndexer and open it."""
+        """Search for a file using FileIndexer and open it. Or type into an active File Dialog."""
+        from automation.desktop.app_controller import AppController
+        app_ctrl = AppController()
+        if app_ctrl.navigate_file_dialog(file_name):
+            return f"Selected file '{file_name}' in the active file dialog."
+            
         from automation.desktop.file_indexer import get_indexer
         import os
         from pathlib import Path
@@ -144,7 +154,7 @@ class FileOperations:
                 pass
 
         if not results:
-            return f"Could not find any file named {file_name}"
+            raise FileNotFoundError(f"Could not find any file named {file_name}")
             
         # 1. Check for an exact name match (e.g., if user specifically asked for "demo45.txt")
         exact_matches = [r for r in results if r["name"].lower() == file_name.lower()]

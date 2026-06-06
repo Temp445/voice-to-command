@@ -161,6 +161,38 @@ async def lifespan(app: FastAPI):
         logger.warning(f"⚠️  Could not restore LLM settings from DB: {e}")
 
 
+    # ── Initialize Desktop Overlay ───────────────────────────────────────────
+    try:
+        import subprocess
+        import sys
+        import os
+        from app.config import settings as global_settings
+        if global_settings.enable_desktop_overlay:
+            # Explicitly use the .venv Python executable to prevent worker processes from failing
+            venv_python = os.path.join(str(_ROOT), ".venv", "Scripts", "python.exe")
+            if os.path.exists(venv_python):
+                python_exe = venv_python
+            else:
+                python_exe = sys.executable
+
+            overlay_path = os.path.join(str(_ROOT), "backend", "automation", "desktop", "overlay.py")
+            if not os.path.exists(overlay_path):
+                # Fallback if _ROOT is somehow different
+                overlay_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "automation", "desktop", "overlay.py")
+                
+            if os.path.exists(overlay_path):
+                app.state.overlay_process = subprocess.Popen(
+                    [python_exe, overlay_path],
+                    creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+                )
+                logger.info(f"🖥️ Desktop Overlay started using {python_exe}")
+            else:
+                logger.error(f"❌ Desktop Overlay script not found at {overlay_path}!")
+        else:
+            logger.info("🖥️ Desktop Overlay is disabled in settings.")
+    except Exception as e:
+        logger.warning(f"⚠️ Failed to start Desktop Overlay: {e}")
+
     # Start the voice pipeline in the backend process
     try:
         from voice.pipeline import VoicePipeline, PipelineState
@@ -192,6 +224,25 @@ async def lifespan(app: FastAPI):
             asyncio.run_coroutine_threadsafe(
                 ws_manager.broadcast("command_executed", result), loop
             )
+            # Auto-suggest next commands if the command succeeded
+            if result.get("status") == "success":
+                try:
+                    from app.services.command_service import command_service
+                    import random
+                    suggs = command_service.get_suggestions(limit=4)
+                    items = suggs.get("suggestions", [])
+                    if items:
+                        # Format as: 'Try: "go to login" · "click sign up" · "scroll down"'
+                        quoted = [f'"{s}"' for s in items[:3]]
+                        hint = "Try: " + " · ".join(quoted)
+                        asyncio.run_coroutine_threadsafe(
+                            ws_manager.broadcast("transcript", {
+                                "text": f"__suggestion__{hint}",
+                                "is_final": True
+                            }), loop
+                        )
+                except Exception:
+                    pass
 
         pipeline = VoicePipeline(
             on_state_change=on_state_change,
@@ -217,6 +268,11 @@ async def lifespan(app: FastAPI):
         app.state.pipeline.stop()
     if getattr(app.state, "file_indexer", None):
         app.state.file_indexer.stop()
+    if getattr(app.state, "overlay_process", None):
+        try:
+            app.state.overlay_process.terminate()
+        except:
+            pass
 
 
 # ─── App ─────────────────────────────────────────────────────────────────────
@@ -249,6 +305,37 @@ app.include_router(settings_router.router, prefix="/api/settings", tags=["Settin
 app.include_router(llm_router.router,    prefix="/api/llm",        tags=["AI Assistant"])
 
 
+# ─── Test Endpoints (Dev only) ───────────────────────────────────────────────
+
+@app.get("/api/test/suggestion", tags=["Dev"])
+async def test_suggestion_broadcast():
+    """Broadcast a mock suggestion to all connected websocket clients (including overlay)."""
+    from app.services.command_service import command_service
+    import random
+    suggs = command_service.get_suggestions(limit=4)
+    items = suggs.get("suggestions", [])
+    if items:
+        quoted = [f'"{s}"' for s in items[:3]]
+        hint = "Try: " + " · ".join(quoted)
+    else:
+        hint = 'Try: "open chrome" · "close window" · "volume up"'
+    await ws_manager.broadcast("transcript", {
+        "text": f"__suggestion__{hint}",
+        "is_final": True
+    })
+    return {"status": "broadcast_sent", "suggestion": hint, "domain": suggs.get("domain")}
+
+@app.get("/api/test/replay", tags=["Dev"])
+async def test_replay_broadcast():
+    """Broadcast a mock replay to all connected websocket clients (including overlay)."""
+    text = "The CRM has been opened successfully. You can now navigate to the login page."
+    await ws_manager.broadcast("transcript", {
+        "text": f"__replay__{text}",
+        "is_final": True
+    })
+    return {"status": "broadcast_sent", "replay": text}
+
+
 # ─── WebSocket ───────────────────────────────────────────────────────────────
 
 @app.websocket("/ws")
@@ -270,6 +357,22 @@ async def websocket_endpoint(websocket: WebSocket):
                     data = json.loads(message["text"])
                     if data.get("type") == "ping":
                         await ws_manager.send_to(websocket, "pong", {})
+                    elif data.get("type") == "trigger_listen":
+                        logger.info("🔘 Overlay Command Received: Trigger Listen")
+                        if getattr(app.state, "pipeline", None):
+                            app.state.pipeline.trigger_listening()
+                    elif data.get("type") == "stop_listen":
+                        logger.info("🔘 Overlay Command Received: Stop Listen")
+                        if getattr(app.state, "pipeline", None):
+                            app.state.pipeline.stop_listening()
+                    elif data.get("type") == "replay":
+                        logger.info("🔘 Overlay Command Received: Replay")
+                        if getattr(app.state, "pipeline", None):
+                            app.state.pipeline.replay()
+                    elif data.get("type") == "suggestion":
+                        logger.info("🔘 Overlay Command Received: Suggestion")
+                        if getattr(app.state, "pipeline", None):
+                            app.state.pipeline.speak_suggestion()
                 except json.JSONDecodeError:
                     pass
     except (WebSocketDisconnect, RuntimeError) as e:
@@ -301,3 +404,4 @@ if __name__ == "__main__":
         reload=settings.debug,
         log_level=settings.log_level.lower(),
     )
+# Reload

@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, desc
+from sqlalchemy import select, desc, delete
 from loguru import logger
 
 from app.database import get_db
@@ -50,13 +50,32 @@ async def execute_command(request: Request, body: ExecuteCommandRequest, backgro
         "source": entry.source,
     })
 
+    # If successful, auto-broadcast suggestions for the overlay
+    if result.get("status") == "success":
+        try:
+            suggs = command_service.get_suggestions(limit=4)
+            items = suggs.get("suggestions", [])
+            if items:
+                quoted = [f'"{s}"' for s in items[:3]]
+                hint = "Try: " + " · ".join(quoted)
+                await ws_manager.broadcast("transcript", {
+                    "text": f"__suggestion__{hint}",
+                    "is_final": True
+                })
+        except Exception as e:
+            logger.warning(f"Failed to broadcast suggestions: {e}")
+
     # Speak the response using the TTS system (if triggered via text/console)
     if body.source == "text" and result.get("status") == "success" and result.get("result"):
         try:
             pipeline = request.app.state.pipeline
             # Run the speaking in background so we return the HTTP response immediately
             import asyncio
-            asyncio.create_task(pipeline._speak(result.get("result")))
+            async def _speak_and_reset():
+                from voice.pipeline import PipelineState
+                await pipeline._speak(result.get("result"))
+                pipeline._set_state(PipelineState.IDLE)
+            asyncio.create_task(_speak_and_reset())
         except Exception as e:
             logger.warning(f"Failed to play TTS for text command: {e}")
 
@@ -74,7 +93,30 @@ async def get_history(limit: int = 50, db: AsyncSession = Depends(get_db)):
     return result.scalars().all()
 
 
+@router.delete("/history/{history_id}")
+async def delete_history_item(history_id: str, db: AsyncSession = Depends(get_db)):
+    """Delete a single command history entry."""
+    result = await db.execute(delete(CommandHistory).where(CommandHistory.id == history_id))
+    await db.commit()
+    if result.rowcount == 0:
+        raise HTTPException(status_code=404, detail="History entry not found")
+    return {"status": "success", "message": "Deleted successfully"}
+
+
+@router.delete("/history")
+async def clear_history(db: AsyncSession = Depends(get_db)):
+    """Clear all command history."""
+    await db.execute(delete(CommandHistory))
+    await db.commit()
+    return {"status": "success", "message": "All history cleared"}
+
+
 @router.get("/intents")
 async def list_intents():
     """Return all registered command intents."""
     return command_service.list_intents()
+
+@router.get("/suggestions")
+async def get_suggestions(limit: int = 4):
+    """Return context-aware command suggestions."""
+    return command_service.get_suggestions(limit)

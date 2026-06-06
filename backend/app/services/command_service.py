@@ -26,6 +26,8 @@ class Intent:
     description: str
     examples: list[str] = field(default_factory=list)
     param_names: list[str] = field(default_factory=list)
+    domain: str = "global"
+    is_fallback: bool = False
 
     def __post_init__(self):
         self._compiled = [re.compile(p, re.IGNORECASE) for p in self.patterns]
@@ -49,6 +51,7 @@ class CommandService:
         self._intents: list[Intent] = []
         self._custom_shortcuts: dict[str, str] = {}  # phrase → action_type
         self.last_target_app: str = ""
+        self.current_domain: str = "desktop"
 
     def register(self, intent: Intent) -> None:
         self._intents.append(intent)
@@ -179,6 +182,7 @@ class CommandService:
             self._pending_action = None
         else:
             # 3. Native regex matching
+            llm_routed = False
             intent_name, params = self._regex_match(text)
 
             # 4. Pronoun detection: If any extracted parameter is exactly a pronoun, force LLM context resolution.
@@ -213,9 +217,16 @@ class CommandService:
                 if not intent_name:
                     try:
                         from automation.desktop.window_manager import WindowManager
+                        import psutil
                         active_win = WindowManager()._get_active_window()
                         active_title = active_win.window_text().lower()
-                        if any(b in active_title for b in ["chrome", "edge", "brave", "firefox"]):
+                        try:
+                            proc = psutil.Process(active_win.process_id())
+                            active_proc_name = proc.name().lower()
+                        except Exception:
+                            active_proc_name = ""
+                            
+                        if any(b in active_title for b in ["chrome", "edge", "brave", "firefox"]) or active_proc_name in ["chrome.exe", "msedge.exe", "brave.exe", "firefox.exe"]:
                             from automation.browser.browser_controller import VoiceBrowserCommands
                             browser_cmd = VoiceBrowserCommands()
                             browser_res = await browser_cmd.execute(text)
@@ -240,6 +251,8 @@ class CommandService:
                 llm_result = await llm_service.classify_intent(text, self.list_intents())
                 if llm_result:
                     intent_name = llm_result.get("intent")
+                    if intent_name:
+                        llm_routed = True
                     # Merge any parameters the LLM contextually extracted
                     params.update(llm_result.get("params", {}))
                 
@@ -295,7 +308,10 @@ class CommandService:
         from app.services.llm.llm_service import llm_service
         # Context is now added AFTER execution to ensure we pair it with the exact system result.
 
-        return await self._execute_intent(intent_name, params, text, start)
+        res_dict = await self._execute_intent(intent_name, params, text, start)
+        if locals().get("llm_routed", False):
+            res_dict["result"] = f"{res_dict.get('result', '')} [🤖 Routed by LLM]"
+        return res_dict
 
     async def _execute_intent(self, intent_name: str, params: dict, text: str, start: float) -> dict[str, Any]:
         # Execute handler
@@ -332,6 +348,9 @@ class CommandService:
                 llm_service.add_to_history("user", text)
                 llm_service.add_to_history("assistant", str(result))
                 
+            if intent.domain != "global":
+                self.current_domain = intent.domain
+                
             return {
                 "intent": intent_name,
                 "parameters": params,
@@ -340,6 +359,24 @@ class CommandService:
                 "duration_ms": duration_ms,
             }
         except Exception as e:
+            error_type = type(e).__name__
+            if error_type in ("AppNotFound", "AutomationError", "FileNotFoundError"):
+                logger.warning(f"OS-level handler '{intent_name}' failed with {error_type}. Falling back to Browser Agent.")
+                try:
+                    from automation.browser.browser_controller import VoiceBrowserCommands
+                    browser_cmd = VoiceBrowserCommands()
+                    browser_res = await browser_cmd.execute(text)
+                    if browser_res and not browser_res.startswith("Command not recognized"):
+                        return {
+                            "intent": "dynamic_browser_command_fallback",
+                            "parameters": {"text": text},
+                            "status": "success" if "Failed" not in browser_res else "failed",
+                            "result": browser_res,
+                            "duration_ms": int((time.perf_counter() - start) * 1000),
+                        }
+                except Exception as browser_e:
+                    logger.debug(f"Browser fallback also failed: {browser_e}")
+
             logger.error(f"Handler '{intent_name}' raised: {e}")
             return {
                 "intent": intent_name,
@@ -350,10 +387,48 @@ class CommandService:
             }
 
     def _regex_match(self, text: str) -> tuple[str | None, dict]:
+        # Priority 1: Specific intents matching the current continuity domain
         for intent in self._intents:
-            matched, params = intent.match(text)
-            if matched:
-                return intent.name, params
+            if not intent.is_fallback and intent.domain == self.current_domain:
+                matched, params = intent.match(text)
+                if matched:
+                    return intent.name, params
+                    
+        # Priority 2: Specific global intents
+        for intent in self._intents:
+            if not intent.is_fallback and intent.domain == "global":
+                matched, params = intent.match(text)
+                if matched:
+                    return intent.name, params
+                    
+        # Priority 3: Specific intents in other domains
+        for intent in self._intents:
+            if not intent.is_fallback and intent.domain not in (self.current_domain, "global"):
+                matched, params = intent.match(text)
+                if matched:
+                    return intent.name, params
+                    
+        # Priority 4: Fallback intents matching the current continuity domain
+        for intent in self._intents:
+            if intent.is_fallback and intent.domain == self.current_domain:
+                matched, params = intent.match(text)
+                if matched:
+                    return intent.name, params
+                    
+        # Priority 5: Fallback global intents
+        for intent in self._intents:
+            if intent.is_fallback and intent.domain == "global":
+                matched, params = intent.match(text)
+                if matched:
+                    return intent.name, params
+                    
+        # Priority 6: Fallback intents in other domains
+        for intent in self._intents:
+            if intent.is_fallback and intent.domain not in (self.current_domain, "global"):
+                matched, params = intent.match(text)
+                if matched:
+                    return intent.name, params
+                    
         return None, {}
 
     def _fuzzy_match(self, text: str, threshold: int = 85) -> tuple[str | None, dict]:
@@ -396,6 +471,41 @@ class CommandService:
             }
             for i in self._intents
         ]
+
+    def get_suggestions(self, limit: int = 4) -> dict:
+        """Return context-aware suggestions based on the current domain."""
+        import random
+        
+        domain_intents = [i for i in self._intents if i.domain == self.current_domain and not i.is_fallback and i.examples]
+        global_intents = [i for i in self._intents if i.domain == "global" and not i.is_fallback and i.examples]
+        
+        suggestions = []
+        
+        # Pick 1 global intent example if available
+        if global_intents and random.random() > 0.3:
+            global_choice = random.choice(global_intents)
+            suggestions.append(random.choice(global_choice.examples))
+            
+        # Fill the rest with domain-specific intents
+        remaining = limit - len(suggestions)
+        if domain_intents and remaining > 0:
+            # Shuffle domain intents to get variety
+            sampled_intents = random.sample(domain_intents, min(remaining, len(domain_intents)))
+            for intent in sampled_intents:
+                suggestions.append(random.choice(intent.examples))
+                
+        # If we still need more, fill with any examples from domain intents
+        if len(suggestions) < limit and domain_intents:
+            all_domain_examples = [ex for i in domain_intents for ex in i.examples]
+            needed = limit - len(suggestions)
+            suggestions.extend(random.sample(all_domain_examples, min(needed, len(all_domain_examples))))
+            
+        random.shuffle(suggestions)
+        
+        return {
+            "domain": self.current_domain,
+            "suggestions": suggestions[:limit]
+        }
 
 
 # Singleton

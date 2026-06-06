@@ -53,6 +53,8 @@ class Settings(BaseSettings):
 
     # --- Automation ---
     browser_type: str = "chromium"  # chromium | firefox | webkit
+    browser_animations_enabled: bool = True
+    enable_desktop_overlay: bool = True
 
     # --- Logging ---
     log_level: str = "INFO"

@@ -1714,5 +1714,47 @@
     "exe_name": "klsbsched.exe",
     "path": "C:\\Program Files\\KLS Soft\\KLS Backup 2025 Professional\\klsbsched.exe",
     "source": "process"
+  },
+  "onenoteim": {
+    "name": "onenoteim",
+    "exe_name": "onenoteim.exe",
+    "path": "C:\\Program Files\\WindowsApps\\Microsoft.Office.OneNote_16001.14326.21738.0_x64__8wekyb3d8bbwe\\onenoteim.exe",
+    "source": "process"
+  },
+  "sppsvc": {
+    "name": "sppsvc",
+    "exe_name": "sppsvc.exe",
+    "path": "C:\\Windows\\System32\\sppsvc.exe",
+    "source": "process"
+  },
+  "w3wp": {
+    "name": "w3wp",
+    "exe_name": "w3wp.exe",
+    "path": "C:\\Windows\\System32\\inetsrv\\w3wp.exe",
+    "source": "process"
+  },
+  "devicecensus": {
+    "name": "DeviceCensus",
+    "exe_name": "DeviceCensus.exe",
+    "path": "C:\\Windows\\System32\\DeviceCensus.exe",
+    "source": "process"
+  },
+  "plugscheduler": {
+    "name": "PLUGScheduler",
+    "exe_name": "PLUGScheduler.exe",
+    "path": "C:\\Program Files\\RUXIM\\PLUGScheduler.exe",
+    "source": "process"
+  },
+  "gamebar": {
+    "name": "GameBar",
+    "exe_name": "GameBar.exe",
+    "path": "C:\\Program Files\\WindowsApps\\Microsoft.XboxGamingOverlay_6.123.11012.0_x64__8wekyb3d8bbwe\\GameBar.exe",
+    "source": "process"
+  },
+  "gamebarftserver": {
+    "name": "GameBarFTServer",
+    "exe_name": "GameBarFTServer.exe",
+    "path": "C:\\Program Files\\WindowsApps\\Microsoft.XboxGamingOverlay_6.123.11012.0_x64__8wekyb3d8bbwe\\GameBarFTServer.exe",
+    "source": "process"
   }
 }

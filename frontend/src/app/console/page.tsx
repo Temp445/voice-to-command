@@ -8,12 +8,14 @@ import { TopBar } from "@/components/layout/TopBar";
 import { useVoice } from "@/hooks/useVoice";
 import { useCommandStore, CommandEntry } from "@/store/commandStore";
 import { useWebSocket } from "@/hooks/useWebSocket";
+import { useSuggestions } from "@/hooks/useSuggestions";
 import { format } from "date-fns";
 
 export default function ConsolePage() {
   const [input, setInput] = useState("");
   const { executeText } = useVoice();
   const { history, clear } = useCommandStore();
+  const { suggestions, domain } = useSuggestions(4);
   const endRef = useRef<HTMLDivElement>(null);
   useWebSocket();
 
@@ -77,19 +79,46 @@ export default function ConsolePage() {
               <div ref={endRef} />
             </div>
 
-            {/* Input */}
-            <form onSubmit={handleSubmit} style={{ borderTop: "1px solid var(--border)", padding: "0.875rem 1rem", display: "flex", gap: "0.75rem", alignItems: "center", flexShrink: 0 }}>
-              <span style={{ color: "var(--foreground)", fontWeight: 700, fontFamily: "var(--font-mono)", fontSize: "1rem", flexShrink: 0 }}>❯</span>
-              <input value={input} onChange={(e) => setInput(e.target.value)}
-                placeholder="Type a command… (e.g. open notepad)"
-                style={{ flex: 1, background: "transparent", border: "none", outline: "none", color: "var(--foreground)", fontFamily: "var(--font-mono)", fontSize: "0.875rem" }}
-                autoFocus
-              />
-              <button type="submit" disabled={!input.trim()}
-                style={{ display: "flex", alignItems: "center", gap: "0.375rem", padding: "0.5rem 1rem", borderRadius: "0.5rem", border: "1px solid var(--ring)", background: input.trim() ? "var(--primary)" : "var(--secondary)", color: input.trim() ? "var(--primary-foreground)" : "var(--muted-foreground)", fontSize: "0.8125rem", fontWeight: 600, cursor: input.trim() ? "pointer" : "not-allowed", opacity: input.trim() ? 1 : 0.5, transition: "all 0.15s" }}>
-                <Send style={{ width: "0.875rem", height: "0.875rem" }} /> Run
-              </button>
-            </form>
+            {/* Input Area */}
+            <div style={{ display: "flex", flexDirection: "column", borderTop: "1px solid var(--border)", padding: "0.75rem 1rem", gap: "0.5rem", flexShrink: 0 }}>
+              {/* Suggestions */}
+              {suggestions && suggestions.length > 0 && (
+                <div style={{ display: "flex", gap: "0.5rem", overflowX: "auto", paddingBottom: "0.25rem", msOverflowStyle: "none", scrollbarWidth: "none" }}>
+                  <span style={{ fontSize: "0.7rem", color: "var(--muted-foreground)", textTransform: "uppercase", letterSpacing: "0.05em", display: "flex", alignItems: "center", marginRight: "0.25rem" }}>
+                    {domain}
+                  </span>
+                  <AnimatePresence>
+                    {suggestions.map((s, i) => (
+                      <motion.button
+                        key={s + i}
+                        initial={{ opacity: 0, scale: 0.9 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.9 }}
+                        onClick={() => setInput(s)}
+                        style={{ whiteSpace: "nowrap", padding: "0.25rem 0.625rem", borderRadius: "9999px", background: "var(--secondary)", border: "1px solid var(--border)", color: "var(--foreground)", fontSize: "0.75rem", cursor: "pointer", transition: "all 0.15s" }}
+                        onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.borderColor = "var(--ring)"; }}
+                        onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.borderColor = "var(--border)"; }}
+                      >
+                        {s}
+                      </motion.button>
+                    ))}
+                  </AnimatePresence>
+                </div>
+              )}
+
+              <form onSubmit={handleSubmit} style={{ display: "flex", gap: "0.75rem", alignItems: "center" }}>
+                <span style={{ color: "var(--foreground)", fontWeight: 700, fontFamily: "var(--font-mono)", fontSize: "1rem", flexShrink: 0 }}>❯</span>
+                <input value={input} onChange={(e) => setInput(e.target.value)}
+                  placeholder="Type a command… (e.g. open notepad)"
+                  style={{ flex: 1, background: "transparent", border: "none", outline: "none", color: "var(--foreground)", fontFamily: "var(--font-mono)", fontSize: "0.875rem" }}
+                  autoFocus
+                />
+                <button type="submit" disabled={!input.trim()}
+                  style={{ display: "flex", alignItems: "center", gap: "0.375rem", padding: "0.5rem 1rem", borderRadius: "0.5rem", border: "1px solid var(--ring)", background: input.trim() ? "var(--primary)" : "var(--secondary)", color: input.trim() ? "var(--primary-foreground)" : "var(--muted-foreground)", fontSize: "0.8125rem", fontWeight: 600, cursor: input.trim() ? "pointer" : "not-allowed", opacity: input.trim() ? 1 : 0.5, transition: "all 0.15s" }}>
+                  <Send style={{ width: "0.875rem", height: "0.875rem" }} /> Run
+                </button>
+              </form>
+            </div>
           </div>
         </main>
       </div>

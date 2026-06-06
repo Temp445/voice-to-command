@@ -86,6 +86,8 @@ class UserSettings(Base):
     browser_type: Mapped[str] = mapped_column(String(20), default="chromium")
     startup_on_boot: Mapped[bool] = mapped_column(Boolean, default=True)
     minimize_to_tray: Mapped[bool] = mapped_column(Boolean, default=True)
+    browser_animations_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    enable_desktop_overlay: Mapped[bool] = mapped_column(Boolean, default=True)
 
     # LLM / AI Assistant
     llm_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
