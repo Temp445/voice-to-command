@@ -162,6 +162,10 @@ async def handle_browser_click_result(index: str = "first", **_) -> str:
     idx = mapping.get(index.lower().strip(), 0)
     return await BrowserController().click_search_result(idx)
 
+async def handle_browser_new_tab(**_) -> str:
+    from automation.browser.browser_controller import BrowserController
+    return await BrowserController().new_tab()
+
 async def handle_browser_switch_last_tab(**_) -> str:
     from automation.browser.browser_controller import BrowserController
     return await BrowserController().switch_to_last_tab()
@@ -1026,6 +1030,7 @@ async def handle_vscode_terminal(**_) -> str:
 
 def register_all_intents() -> None:
     """Registers all built-in commands with the CommandService."""
+    from app.config import settings
     command_service._intents.clear()
     
     intents = [
@@ -1197,6 +1202,18 @@ def register_all_intents() -> None:
             description="Create a new software project (like React, Next.js) on the Desktop",
             examples=["create a new react project", "create a next project called my website"],
             param_names=["project_type", "project_name"],
+        ),
+        Intent(
+            name="browser_new_tab",
+            domain="browser",
+            patterns=[
+                r"(?:open|create|make)\s+(?:a\s+)?(?:new|another)\s+tab",
+                r"new\s+tab",
+                r"another\s+tab"
+            ],
+            handler=handle_browser_new_tab,
+            description="Open a new browser tab",
+            examples=["open a new tab", "create a new tab", "new tab", "create another tab"]
         ),
         Intent(
             name="browser_switch_last_tab",
@@ -1735,6 +1752,17 @@ def register_all_intents() -> None:
             description="Press Ctrl+S or Enter to save",
             examples=["save", "save file", "save the changes", "save the notepad"],
             param_names=["app_name"],
+        ),
+        Intent(
+            name="greeting",
+            patterns=[
+                rf"^(?P<question>(?:hello|hi|hey|greetings)(?:\s+(?:{settings.wake_word}|ace|assistant|ai|there))?)$",
+                rf"^(?P<question>{settings.wake_word}|hey\s+{settings.wake_word}|ace|assistant|ai)$"
+            ],
+            handler=handle_ask_llm,
+            description="Respond to simple greetings conversationally",
+            examples=["hello", "hi ace", "hey"],
+            param_names=["question"],
         ),
         Intent(
             name="cancel_dialog",

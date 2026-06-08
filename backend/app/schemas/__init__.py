@@ -43,6 +43,8 @@ class SettingsUpdate(BaseModel):
     minimize_to_tray: bool | None = None
     browser_animations_enabled: bool | None = None
     enable_desktop_overlay: bool | None = None
+    crm_url: str | None = None
+    crm_keywords: str | None = None
     # LLM
     llm_enabled: bool | None = None
     llm_provider: str | None = None
@@ -66,6 +68,8 @@ class SettingsResponse(BaseModel):
     browser_animations_enabled: bool
     enable_desktop_overlay: bool
     gtts_configured: bool   # True if API key is set
+    crm_url: str
+    crm_keywords: str
     # LLM
     llm_enabled: bool
     llm_provider: str

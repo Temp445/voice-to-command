@@ -41,6 +41,8 @@ def _build_response(s: UserSettings) -> SettingsResponse:
         browser_animations_enabled=s.browser_animations_enabled,
         enable_desktop_overlay=s.enable_desktop_overlay,
         gtts_configured=bool(s.gtts_api_key_encrypted),
+        crm_url=s.crm_url,
+        crm_keywords=s.crm_keywords,
         # LLM
         llm_enabled=s.llm_enabled,
         llm_provider=s.llm_provider,

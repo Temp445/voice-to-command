@@ -89,6 +89,10 @@ class UserSettings(Base):
     browser_animations_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     enable_desktop_overlay: Mapped[bool] = mapped_column(Boolean, default=True)
 
+    # CRM Integration
+    crm_url: Mapped[str] = mapped_column(String(500), default="https://crm.acesoftcloud.in/")
+    crm_keywords: Mapped[str] = mapped_column(String(500), default="open my crm, open crm, open ace crm")
+
     # LLM / AI Assistant
     llm_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     llm_provider: Mapped[str] = mapped_column(String(30), default="groq")

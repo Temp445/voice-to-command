@@ -6,9 +6,17 @@ Checks prerequisites, creates .env, downloads voice models, initialises DB.
 import subprocess
 import sys
 import shutil
+import os
+import venv
 from pathlib import Path
 
 ROOT = Path(__file__).parent.parent
+VENV_DIR = ROOT / "backend" / "venv"
+
+def get_venv_python() -> str:
+    if os.name == 'nt':
+        return str(VENV_DIR / "Scripts" / "python.exe")
+    return str(VENV_DIR / "bin" / "python")
 
 
 def check(name: str, cmd: str) -> bool:
@@ -21,7 +29,7 @@ def check(name: str, cmd: str) -> bool:
 def pip_install(*packages, requirements: str | None = None) -> int:
     """Run pip install with trusted-host flags to bypass SSL cert issues."""
     cmd = [
-        sys.executable, "-m", "pip", "install",
+        get_venv_python(), "-m", "pip", "install",
         "--trusted-host", "pypi.org",
         "--trusted-host", "pypi.python.org",
         "--trusted-host", "files.pythonhosted.org",
@@ -37,7 +45,17 @@ def main():
     print("\n🚀 ACE Voice Controller — Setup Wizard\n" + "=" * 45)
 
     print("\n📋 Checking prerequisites...")
-    python_ok = check("Python 3.11+", "python")
+    python_ok = check("Python (executable)", "python")
+    
+    # Strict Python Version Check
+    major, minor = sys.version_info[:2]
+    if major != 3 or minor < 11 or minor >= 13:
+        print(f"\n❌ Incompatible Python version detected: {major}.{minor}")
+        print("   ACE Voice Controller requires Python 3.11 or 3.12.")
+        print("   Newer versions (3.13, 3.14+) may break dependencies like Playwright.")
+        sys.exit(1)
+    else:
+        print(f"  ✅ Python version: {major}.{minor} (Supported)")
     node_ok    = check("Node.js", "node")
     npm_ok     = check("npm", "npm")
     rust_ok    = check("Rust (rustup)", "rustup")
@@ -50,6 +68,13 @@ def main():
         print("\n  ℹ️  Rust NOT required to run the backend + voice pipeline.")
         print("     Install Rust later from https://rustup.rs only if you want")
         print("     to package the app as a .exe (Tauri desktop build).")
+
+    print("\n📦 Setting up virtual environment...")
+    if not VENV_DIR.exists():
+        print(f"  Creating venv at {VENV_DIR}...")
+        venv.create(VENV_DIR, with_pip=True)
+    else:
+        print("  ℹ️  venv already exists")
 
     print("\n📁 Creating .env file from template...")
     env_template = ROOT / ".env.example"
@@ -69,18 +94,18 @@ def main():
             pip_install(pkg)
 
     print("\n📥 Downloading Piper TTS voice model...")
-    subprocess.run([sys.executable, str(ROOT / "scripts" / "download_models.py")])
+    subprocess.run([get_venv_python(), str(ROOT / "scripts" / "download_models.py")])
 
     print("\n🎭 Setting up Playwright...")
     pw_check = subprocess.run(
-        [sys.executable, "-c", "import playwright"],
+        [get_venv_python(), "-c", "import playwright"],
         capture_output=True,
     )
     if pw_check.returncode != 0:
         print("  ⚙️  playwright not yet installed — installing now...")
         pip_install("playwright==1.44.0")
 
-    pw_result = subprocess.run([sys.executable, "-m", "playwright", "install", "chromium"])
+    pw_result = subprocess.run([get_venv_python(), "-m", "playwright", "install", "chromium"])
     if pw_result.returncode == 0:
         print("  ✅ Playwright Chromium installed")
     else:

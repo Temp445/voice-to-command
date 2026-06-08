@@ -45,6 +45,7 @@ Run `database/supabase_schema.sql` in your Supabase SQL editor.
 
 ```bash
 cd backend
+.\venv\Scripts\Activate
 python -m app.main
 # → FastAPI running at http://127.0.0.1:8000
 # → API docs at http://127.0.0.1:8000/api/docs

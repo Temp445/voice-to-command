@@ -1756,5 +1756,47 @@
     "exe_name": "GameBarFTServer.exe",
     "path": "C:\\Program Files\\WindowsApps\\Microsoft.XboxGamingOverlay_6.123.11012.0_x64__8wekyb3d8bbwe\\GameBarFTServer.exe",
     "source": "process"
+  },
+  "cargo": {
+    "name": "cargo",
+    "exe_name": "cargo.exe",
+    "path": "C:\\Users\\Nivin\\.rustup\\toolchains\\stable-x86_64-pc-windows-msvc\\bin\\cargo.exe",
+    "source": "process"
+  },
+  "rustc": {
+    "name": "rustc",
+    "exe_name": "rustc.exe",
+    "path": "C:\\Users\\Nivin\\.rustup\\toolchains\\stable-x86_64-pc-windows-msvc\\bin\\rustc.exe",
+    "source": "process"
+  },
+  "rustup": {
+    "name": "rustup",
+    "exe_name": "rustup.exe",
+    "path": "C:\\Users\\Nivin\\.cargo\\bin\\rustup.exe",
+    "source": "process"
+  },
+  "msedgewebview2": {
+    "name": "msedgewebview2",
+    "exe_name": "msedgewebview2.exe",
+    "path": "C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\148.0.3967.96\\msedgewebview2.exe",
+    "source": "process"
+  },
+  "ace voice controller": {
+    "name": "ACE Voice Controller",
+    "exe_name": "ACE Voice Controller.exe",
+    "path": "E:\\Nivin_Sync\\ACE\\Voice\\Voice_Controller_v1\\frontend\\src-tauri\\target\\debug\\ACE Voice Controller.exe",
+    "source": "process"
+  },
+  "nightly private browsing": {
+    "name": "Nightly Private Browsing",
+    "exe_name": "private_browsing.exe",
+    "path": "C:\\Users\\Nivin\\AppData\\Local\\ms-playwright\\firefox-1522\\firefox\\private_browsing.exe",
+    "source": "start_menu"
+  },
+  "comppkgsrv": {
+    "name": "CompPkgSrv",
+    "exe_name": "CompPkgSrv.exe",
+    "path": "C:\\Windows\\System32\\CompPkgSrv.exe",
+    "source": "process"
   }
 }

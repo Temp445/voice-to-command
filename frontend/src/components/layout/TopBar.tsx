@@ -18,9 +18,10 @@ export function TopBar() {
   const badge = STATE_BADGE[pipelineState] || STATE_BADGE.idle;
 
   return (
-    <header style={{
-      height: "3.5rem", display: "flex", alignItems: "center", padding: "0 1.5rem", gap: "1rem",
+    <header data-tauri-drag-region style={{
+      height: "4rem", display: "flex", alignItems: "center", padding: "0 1.5rem", gap: "1rem",
       borderBottom: "1px solid var(--border)", background: "var(--background)", flexShrink: 0,
+      userSelect: "none"
     }}>
       {/* Search */}
       <div style={{ flex: 1, maxWidth: "28rem", position: "relative" }}>

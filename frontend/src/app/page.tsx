@@ -16,15 +16,15 @@ export default function DashboardPage() {
       <Sidebar />
       <div style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }}>
         <TopBar />
-        <main style={{ flex: 1, overflowY: "auto", padding: "1.75rem" }}>
-          <div style={{ maxWidth: "1280px", margin: "0 auto", display: "flex", flexDirection: "column", gap: "1.5rem" }}>
+        <main style={{ flex: 1, overflowY: "auto", padding: "2.5rem 3.5rem" }}>
+          <div style={{ maxWidth: "1280px", margin: "0 auto", display: "flex", flexDirection: "column", gap: "2rem" }}>
 
             {/* Header */}
             <div>
-              <h1 style={{ fontSize: "1.875rem", fontWeight: 800, color: "var(--foreground)", letterSpacing: "-0.02em" }}>
+              <h1 style={{ fontSize: "2.25rem", fontWeight: 800, color: "var(--foreground)", letterSpacing: "-0.02em" }}>
                 ACE Dashboard
               </h1>
-              <p style={{ color: "var(--muted-foreground)", marginTop: "0.25rem", fontSize: "0.875rem" }}>
+              <p style={{ color: "var(--muted-foreground)", marginTop: "0.375rem", fontSize: "0.9375rem" }}>
                 Your AI-powered desktop assistant — always listening, always ready.
               </p>
             </div>
@@ -33,7 +33,7 @@ export default function DashboardPage() {
             <StatusBar />
 
             {/* 2-column grid */}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: "1.25rem" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: "1.5rem" }}>
               <VoicePanel />
               <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
                 <QuickActions />

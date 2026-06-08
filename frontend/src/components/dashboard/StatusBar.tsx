@@ -30,9 +30,9 @@ export function StatusBar() {
   };
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex justify-between items-center">
-        <h3 style={{ fontSize: "0.9rem", fontWeight: 600, color: "var(--foreground)" }}>System Status</h3>
+    <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: "1rem", padding: "1.5rem", display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <h3 style={{ fontSize: "0.8125rem", fontWeight: 600, color: "var(--foreground)", textTransform: "uppercase", letterSpacing: "0.06em" }}>System Status</h3>
         <button 
           onClick={toggleRecording}
           style={{
@@ -54,15 +54,15 @@ export function StatusBar() {
         </button>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "1rem" }}>
         {STATS.map(({ key, icon: Icon, label, color }) => (
-          <div key={key} className="stat-card">
-            <div className="stat-card-icon">
-              <Icon style={{ width: "1rem", height: "1rem", color }} />
+          <div key={key} style={{ background: "var(--secondary)", border: "1px solid var(--border)", borderRadius: "0.75rem", padding: "1.25rem", display: "flex", alignItems: "center", gap: "1rem" }}>
+            <div style={{ width: "2.5rem", height: "2.5rem", borderRadius: "0.5rem", background: "var(--background)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+              <Icon style={{ width: "1.25rem", height: "1.25rem", color }} />
             </div>
             <div style={{ minWidth: 0 }}>
-              <p style={{ fontSize: "0.7rem", color: "var(--muted-foreground)", textTransform: "uppercase", letterSpacing: "0.06em" }}>{label}</p>
-              <p style={{ fontSize: "0.875rem", fontWeight: 600, color, textTransform: "capitalize", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              <p style={{ fontSize: "0.6875rem", color: "var(--muted-foreground)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "0.125rem" }}>{label}</p>
+              <p style={{ fontSize: "0.9375rem", fontWeight: 600, color, textTransform: "capitalize", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                 {values[key]}
               </p>
             </div>

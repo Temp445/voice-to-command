@@ -12,6 +12,7 @@ import random
 from pathlib import Path
 from loguru import logger
 from playwright.async_api import async_playwright, BrowserContext, Page
+from app.config import settings
 
 # Dedicated Playwright event loop for thread safety with FastAPI
 _playwright_loop = None
@@ -68,32 +69,48 @@ class BrowserEngine:
                 profile_path = self._get_profile_path()
                 os.makedirs(profile_path, exist_ok=True)
 
-                logger.info(f"Launching Browser in isolated profile: {profile_path}")
+                logger.info(f"Launching Browser ({settings.browser_type}) in isolated profile: {profile_path}")
                 try:
-                    self._context = await self._playwright.chromium.launch_persistent_context(
-                        user_data_dir=profile_path,
-                        channel="chrome",  # Use system Chrome to avoid Chromium fingerprint
-                        headless=False,
-                        no_viewport=True,
-                        args=[
-                            "--start-maximized",
-                            "--disable-blink-features=AutomationControlled",
-                            "--no-first-run",
-                            "--no-default-browser-check",
-                            "--test-type"
-                        ],
-                        ignore_default_args=["--enable-automation"]
-                    )
+                    b_type = settings.browser_type.lower()
+                    
+                    if b_type == "firefox":
+                        self._context = await self._playwright.firefox.launch_persistent_context(
+                            user_data_dir=profile_path,
+                            headless=False,
+                            no_viewport=True,
+                        )
+                    elif b_type == "webkit":
+                        self._context = await self._playwright.webkit.launch_persistent_context(
+                            user_data_dir=profile_path,
+                            headless=False,
+                            no_viewport=True,
+                        )
+                    else:
+                        self._context = await self._playwright.chromium.launch_persistent_context(
+                            user_data_dir=profile_path,
+                            channel="chrome",  # Use system Chrome to avoid Chromium fingerprint
+                            headless=False,
+                            no_viewport=True,
+                            args=[
+                                "--start-maximized",
+                                "--disable-blink-features=AutomationControlled",
+                                "--no-first-run",
+                                "--no-default-browser-check",
+                                "--test-type"
+                            ],
+                            ignore_default_args=["--enable-automation"]
+                        )
                     
                     try:
-                        try:
-                            from playwright_stealth import stealth_async
-                            await stealth_async(self._context)
-                        except ImportError:
-                            from playwright_stealth import Stealth
-                            await Stealth().apply_stealth_async(self._context)
-                    except ImportError:
-                        logger.warning("playwright-stealth not installed, bot detection risk higher.")
+                        if b_type not in ["firefox", "webkit"]:
+                            try:
+                                from playwright_stealth import stealth_async
+                                await stealth_async(self._context)
+                            except ImportError:
+                                from playwright_stealth import Stealth
+                                await Stealth().apply_stealth_async(self._context)
+                    except Exception as e:
+                        logger.warning(f"Stealth could not be applied: {e}")
 
                     pages = self._context.pages
                     self._page = pages[0] if pages else await self._context.new_page()
@@ -139,7 +156,15 @@ class BrowserEngine:
         async def _do_nav():
             page = await self.ensure_browser()
             target = f"https://{url}" if not url.startswith(("http://", "https://")) else url
-            await page.goto(target, wait_until="commit", timeout=15000)
+            from playwright.async_api import TimeoutError as PlaywrightTimeoutError
+            try:
+                await page.goto(target, wait_until="domcontentloaded", timeout=30000)
+            except PlaywrightTimeoutError:
+                logger.warning(f"Timeout navigating to {target}, retrying...")
+                try:
+                    await page.reload(timeout=30000)
+                except PlaywrightTimeoutError:
+                    return f"Failed to fully load {target} due to network timeout."
             return f"Navigated to {target}"
         return await _run_in_playwright(_do_nav())
 

@@ -340,7 +340,7 @@ Reply ONLY with a comma-separated list of integer IDs (e.g., '45' or '26, 27'). 
                 element_ids = element_ids[:1]
                 
         if not element_ids:
-            return f"I couldn't find the correct element for: {intent}"
+            return f"I couldn't find '{intent}'."
             
         results = []
         for i, element_id in enumerate(element_ids):
@@ -543,7 +543,20 @@ Reply ONLY with a comma-separated list of integer IDs (e.g., '45' or '26, 27'). 
                 logger.error(f"Failed to execute {current_action} on element {element_id}: {e}")
                 results.append(f"Action failed for element {element_id}: {e}")
                 
-        return " and ".join(results)
+        raw_result = " and ".join(results)
+        if not raw_result:
+            return "Action completed."
+            
+        if "Action failed" in raw_result:
+            return raw_result
+            
+        try:
+            prompt = f"User command: '{intent}'. System result: '{raw_result}'. Rewrite this into a very short, conversational confirmation as a helpful voice assistant (e.g. 'I've signed you in', 'I clicked the button for you', 'I typed John into the name field'). Keep it under 1 short sentence."
+            friendly_result = await llm_service.chat(prompt)
+            return friendly_result.strip()
+        except Exception as e:
+            logger.error(f"Failed to generate friendly response: {e}")
+            return raw_result
 
     async def highlight_specific_element(self, intent: str) -> str:
         element_ids = await self.find_element_for_intent(intent, "highlight")

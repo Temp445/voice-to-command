@@ -69,6 +69,7 @@ export default function SettingsPage() {
         whisperModel: data.whisper_model, ttsProvider: data.tts_provider, piperVoice: data.piper_voice,
         browserType: data.browser_type, startupOnBoot: data.startup_on_boot, minimizeToTray: data.minimize_to_tray,
         theme: data.theme, browserAnimationsEnabled: data.browser_animations_enabled, enableDesktopOverlay: data.enable_desktop_overlay,
+        crmUrl: data.crm_url, crmKeywords: data.crm_keywords,
         llmEnabled: data.llm_enabled, llmProvider: data.llm_provider, llmModel: data.llm_model,
         llmMode: data.llm_mode, llmTemperature: data.llm_temperature,
       });
@@ -86,6 +87,7 @@ export default function SettingsPage() {
     settings.wakeWord, settings.sttProvider, settings.sttNoiseCancellation, settings.whisperModel,
     settings.ttsProvider, settings.piperVoice, settings.theme, settings.browserType,
     settings.startupOnBoot, settings.minimizeToTray, settings.browserAnimationsEnabled, settings.enableDesktopOverlay,
+    settings.crmUrl, settings.crmKeywords,
     settings.llmEnabled, settings.llmProvider, settings.llmModel, settings.llmMode,
     settings.llmTemperature, settings.llmApiKey
   ]);
@@ -125,6 +127,7 @@ export default function SettingsPage() {
         whisper_model: settings.whisperModel, tts_provider: settings.ttsProvider, piper_voice: settings.piperVoice,
         browser_type: settings.browserType, startup_on_boot: settings.startupOnBoot, minimize_to_tray: settings.minimizeToTray,
         theme: settings.theme, browser_animations_enabled: settings.browserAnimationsEnabled, enable_desktop_overlay: settings.enableDesktopOverlay,
+        crm_url: settings.crmUrl, crm_keywords: settings.crmKeywords,
         llm_enabled: settings.llmEnabled, llm_provider: settings.llmProvider, llm_model: settings.llmModel,
         llm_mode: settings.llmMode, llm_temperature: settings.llmTemperature,
       };
@@ -382,6 +385,22 @@ export default function SettingsPage() {
                 </div>
                 <Toggle checked={settings.browserAnimationsEnabled} onChange={() => settings.update({ browserAnimationsEnabled: !settings.browserAnimationsEnabled })} />
               </div>
+
+              <div style={{ marginTop: "1rem", paddingTop: "1.5rem", borderTop: "1px solid var(--border)" }}>
+                <p style={{ fontSize: "1rem", fontWeight: 600, color: "var(--foreground)", marginBottom: "1rem" }}>CRM Integration</p>
+                <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+                  <div>
+                    <p style={lbl}>CRM Base URL</p>
+                    <input style={inp} value={settings.crmUrl} onChange={(e) => settings.update({ crmUrl: e.target.value })} placeholder="https://crm.acesoftcloud.in/" />
+                    <p style={sub}>The landing page or base URL of your CRM system.</p>
+                  </div>
+                  <div>
+                    <p style={lbl}>Trigger Keywords (comma separated)</p>
+                    <input style={inp} value={settings.crmKeywords} onChange={(e) => settings.update({ crmKeywords: e.target.value })} placeholder="open crm, open my crm" />
+                    <p style={sub}>Voice phrases that will trigger the browser to navigate to your CRM.</p>
+                  </div>
+                </div>
+              </div>
             </div>
           </section>
         );
@@ -437,7 +456,7 @@ export default function SettingsPage() {
         <TopBar />
         <main style={{ flex: 1, overflowY: "auto", padding: "2.5rem" }}>
           
-          <div style={{ maxWidth: "1000px", margin: "0 auto", display: "flex", gap: "3rem", position: "relative" }}>
+          <div style={{ width: "100%", display: "flex", gap: "4rem", position: "relative" }}>
             
             {/* Left Navigation Sidebar */}
             <nav style={{ width: "240px", flexShrink: 0, position: "sticky", top: 0, display: "flex", flexDirection: "column", gap: "0.375rem" }}>

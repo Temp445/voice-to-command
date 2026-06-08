@@ -247,8 +247,13 @@ class VoiceBrowserCommands:
         
         # --- CRM Workflows ---
         if self.crm:
-            if "open my crm" in transcript or "open crm" in transcript or "open ace crm" in transcript:
-                return await self.crm.open_crm()
+            from app.config import settings
+            crm_keys = [k.strip().lower() for k in settings.crm_keywords.split(",")]
+            if not any(crm_keys):
+                crm_keys = ["open my crm", "open crm", "open ace crm"]
+
+            if any(key in transcript for key in crm_keys if key):
+                return await self.crm.open_crm(transcript)
             if "log in" in transcript or "login" in transcript:
                 return await self.crm.login()
             

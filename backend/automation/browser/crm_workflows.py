@@ -10,12 +10,23 @@ class CRMMacros:
         Expects a BrowserEngine instance from the BrowserController.
         """
         self.engine = engine
-        self.base_url = "https://crm.acesoftcloud.in/"
+        from app.config import settings
+        self.base_url = settings.crm_url if settings.crm_url.endswith('/') else settings.crm_url + '/'
 
-    async def open_crm(self):
+    async def open_crm(self, transcript: str = None):
         """Navigates to the CRM homepage."""
         logger.info("Opening CRM...")
-        return await self.engine.navigate(self.base_url)
+        await self.engine.navigate(self.base_url)
+        
+        if not transcript:
+            return "Opened CRM."
+            
+        words = transcript.strip().split()
+        verb = words[0].lower()
+        if verb in ['open', 'launch', 'start', 'show']:
+            past_tense = verb + 'ed' if verb not in ['show', 'launch'] else ('shown' if verb == 'show' else 'launched')
+            return f"{past_tense.capitalize()} {' '.join(words[1:]) if len(words) > 1 else 'CRM'}"
+        return f"Opened {transcript}"
 
     async def login(self, username: str = None, password: str = None):
         """Automates the CRM login flow with robust error handling and fallbacks."""

@@ -16,6 +16,10 @@ interface SettingsStore {
   browserAnimationsEnabled: boolean;
   enableDesktopOverlay: boolean;
   
+  // CRM Integration
+  crmUrl: string;
+  crmKeywords: string;
+
   // LLM
   llmEnabled: boolean;
   llmProvider: string;
@@ -26,6 +30,13 @@ interface SettingsStore {
 
   setTtsProvider: (p: "piper" | "gtts") => void;
   update: (patch: Partial<SettingsStore>) => void;
+}
+
+/** Push the persisted minimizeToTray value to the Rust backend on startup */
+export function syncTrayStateOnBoot(minimizeToTray: boolean) {
+  import("@tauri-apps/api").then(({ invoke }) => {
+    invoke("sync_minimize_to_tray", { value: minimizeToTray }).catch(console.error);
+  }).catch(() => {/* not in Tauri context (web dev) */});
 }
 
 export const useSettingsStore = create<SettingsStore>()(
@@ -44,6 +55,10 @@ export const useSettingsStore = create<SettingsStore>()(
       browserAnimationsEnabled: true,
       enableDesktopOverlay: true,
 
+      // CRM Defaults
+      crmUrl:         "https://crm.acesoftcloud.in/",
+      crmKeywords:    "open my crm, open crm, open ace crm",
+
       // LLM Defaults
       llmEnabled:     true,
       llmProvider:    "groq",
@@ -53,7 +68,15 @@ export const useSettingsStore = create<SettingsStore>()(
       llmTemperature: 0.7,
 
       setTtsProvider: (p) => set({ ttsProvider: p }),
-      update:         (patch) => set(patch),
+      update: (patch) => {
+        set(patch);
+        // Sync tray state to Rust backend whenever it changes
+        if (patch.minimizeToTray !== undefined) {
+          import("@tauri-apps/api").then(({ invoke }) => {
+            invoke("sync_minimize_to_tray", { value: patch.minimizeToTray }).catch(console.error);
+          }).catch(() => {});
+        }
+      },
     }),
     { name: "ace-settings" }
   )

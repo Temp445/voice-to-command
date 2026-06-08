@@ -1,22 +1,24 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
 @import "tailwindcss";
 @import "tw-animate-css";
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
 
 /* ─── Design Token Variables ─────────────────────────────── */
 :root {
-  --background:          #FFFFFF;
-  --foreground:          #111111;
-  --card:                #F8F9FA;
-  --card-foreground:     #111111;
-  --primary:             #111111;
+  --background:          #FAFAFA; /* Ultra-clean near-white background */
+  --foreground:          #09090B; /* Deep black text */
+  --card:                #FFFFFF; /* Pure white floating cards */
+  --card-foreground:     #09090B;
+  --primary:             #09090B; /* Minimalist solid black accent */
   --primary-foreground:  #FFFFFF;
-  --secondary:           #F3F4F6;
-  --secondary-foreground:#111111;
-  --muted:               #E5E7EB;
-  --muted-foreground:    #6B7280;
-  --border:              #E5E7EB;
-  --input:               #E5E7EB;
-  --ring:                #111111;
+  --secondary:           #F4F4F5; /* Neutral light gray for secondary/hover */
+  --secondary-foreground:#09090B;
+  --muted:               #E4E4E7;
+  --muted-foreground:    #71717A;
+  --border:              #E4E4E7;
+  --input:               #FFFFFF;
+  --ring:                #09090B;
+  --glass-bg:            rgba(255, 255, 255, 0.75);
+  --glass-strong-bg:     rgba(255, 255, 255, 0.9);
 
   /* Font stacks */
   --font-sans: 'Inter', system-ui, sans-serif;
@@ -31,19 +33,21 @@
 }
 
 .dark {
-  --background:          #000000;
-  --foreground:          #FFFFFF;
-  --card:                #111111;
-  --card-foreground:     #FFFFFF;
-  --primary:             #FFFFFF;
-  --primary-foreground:  #111111;
-  --secondary:           #1A1A1A;
-  --secondary-foreground:#FFFFFF;
-  --muted:               #2A2A2A;
-  --muted-foreground:    #9CA3AF;
-  --border:              #2A2A2A;
-  --input:               #2A2A2A;
-  --ring:                #FFFFFF;
+  --background:          #09090B; /* Deep Zinc for background */
+  --foreground:          #FAFAFA;
+  --card:                #18181B; /* Lighter Zinc for cards */
+  --card-foreground:     #FAFAFA;
+  --primary:             #FAFAFA;
+  --primary-foreground:  #09090B;
+  --secondary:           #27272A; /* Sidebar and hovered items */
+  --secondary-foreground:#FAFAFA;
+  --muted:               #3F3F46;
+  --muted-foreground:    #A1A1AA;
+  --border:              #27272A;
+  --input:               #27272A;
+  --ring:                #D4D4D8;
+  --glass-bg:            rgba(24, 24, 27, 0.7);
+  --glass-strong-bg:     rgba(9, 9, 11, 0.85);
 }
 
 /* ─── Base Reset ─────────────────────────────────────────── */
@@ -74,13 +78,13 @@ html, body, #__next {
 
   /* Glass card */
   .glass {
-    background: rgba(17, 17, 17, 0.7);
+    background: var(--glass-bg);
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
     border: 1px solid var(--border);
   }
   .glass-strong {
-    background: rgba(0, 0, 0, 0.85);
+    background: var(--glass-strong-bg);
     backdrop-filter: blur(24px);
     -webkit-backdrop-filter: blur(24px);
     border: 1px solid var(--border);

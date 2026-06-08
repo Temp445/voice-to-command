@@ -60,6 +60,10 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     log_file: str = "logs/ace.log"
 
+    # --- CRM Integration ---
+    crm_url: str = "https://crm.acesoftcloud.in/"
+    crm_keywords: str = "open my crm, open crm, open ace crm"
+
     # --- LLM Providers ---
     # Set whichever provider you want to use. Only one is active at a time.
     llm_provider: str = ""              # groq | openai | gemini | claude | deepseek
