@@ -74,18 +74,6 @@ class AudioCapture:
         logger.info("🎤 Audio capture stopped")
 
     def _capture_loop(self) -> None:
-        stream = None
-        try:
-            stream = self._audio.open(
-                format=FORMAT,
-                channels=CHANNELS,
-                rate=SAMPLE_RATE,
-                input=True,
-                frames_per_buffer=CHUNK_SIZE,
-            )
-        except Exception as e:
-            logger.warning(f"🎤 No local microphone found ({e}). Using Remote Mic only.")
-
         from voice.remote_mic import subscribe
         remote_q = subscribe()
         import queue
@@ -100,15 +88,10 @@ class AudioCapture:
 
         try:
             while self._running:
-                raw = b""
                 try:
-                    raw = remote_q.get_nowait()
+                    raw = remote_q.get(timeout=0.1)
                 except queue.Empty:
-                    if stream and stream.get_read_available() >= CHUNK_SIZE:
-                        raw = stream.read(CHUNK_SIZE, exception_on_overflow=False)
-                    else:
-                        time.sleep(0.01)
-                        continue
+                    continue
 
                 if not raw:
                     continue
@@ -158,15 +141,13 @@ class AudioCapture:
                     pre_roll_buffer.append(raw)
                     was_speech = False
                     
-        finally:
-            if stream:
-                stream.stop_stream()
-                stream.close()
+        except Exception as e:
+            logger.error(f"Audio capture loop error: {e}")
 
     def stop_recording_early(self) -> None:
         self._force_stop_recording = True
 
-    def get_speech_segment(self, silence_chunks: int = 12, timeout: float = 10.0) -> bytes:
+    def get_speech_segment(self, silence_chunks: int = 20, timeout: float = 10.0) -> bytes:
         """
         Collect speech until `silence_chunks` consecutive silent frames (each ~100ms).
         Default 12 chunks = ~1.2s of trailing silence — enough to know the user stopped
@@ -193,7 +174,7 @@ class AudioCapture:
 
         return b"".join(frames)
 
-    def stream_speech_segment(self, silence_chunks: int = 12, timeout: float = 10.0, yield_interval_chunks: int = 15, max_initial_silence_chunks: int = 20):
+    def stream_speech_segment(self, silence_chunks: int = 20, timeout: float = 10.0, yield_interval_chunks: int = 15, max_initial_silence_chunks: int = 20):
         """
         Generator that yields (audio_bytes, is_final) periodically as speech is collected.
         yield_interval_chunks of 15 ~ 450ms between partial yields.

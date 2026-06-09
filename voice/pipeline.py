@@ -63,7 +63,14 @@ class VoicePipeline:
     # ─── Lifecycle ───────────────────────────────────────────────────────────
 
     def start(self) -> None:
-        """Start the pipeline in a background thread."""
+        """Start the background pipeline loops."""
+        if self._running:
+            return
+        
+        # Start the global local microphone broadcast
+        from voice.remote_mic import start_local_mic
+        start_local_mic()
+        
         self._running = True
         self._loop = asyncio.new_event_loop()
         
@@ -174,6 +181,23 @@ class VoicePipeline:
         variants = {wake, f"hey {wake}", f"ok {wake}", f"okay {wake}", "hey", "ok", "okay"}
         return cleaned in variants
 
+    def _strip_wake_word(self, text: str) -> str:
+        """Remove the wake word from the start of the text so the NLU can parse it cleanly."""
+        cleaned = text.strip()
+        lower_cleaned = cleaned.lower()
+        wake = self._wake_word.wake_word.lower()
+        
+        prefixes_to_strip = [f"hey {wake}", f"ok {wake}", f"okay {wake}", wake]
+        
+        for prefix in prefixes_to_strip:
+            if lower_cleaned.startswith(prefix):
+                # Slice off the prefix length from the ORIGINAL string to preserve casing
+                stripped = cleaned[len(prefix):].strip()
+                # Remove leading punctuation like commas or colons (e.g., "Alexa, open crm")
+                return stripped.lstrip(".,!:;").strip()
+                
+        return cleaned
+
     async def _capture_and_stream(self, timeout: float = 8.0, max_initial_silence_chunks: int = 20) -> tuple[bytes, str]:
         """Start mic, stream speech segments to STT, and return final (audio_bytes, text)."""
         self._manually_stopped = False
@@ -259,7 +283,9 @@ class VoicePipeline:
                         self.on_transcript(text, True)
 
                     from app.services.command_service import command_service
-                    result = await command_service.parse_and_execute(text)
+                    clean_text = self._strip_wake_word(text)
+                    logger.info(f"🚀 Passing to command_service: '{clean_text}'")
+                    result = await command_service.parse_and_execute(clean_text)
                     if self.on_command_result:
                         self.on_command_result(result)
 

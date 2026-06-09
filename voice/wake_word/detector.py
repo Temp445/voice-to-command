@@ -92,38 +92,18 @@ class WakeWordDetector:
         if not self._running:
             return
 
-        stream = None
-        try:
-            stream = self._audio.open(
-                format=FORMAT,
-                channels=CHANNELS,
-                rate=SAMPLE_RATE,
-                input=True,
-                frames_per_buffer=CHUNK_SIZE,
-            )
-            logger.info(f"✅ Listening for wake word: '{self.wake_word}' (Local Mic Active)")
-        except Exception as e:
-            logger.warning(f"⚠️  No local microphone found ({e}). Listening via Remote Mic only.")
-
-        from voice.remote_mic import subscribe, clear_queues
+        from voice.remote_mic import subscribe
         remote_q = subscribe()
         import queue
-        import time
+
+        logger.info(f"✅ Listening for wake word: '{self.wake_word}' (Global Mic Stream)")
 
         try:
             while self._running:
-                raw = b""
-                # 1. Prioritize remote audio queue
                 try:
-                    raw = remote_q.get_nowait()
+                    raw = remote_q.get(timeout=0.1)
                 except queue.Empty:
-                    # 2. Fallback to local mic if available and has data
-                    if stream and stream.get_read_available() >= CHUNK_SIZE:
-                        raw = stream.read(CHUNK_SIZE, exception_on_overflow=False)
-                    # 3. Otherwise wait to prevent CPU spin
-                    else:
-                        time.sleep(0.01)
-                        continue
+                    continue
 
                 if not raw:
                     continue
@@ -145,7 +125,5 @@ class WakeWordDetector:
                         if self.on_detected:
                             self.on_detected()
                         break
-        finally:
-            if stream:
-                stream.stop_stream()
-                stream.close()
+        except Exception as e:
+            logger.error(f"Detector loop error: {e}")

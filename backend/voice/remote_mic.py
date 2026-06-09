@@ -4,8 +4,12 @@ Handles audio chunks streamed from the web frontend over WebSockets.
 """
 
 import queue
+import threading
+import time
+from loguru import logger
 
 _queues: list[queue.Queue] = []
+_local_mic_running = False
 
 def subscribe() -> queue.Queue:
     """Register a new queue for a background thread to consume remote audio."""
@@ -33,3 +37,38 @@ def clear_queues() -> None:
                 q.get_nowait()
             except queue.Empty:
                 break
+
+def _local_mic_loop():
+    import pyaudio
+    p = pyaudio.PyAudio()
+    if p.get_device_count() == 0:
+        logger.warning("No local audio devices found.")
+        return
+        
+    try:
+        stream = p.open(format=pyaudio.paInt16, channels=1, rate=16000, input=True, frames_per_buffer=1280)
+        logger.info("🎤 Local microphone broadcast started.")
+        while _local_mic_running:
+            if stream.get_read_available() >= 1280:
+                raw = stream.read(1280, exception_on_overflow=False)
+                put_chunk(raw)
+            else:
+                time.sleep(0.01)
+    except Exception as e:
+        logger.error(f"Local mic broadcast error: {e}")
+    finally:
+        if 'stream' in locals() and stream:
+            stream.stop_stream()
+            stream.close()
+        p.terminate()
+
+def start_local_mic():
+    global _local_mic_running
+    if _local_mic_running:
+        return
+    _local_mic_running = True
+    threading.Thread(target=_local_mic_loop, daemon=True).start()
+
+def stop_local_mic():
+    global _local_mic_running
+    _local_mic_running = False

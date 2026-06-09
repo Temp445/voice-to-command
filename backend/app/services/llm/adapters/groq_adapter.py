@@ -17,7 +17,7 @@ _MODELS = [
 class GroqAdapter(LLMProvider):
     def __init__(self, api_key: str, model: str = "llama-3.3-70b-versatile"):
         from groq import AsyncGroq
-        self._client = AsyncGroq(api_key=api_key)
+        self._client = AsyncGroq(api_key=api_key, timeout=10.0)
         self._model = model
 
     @property
