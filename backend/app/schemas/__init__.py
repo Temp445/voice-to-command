@@ -34,6 +34,7 @@ class SettingsUpdate(BaseModel):
     whisper_model: str | None = None
     stt_provider: str | None = None
     stt_noise_cancellation: bool | None = None
+    active_mode_timeout: int | None = None
     tts_provider: str | None = None
     gtts_api_key: str | None = None       # raw; encrypted before storage
     piper_voice: str | None = None
@@ -59,6 +60,7 @@ class SettingsResponse(BaseModel):
     whisper_model: str
     stt_provider: str
     stt_noise_cancellation: bool
+    active_mode_timeout: int
     tts_provider: str
     piper_voice: str
     theme: str

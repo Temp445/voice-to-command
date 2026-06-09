@@ -43,7 +43,8 @@ class Settings(BaseSettings):
 
     # --- Voice ---
     wake_word: str = "alexa"  # Must match OWW model: hey_jarvis, alexa, hey_mycroft, hey_rhasspy
-    whisper_model: str = "base"  # tiny | base | small | medium
+    whisper_model: str = "small"  # tiny | base | small | medium
+    active_mode_timeout: int = 120  # Seconds to stay awake after wake word
 
     # --- TTS ---
     tts_provider: str = "piper"  # piper | gtts

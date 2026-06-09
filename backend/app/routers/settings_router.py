@@ -32,6 +32,7 @@ def _build_response(s: UserSettings) -> SettingsResponse:
         whisper_model=s.whisper_model,
         stt_provider=s.stt_provider,
         stt_noise_cancellation=s.stt_noise_cancellation,
+        active_mode_timeout=s.active_mode_timeout,
         tts_provider=s.tts_provider,
         piper_voice=s.piper_voice,
         theme=s.theme,

@@ -1798,5 +1798,23 @@
     "exe_name": "CompPkgSrv.exe",
     "path": "C:\\Windows\\System32\\CompPkgSrv.exe",
     "source": "process"
+  },
+  "helppane": {
+    "name": "HelpPane",
+    "exe_name": "HelpPane.exe",
+    "path": "C:\\Windows\\HelpPane.exe",
+    "source": "process"
+  },
+  "logonui": {
+    "name": "LogonUI",
+    "exe_name": "LogonUI.exe",
+    "path": "C:\\Windows\\System32\\LogonUI.exe",
+    "source": "process"
+  },
+  "rdpclip": {
+    "name": "rdpclip",
+    "exe_name": "rdpclip.exe",
+    "path": "C:\\Windows\\System32\\rdpclip.exe",
+    "source": "process"
   }
 }

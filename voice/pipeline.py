@@ -81,6 +81,8 @@ class VoicePipeline:
 
         # Async preload TTS engine so the first command is instant
         asyncio.run_coroutine_threadsafe(self._preload_tts(), self._loop)
+        # Async preload STT engine so the first transcription doesn't have a 30s cold-start delay
+        asyncio.run_coroutine_threadsafe(self._preload_stt(), self._loop)
 
     async def _preload_tts(self) -> None:
         try:
@@ -93,6 +95,18 @@ class VoicePipeline:
             logger.info("✅ TTS engine preloaded successfully.")
         except Exception as e:
             logger.warning(f"Failed to preload TTS engine: {e}")
+
+    async def _preload_stt(self) -> None:
+        try:
+            logger.info("⚙️ Preloading STT engine in background...")
+            stt = get_stt_provider()
+            import numpy as np
+            # Force model load with 1s of silent audio
+            silent_audio = np.zeros(16000, dtype=np.int16).tobytes()
+            await asyncio.get_event_loop().run_in_executor(None, stt.transcribe, silent_audio)
+            logger.info("✅ STT engine preloaded successfully.")
+        except Exception as e:
+            logger.warning(f"Failed to preload STT engine: {e}")
 
     def stop(self) -> None:
         self._running = False
@@ -153,71 +167,126 @@ class VoicePipeline:
 
     # ─── Processing Pipeline ─────────────────────────────────────────────────
 
+    def _is_only_wake_word(self, text: str) -> bool:
+        """Return True if the transcript is just the wake word with no real command."""
+        cleaned = text.lower().strip().rstrip(".,!?")
+        wake = self._wake_word.wake_word  # e.g. "alexa"
+        variants = {wake, f"hey {wake}", f"ok {wake}", f"okay {wake}", "hey", "ok", "okay"}
+        return cleaned in variants
+
+    async def _capture_and_stream(self, timeout: float = 8.0, max_initial_silence_chunks: int = 20) -> tuple[bytes, str]:
+        """Start mic, stream speech segments to STT, and return final (audio_bytes, text)."""
+        self._manually_stopped = False
+        self._set_state(PipelineState.LISTENING)
+        self._audio_capture.start()
+        self._audio_capture.clear()
+
+        stt_provider = get_stt_provider()
+        loop = asyncio.get_event_loop()
+
+        final_text = ""
+        final_audio_bytes = b""
+
+        def _transcribe_stream():
+            nonlocal final_text, final_audio_bytes
+            for audio_bytes, is_final in self._audio_capture.stream_speech_segment(timeout=timeout, max_initial_silence_chunks=max_initial_silence_chunks):
+                final_audio_bytes = audio_bytes
+                if is_final and len(audio_bytes) >= 3200:  # MIN_AUDIO_BYTES
+                    # Provide instant UI feedback that we are no longer listening
+                    self._set_state(PipelineState.PROCESSING)
+                    if self.on_transcript:
+                        self.on_transcript("Transcribing audio...", False)
+                    text = stt_provider.transcribe(audio_bytes)
+                    final_text = text
+
+        await loop.run_in_executor(None, _transcribe_stream)
+        self._audio_capture.stop()
+        return final_audio_bytes, final_text
+
     async def _listen_and_process(self) -> None:
-        """Full pipeline run: listen → transcribe → command → speak."""
+        """Full pipeline run: stream capture & transcribe → command → speak.
+        
+        Enterprise Workflow:
+        1. Capture initial command.
+        2. If only wake word, wait 10s silently.
+        3. If still silent, prompt "How can I assist you?".
+        4. Enter Active Mode loop until active_mode_timeout expires.
+        """
+        from app.config import settings
+        import time
+
+        MIN_AUDIO_BYTES = 3200  # ~0.1s of audio @ 16kHz 16-bit
+        active_timeout = getattr(settings, 'active_mode_timeout', 120)
+
         try:
-            # 1. Stop wake word to free the mic
             self._wake_word.stop()
+            deadline = time.time() + active_timeout
 
-            # 2. Listen
-            self._manually_stopped = False
-            self._set_state(PipelineState.LISTENING)
-            self._audio_capture.start()
-            self._audio_capture.clear()
-            audio_bytes = await asyncio.get_event_loop().run_in_executor(
-                None,
-                lambda: self._audio_capture.get_speech_segment(timeout=8.0),
-            )
+            # 1. First stream pass — capture wake word + command
+            audio_bytes, text = await self._capture_and_stream(timeout=8.0, max_initial_silence_chunks=20)
 
-            # 3. Stop audio capture to free the mic
-            self._audio_capture.stop()
-
-            # If user manually stopped the mic OR no audio, return to idle
-            MIN_AUDIO_BYTES = 3200  # ~0.1s of audio @ 16kHz 16-bit
-            if self._manually_stopped or not audio_bytes or len(audio_bytes) < MIN_AUDIO_BYTES:
-                logger.debug("Mic stopped manually or no speech — returning to idle")
+            if self._manually_stopped:
                 self._manually_stopped = False
-                self._set_state(PipelineState.IDLE)
-                self._wake_word.start()
                 return
 
-            # 4. Transcribe
-            self._set_state(PipelineState.PROCESSING)
-            stt_provider = get_stt_provider()
-            text = await asyncio.get_event_loop().run_in_executor(
-                None,
-                lambda: stt_provider.transcribe(audio_bytes),
-            )
+            if not audio_bytes or len(audio_bytes) < MIN_AUDIO_BYTES or not text.strip() or self._is_only_wake_word(text):
+                # 2. Wait 10 seconds for user to naturally give command
+                logger.info("Only wake word detected. Waiting 10s for command...")
+                audio_bytes, text = await self._capture_and_stream(timeout=10.0, max_initial_silence_chunks=100) # 100 chunks = 10s
+                
+                if self._manually_stopped:
+                    self._manually_stopped = False
+                    return
 
-            if not text.strip():
-                # If they just said the wake word without a command, prompt them.
-                await self._speak("How can I help you?")
-                self._set_state(PipelineState.IDLE)
-                self._wake_word.start()
-                return
+                if not audio_bytes or len(audio_bytes) < MIN_AUDIO_BYTES or not text.strip() or self._is_only_wake_word(text):
+                    # 3. Still no command. Prompt them.
+                    logger.debug("No command after 10s wait. Asking how to help.")
+                    await self._speak("How can I assist you?")
+                    text = "" # Clear text so we don't execute the wake word in the loop
 
-            logger.info(f"📝 Transcript: '{text}'")
-            if self.on_transcript:
-                self.on_transcript(text, True)
+            # 4. Active Conversational Loop
+            while time.time() < deadline:
+                if self._manually_stopped:
+                    logger.debug("Manually stopped — returning to idle")
+                    self._manually_stopped = False
+                    break
+                
+                if text.strip() and not self._is_only_wake_word(text):
+                    # We have a valid command! Execute it.
+                    self._set_state(PipelineState.PROCESSING)
+                    logger.info(f"📝 Transcript: '{text}'")
+                    if self.on_transcript:
+                        self.on_transcript(text, True)
 
-            # 5. Execute command
-            from app.services.command_service import command_service
-            result = await command_service.parse_and_execute(text)
-            if self.on_command_result:
-                self.on_command_result(result)
+                    from app.services.command_service import command_service
+                    result = await command_service.parse_and_execute(text)
+                    if self.on_command_result:
+                        self.on_command_result(result)
 
-            # 6. Speak response
-            response_text = result.get("result", "Done")
-            await self._speak(response_text)
+                    response_text = result.get("result", "Done")
+                    await self._speak(response_text)
+                    
+                    # Reset deadline after execution to give another full window
+                    deadline = time.time() + active_timeout
+                
+                # Check if timeout reached
+                time_left = deadline - time.time()
+                if time_left <= 0:
+                    break
+                    
+                # Listen again
+                listen_timeout = min(15.0, time_left) 
+                audio_bytes, text = await self._capture_and_stream(timeout=listen_timeout, max_initial_silence_chunks=150)
 
+            # Loop finished
+            logger.info("Active Mode finished or timed out. Returning to IDLE.")
+            
         except Exception as e:
             logger.error(f"Pipeline error: {e}")
             self._audio_capture.stop()
             self._set_state(PipelineState.ERROR)
             await asyncio.sleep(1)
-            self._set_state(PipelineState.IDLE)
-            self._wake_word.start()
-        else:
+        finally:
             self._set_state(PipelineState.IDLE)
             self._wake_word.start()
 

@@ -23,7 +23,7 @@ SAMPLE_RATE = 16000
 CHUNK_SIZE = 1280          # 80ms at 16kHz (OWW requirement)
 FORMAT = pyaudio.paInt16
 CHANNELS = 1
-DETECTION_THRESHOLD = 0.5  # Confidence threshold
+DETECTION_THRESHOLD = 0.3  # Confidence threshold
 
 
 class WakeWordDetector:
@@ -135,6 +135,8 @@ class WakeWordDetector:
                 predictions = self._model.predict(audio_np)
 
                 for model_name, score in predictions.items():
+                    if score > 0.1:
+                        logger.debug(f"Wake word '{model_name}' score: {score:.3f}")
                     if score >= DETECTION_THRESHOLD:
                         logger.info(f"🔔 Wake word detected! ('{self.wake_word}', score={score:.2f})")
                         self._model.reset()   # Reset prediction buffer

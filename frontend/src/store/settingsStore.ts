@@ -7,6 +7,7 @@ interface SettingsStore {
   sttProvider: "whisper" | "gstt";
   sttNoiseCancellation: boolean;
   whisperModel: "tiny" | "base" | "small" | "large-v2" | "large-v3";
+  activeModeTimeout: number;
   ttsProvider: "piper" | "gtts";
   piperVoice: string;
   theme: "dark" | "light";
@@ -46,6 +47,7 @@ export const useSettingsStore = create<SettingsStore>()(
       sttProvider:    "whisper",
       sttNoiseCancellation: true,
       whisperModel:   "base",
+      activeModeTimeout: 120,
       ttsProvider:    "piper",
       piperVoice:     "en_US-lessac-medium",
       theme:          "dark",

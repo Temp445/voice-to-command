@@ -19,17 +19,18 @@ class Transcriber:
     _model: WhisperModel | None = None
 
     def __init__(self):
-        self._model_size = settings.whisper_model
+        pass
 
     def _load_model(self) -> WhisperModel:
         if Transcriber._model is None:
-            logger.info(f"Loading Whisper model: {self._model_size}")
+            model_size = settings.whisper_model
+            logger.info(f"Loading Whisper model: {model_size} (device: auto, compute: default)")
             Transcriber._model = WhisperModel(
-                self._model_size,
-                device="cpu",
-                compute_type="int8",    # quantised for speed
+                model_size,
+                device="auto",
+                compute_type="int8",
             )
-            logger.info(f"✅ Whisper model '{self._model_size}' loaded")
+            logger.info(f"✅ Whisper model '{model_size}' loaded")
         return Transcriber._model
 
     def transcribe(self, audio_bytes: bytes) -> str:
@@ -42,25 +43,36 @@ class Transcriber:
         # Convert raw bytes → float32 numpy array
         audio_np = np.frombuffer(audio_bytes, dtype=np.int16).astype(np.float32) / 32768.0
 
-        # Dynamically build initial prompt from registered intents to dramatically improve accuracy
-        try:
-            from app.services.command_service import command_service
-            intents = [i["name"].replace("_", " ") for i in command_service.list_intents()]
-            dynamic_prompt = "desktop assistant commands: " + ", ".join(intents) + "."
-        except Exception:
-            dynamic_prompt = "desktop assistant commands: open application, close application, system settings, minimize window."
+        # Context-aware prompt to establish tone, verb usage, and vocabulary.
+        # This prevents common phonetic errors (e.g. "Notepad" -> "not bad") and improves
+        # intent recognition for desktop and CRM commands.
+        initial_prompt = "Voice commands: Open Notepad, Chrome, Spotify, YouTube, CRM, play, pause, next, select, close, mute, volume."
 
         segments, info = model.transcribe(
             audio_np,
             beam_size=5,
             language="en",
             condition_on_previous_text=False,
-            vad_filter=True,              # Built-in VAD silences noise
-            vad_parameters={"min_silence_duration_ms": 500},
-            initial_prompt=dynamic_prompt,
+            temperature=0.0,              # Deterministic — eliminates hallucinations on short phrases
+            no_speech_threshold=0.6,      # Reject segment if Whisper thinks it's silence/noise
+            log_prob_threshold=-1.0,      # Reject low-confidence segments
+            vad_filter=False,             # Disabled: We use WebRTC VAD before STT for instant streaming
+            initial_prompt=initial_prompt,
+            word_timestamps=False,        # Not needed; skip for speed
         )
 
-        text = " ".join(s.text.strip() for s in segments).strip()
+        # Filter out hallucinated segments (Whisper sometimes generates text from silence)
+        NO_SPEECH_PROB_THRESHOLD = 0.6
+        kept = []
+        for seg in segments:
+            if seg.no_speech_prob < NO_SPEECH_PROB_THRESHOLD:
+                kept.append(seg.text.strip())
+            else:
+                logger.debug(
+                    f"Dropped hallucinated segment (no_speech_prob={seg.no_speech_prob:.2f}): '{seg.text.strip()}'"
+                )
+
+        text = " ".join(kept).strip()
         logger.debug(f"Transcribed ({info.language}, {info.duration:.1f}s): '{text}'")
         return text
 

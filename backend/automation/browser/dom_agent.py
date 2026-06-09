@@ -428,10 +428,14 @@ Reply ONLY with a comma-separated list of integer IDs (e.g., '45' or '26, 27'). 
                     """
                     best_val = await self.page.evaluate(match_script)
                     if best_val:
-                        await self.page.select_option(selector, value=best_val)
+                        await self.page.select_option(selector, value=best_val, timeout=3000)
+                        results.append(f"Selected '{option_to_select}'.")
                     else:
-                        await self.page.select_option(selector, label=option_to_select)
-                    results.append(f"Selected '{option_to_select}'.")
+                        try:
+                            await self.page.select_option(selector, label=option_to_select, timeout=3000)
+                            results.append(f"Selected '{option_to_select}'.")
+                        except Exception:
+                            raise Exception(f"Could not find an option matching '{option_to_select}' in the dropdown.")
                 elif current_action == "upload":
                     extract_prompt = f"Extract exactly the filename (with extension if provided) the user wants to upload from this intent: '{intent}'. Reply ONLY with the filename."
                     filename = await llm_service.chat(extract_prompt)

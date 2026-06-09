@@ -72,6 +72,7 @@ class UserSettings(Base):
     stt_provider: Mapped[str] = mapped_column(String(20), default="whisper")
     stt_noise_cancellation: Mapped[bool] = mapped_column(Boolean, default=True)
     whisper_model: Mapped[str] = mapped_column(String(20), default="base")
+    active_mode_timeout: Mapped[int] = mapped_column(default=120)
 
     # TTS
     tts_provider: Mapped[str] = mapped_column(String(20), default="piper")

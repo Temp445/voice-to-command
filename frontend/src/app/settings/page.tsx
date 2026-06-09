@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Settings, Mic, Volume2, Globe, Shield, CheckCircle2, Eye, EyeOff, Bot, Loader2, Link2 } from "lucide-react";
 import { Sidebar } from "@/components/layout/Sidebar";
@@ -56,6 +56,16 @@ export default function SettingsPage() {
   const [showApiKey, setShowApiKey] = useState(false);
   const [testingLlm, setTestingLlm] = useState(false);
   const [testResult, setTestResult] = useState<{ ok: boolean; msg: string } | null>(null);
+
+  // STT Tester State
+  const [sttTestActive, setSttTestActive] = useState(false);
+  const [sttTestText, setSttTestText] = useState("");
+  const [sttTestDuration, setSttTestDuration] = useState<number | null>(null);
+  const sttWsRef = useRef<WebSocket | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+  const processorRef = useRef<ScriptProcessorNode | null>(null);
+  const isTestingRef = useRef(false);
 
   // TTS State
   const [testTtsText, setTestTtsText] = useState("Hello, I am your desktop assistant.");
@@ -118,6 +128,97 @@ export default function SettingsPage() {
     } catch (err) { console.error("Test TTS failed:", err); } 
     finally { setTestingTts(false); }
   };
+
+  const startSttTest = async () => {
+    if (isTestingRef.current) return;
+    isTestingRef.current = true;
+    setSttTestActive(true);
+    try {
+      setSttTestText("Connecting to microphone...");
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        audio: {
+          noiseSuppression: true,
+          echoCancellation: true,
+          autoGainControl: true
+        }
+      });
+      if (!isTestingRef.current) {
+        stream.getTracks().forEach(t => t.stop());
+        return;
+      }
+      mediaStreamRef.current = stream;
+      
+      const wsUrl = window.location.protocol === "https:" ? "wss://" : "ws://" + window.location.host.split(":")[0] + ":8000/api/voice/ws-test-stt";
+      const ws = new WebSocket(wsUrl);
+      sttWsRef.current = ws;
+      
+      ws.onopen = () => {
+        setSttTestText("Listening... Speak now.");
+        
+        const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
+        audioContextRef.current = audioContext;
+        const source = audioContext.createMediaStreamSource(stream);
+        
+        const processor = audioContext.createScriptProcessor(4096, 1, 1);
+        processorRef.current = processor;
+        
+        processor.onaudioprocess = (e) => {
+          if (ws.readyState !== WebSocket.OPEN) return;
+          const inputData = e.inputBuffer.getChannelData(0);
+          const pcm16 = new Int16Array(inputData.length);
+          for (let i = 0; i < inputData.length; i++) {
+            let s = Math.max(-1, Math.min(1, inputData[i]));
+            pcm16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+          }
+          ws.send(pcm16.buffer);
+        };
+        
+        source.connect(processor);
+        processor.connect(audioContext.destination);
+      };
+      
+      ws.onmessage = (e) => {
+        try {
+          const data = JSON.parse(e.data);
+          if (data.text) setSttTestText(data.text);
+          if (data.duration_ms) setSttTestDuration(data.duration_ms);
+        } catch(err) {}
+      };
+      
+      ws.onclose = () => { stopSttTest(); };
+    } catch (err) {
+      console.error(err);
+      setSttTestText("Failed to access microphone.");
+      setSttTestActive(false);
+      isTestingRef.current = false;
+    }
+  };
+
+  const stopSttTest = () => {
+    isTestingRef.current = false;
+    setSttTestActive(false);
+    setSttTestDuration(null);
+    setSttTestText("");
+    if (processorRef.current && audioContextRef.current) processorRef.current.disconnect();
+    if (audioContextRef.current) { audioContextRef.current.close().catch(()=>{}); audioContextRef.current = null; }
+    if (mediaStreamRef.current) { mediaStreamRef.current.getTracks().forEach(t => t.stop()); mediaStreamRef.current = null; }
+    if (sttWsRef.current) {
+      if (sttWsRef.current.readyState === WebSocket.OPEN) sttWsRef.current.send(JSON.stringify({ type: "stop" }));
+      setTimeout(() => {
+        if (sttWsRef.current) sttWsRef.current.close();
+        sttWsRef.current = null;
+      }, 500);
+    }
+  };
+
+  const handleToggleSttTest = () => {
+    if (sttTestActive) stopSttTest();
+    else startSttTest();
+  };
+
+  useEffect(() => {
+    return () => { stopSttTest(); };
+  }, []);
 
   const handleSave = async () => {
     setSaving(true);
@@ -183,7 +284,7 @@ export default function SettingsPage() {
                 <div>
                   <p style={lbl}>Whisper Model</p>
                   <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-                    {(["tiny", "base", "small", "large-v2", "large-v3"] as const).map((m) => (
+                    {(["tiny", "base", "small", "medium", "large-v2", "large-v3"] as const).map((m) => (
                       <button key={m} onClick={() => settings.update({ whisperModel: m })} style={settings.whisperModel === m ? btnA : btnI}>
                         {m.charAt(0).toUpperCase() + m.slice(1)}
                       </button>
@@ -199,6 +300,46 @@ export default function SettingsPage() {
                   <p style={{ fontSize: "0.8125rem", color: "var(--muted-foreground)", marginTop: "0.25rem" }}>Aggressively filter background noise using VAD</p>
                 </div>
                 <Toggle checked={settings.sttNoiseCancellation} onChange={() => settings.update({ sttNoiseCancellation: !settings.sttNoiseCancellation })} />
+              </div>
+
+              <div>
+                <p style={lbl}>Active Mode Timeout (Seconds)</p>
+                <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
+                  <input
+                    type="range"
+                    min="10"
+                    max="600"
+                    step="10"
+                    value={settings.activeModeTimeout || 120}
+                    onChange={(e) => settings.update({ activeModeTimeout: parseInt(e.target.value) })}
+                    style={{ flex: 1, accentColor: "var(--primary)" }}
+                  />
+                  <span style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--foreground)", minWidth: "3rem", textAlign: "right" }}>
+                    {settings.activeModeTimeout || 120}s
+                  </span>
+                </div>
+                <p style={sub}>How long the assistant stays awake listening for follow-up commands without the wake word.</p>
+              </div>
+
+              <div style={{ marginTop: "1rem", padding: "1.25rem", background: "var(--secondary)", borderRadius: "0.75rem", border: "1px solid var(--border)" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1rem" }}>
+                  <div>
+                    <p style={{ fontSize: "0.9375rem", fontWeight: 600, color: "var(--foreground)" }}>Live STT Tester</p>
+                    <p style={{ fontSize: "0.8125rem", color: "var(--muted-foreground)" }}>Speak into your microphone to instantly test transcription speed and accuracy. No commands will be executed.</p>
+                  </div>
+                  <button onClick={handleToggleSttTest} style={{ flexShrink: 0, padding: "0.5rem 1.25rem", borderRadius: "0.5rem", fontSize: "0.875rem", fontWeight: 600, cursor: "pointer", background: sttTestActive ? "rgba(239,68,68,0.1)" : "var(--background)", border: `1px solid ${sttTestActive ? "#ef444430" : "var(--border)"}`, color: sttTestActive ? "#dc2626" : "var(--foreground)", display: "flex", alignItems: "center", gap: "0.5rem", boxShadow: "0 1px 2px rgba(0,0,0,0.05)", transition: "all 0.2s" }}>
+                    {sttTestActive ? <Loader2 size={16} className="animate-spin" /> : <Mic size={16} />}
+                    {sttTestActive ? "Stop Test" : "Start Test"}
+                  </button>
+                </div>
+                <div style={{ background: "var(--background)", border: "1px solid var(--border)", borderRadius: "0.5rem", padding: "1rem", minHeight: "6rem", fontSize: "0.875rem", color: sttTestText ? "var(--foreground)" : "var(--muted-foreground)", fontFamily: "var(--font-mono)", display: "flex", flexDirection: "column", alignItems: "flex-start", justifyContent: "flex-start", textAlign: "left" }}>
+                  <div style={{ flex: 1, whiteSpace: "pre-wrap" }}>{sttTestText || "Click 'Start Test' and begin speaking..."}</div>
+                  {sttTestDuration !== null && sttTestText && (
+                    <div style={{ marginTop: "0.5rem", fontSize: "0.75rem", color: "var(--muted-foreground)" }}>
+                      Transcription took {sttTestDuration}ms
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </section>
@@ -329,7 +470,7 @@ export default function SettingsPage() {
                   </div>
                   <div>
                     <p style={lbl}>Temperature: {settings.llmTemperature}</p>
-                    <input type="range" min="0" max="1" step="0.1" value={settings.llmTemperature} onChange={(e) => settings.update({ llmTemperature: parseFloat(e.target.value) })} style={{ width: "100%", marginTop: "0.5rem" }} />
+                    <input type="range" min="0" max="1" step="0.1" value={settings.llmTemperature} onChange={(e) => settings.update({ llmTemperature: parseFloat(e.target.value) })} style={{ width: "100%", marginTop: "0.5rem", accentColor: "var(--primary)" }} />
                     <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.75rem", color: "var(--muted-foreground)", marginTop: "0.25rem", fontWeight: 500 }}>
                       <span>Precise</span><span>Creative</span>
                     </div>

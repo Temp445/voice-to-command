@@ -46,3 +46,10 @@ async def init_db() -> None:
     """Create all tables on startup (local SQLite)."""
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        
+        # Migration: add active_mode_timeout if it doesn't exist
+        try:
+            from sqlalchemy import text
+            await conn.execute(text("ALTER TABLE settings ADD COLUMN active_mode_timeout INTEGER DEFAULT 120"))
+        except Exception:
+            pass  # Column likely already exists

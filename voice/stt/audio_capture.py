@@ -34,9 +34,11 @@ class AudioCapture:
 
     def __init__(self):
         from app.config import settings
-        # Use level 3 (aggressive) if noise cancellation is enabled, otherwise 1 (permissive)
+        # Level 2: balanced — catches real speech without over-filtering marginal frames.
+        # Level 3 is too aggressive and causes legitimate speech frames to be dropped,
+        # leading to garbled or truncated audio sent to Whisper.
         noise_cancelling = getattr(settings, 'stt_noise_cancellation', True)
-        vad_aggressiveness = 3 if noise_cancelling else 1
+        vad_aggressiveness = 3
         
         self._vad = webrtcvad.Vad(vad_aggressiveness)
         self._audio = pyaudio.PyAudio()
@@ -88,6 +90,13 @@ class AudioCapture:
         remote_q = subscribe()
         import queue
         import time
+        from collections import deque
+
+        # Buffer the last ~300ms of audio BEFORE speech is detected.
+        # This prevents the VAD from cutting off the very first consonant/vowel of a word.
+        # 10 chunks of 1024 bytes (512 samples) @ 16kHz = ~320ms.
+        pre_roll_buffer = deque(maxlen=10)
+        was_speech = False
 
         try:
             while self._running:
@@ -138,7 +147,17 @@ class AudioCapture:
                     is_speech = False
                     
                 if is_speech:
+                    # If this is the start of a new speech segment, dump the pre-roll buffer first
+                    if not was_speech:
+                        while pre_roll_buffer:
+                            self._queue.put(pre_roll_buffer.popleft())
                     self._queue.put(raw)
+                    was_speech = True
+                else:
+                    # Save silent chunk to pre-roll
+                    pre_roll_buffer.append(raw)
+                    was_speech = False
+                    
         finally:
             if stream:
                 stream.stop_stream()
@@ -147,9 +166,11 @@ class AudioCapture:
     def stop_recording_early(self) -> None:
         self._force_stop_recording = True
 
-    def get_speech_segment(self, silence_chunks: int = 30, timeout: float = 10.0) -> bytes:
+    def get_speech_segment(self, silence_chunks: int = 12, timeout: float = 10.0) -> bytes:
         """
-        Collect speech until `silence_chunks` consecutive silent frames.
+        Collect speech until `silence_chunks` consecutive silent frames (each ~100ms).
+        Default 12 chunks = ~1.2s of trailing silence — enough to know the user stopped
+        speaking without making them wait 3+ seconds.
         Returns concatenated audio bytes.
         """
         import time
@@ -167,10 +188,43 @@ class AudioCapture:
                 silent += 1
                 if frames and silent >= silence_chunks:
                     break
-                elif not frames and silent >= 40:  # Auto-stop after 4s of complete silence
+                elif not frames and silent >= 20:  # Auto-stop after 2s of complete silence at start
                     break
 
         return b"".join(frames)
+
+    def stream_speech_segment(self, silence_chunks: int = 12, timeout: float = 10.0, yield_interval_chunks: int = 15, max_initial_silence_chunks: int = 20):
+        """
+        Generator that yields (audio_bytes, is_final) periodically as speech is collected.
+        yield_interval_chunks of 15 ~ 450ms between partial yields.
+        """
+        import time
+        frames: list[bytes] = []
+        silent = 0
+        deadline = time.time() + timeout
+        self._force_stop_recording = False
+        chunks_since_last_yield = 0
+
+        while time.time() < deadline and not self._force_stop_recording:
+            try:
+                chunk = self._queue.get(timeout=0.1)
+                frames.append(chunk)
+                silent = 0
+                chunks_since_last_yield += 1
+                
+                # Yield partial audio periodically
+                if chunks_since_last_yield >= yield_interval_chunks:
+                    yield (b"".join(frames), False)
+                    chunks_since_last_yield = 0
+                    
+            except queue.Empty:
+                silent += 1
+                if frames and silent >= silence_chunks:
+                    break
+                elif not frames and silent >= max_initial_silence_chunks:
+                    break
+
+        yield (b"".join(frames), True)
 
     def clear(self) -> None:
         while not self._queue.empty():
