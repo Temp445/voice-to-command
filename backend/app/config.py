@@ -8,8 +8,15 @@ from pathlib import Path
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field
 
-# Resolve .env path — works whether you run from project root or backend/
-_ROOT = Path(__file__).resolve().parent.parent.parent  # Voice_Controller_v1/
+import sys
+
+if getattr(sys, 'frozen', False):
+    # Running in PyInstaller bundle
+    _ROOT = Path(sys._MEIPASS)
+else:
+    # Resolve .env path — works whether you run from project root or backend/
+    _ROOT = Path(__file__).resolve().parent.parent.parent  # Voice_Controller_v1/
+
 _ENV_FILE = _ROOT / ".env" if (_ROOT / ".env").exists() else Path(".env")
 
 

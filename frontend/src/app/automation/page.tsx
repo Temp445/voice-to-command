@@ -5,6 +5,7 @@ import { motion } from "framer-motion";
 import { Activity, CheckCircle2, XCircle, Clock, Zap, Monitor, Globe, Folder, Camera, Play } from "lucide-react";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { TopBar } from "@/components/layout/TopBar";
+import { getResolvedBaseUrl } from "@/lib/api";
 
 const LOG = [
   { id: "a1", action: "Open VS Code",        type: "app",     status: "success", time: "10:42:05", duration: 320  },
@@ -33,7 +34,8 @@ export default function AutomationPage() {
   const takeScreenshot = async () => {
     setIsCapturing(true);
     try {
-      const response = await fetch("http://localhost:8000/api/automation/browser/screenshot", {
+      const base = await getResolvedBaseUrl();
+      const response = await fetch(`${base}/automation/browser/screenshot`, {
         method: "POST"
       });
       if (response.ok) {
@@ -53,7 +55,8 @@ export default function AutomationPage() {
     setIsRunningTest(true);
     setTestResult(null);
     try {
-      const response = await fetch("http://localhost:8000/api/automation/browser/test", {
+      const base = await getResolvedBaseUrl();
+      const response = await fetch(`${base}/automation/browser/test`, {
         method: "POST"
       });
       if (response.ok) {

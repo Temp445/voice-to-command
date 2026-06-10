@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useCommandStore } from "@/store/commandStore";
+import { getResolvedBaseUrl } from "@/lib/api";
 
 export interface SuggestionsResponse {
   domain: string;
@@ -14,7 +15,8 @@ export function useSuggestions(limit: number = 4) {
   const fetchSuggestions = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`http://localhost:8000/api/commands/suggestions?limit=${limit}`);
+      const base = await getResolvedBaseUrl();
+      const res = await fetch(`${base}/commands/suggestions?limit=${limit}`);
       if (res.ok) {
         const json = await res.json();
         setData(json);

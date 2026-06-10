@@ -73,33 +73,58 @@ class BrowserEngine:
                 try:
                     b_type = settings.browser_type.lower()
                     
-                    if b_type == "firefox":
-                        self._context = await self._playwright.firefox.launch_persistent_context(
-                            user_data_dir=profile_path,
-                            headless=False,
-                            no_viewport=True,
-                        )
-                    elif b_type == "webkit":
-                        self._context = await self._playwright.webkit.launch_persistent_context(
-                            user_data_dir=profile_path,
-                            headless=False,
-                            no_viewport=True,
-                        )
-                    else:
-                        self._context = await self._playwright.chromium.launch_persistent_context(
-                            user_data_dir=profile_path,
-                            channel="chrome",  # Use system Chrome to avoid Chromium fingerprint
-                            headless=False,
-                            no_viewport=True,
-                            args=[
-                                "--start-maximized",
-                                "--disable-blink-features=AutomationControlled",
-                                "--no-first-run",
-                                "--no-default-browser-check",
-                                "--test-type"
-                            ],
-                            ignore_default_args=["--enable-automation"]
-                        )
+                    try:
+                        if b_type == "firefox":
+                            self._context = await self._playwright.firefox.launch_persistent_context(
+                                user_data_dir=profile_path,
+                                headless=False,
+                                no_viewport=True,
+                            )
+                        elif b_type == "webkit":
+                            self._context = await self._playwright.webkit.launch_persistent_context(
+                                user_data_dir=profile_path,
+                                headless=False,
+                                no_viewport=True,
+                            )
+                        else:
+                            self._context = await self._playwright.chromium.launch_persistent_context(
+                                user_data_dir=profile_path,
+                                channel="chrome",  # Use system Chrome to avoid Chromium fingerprint
+                                headless=False,
+                                no_viewport=True,
+                                args=[
+                                    "--start-maximized",
+                                    "--disable-blink-features=AutomationControlled",
+                                    "--no-first-run",
+                                    "--no-default-browser-check",
+                                    "--test-type"
+                                ],
+                                ignore_default_args=["--enable-automation"]
+                            )
+                    except Exception as launch_err:
+                        logger.warning(f"Browser launch failed, attempting to kill locked processes: {launch_err}")
+                        import psutil
+                        for proc in psutil.process_iter(['name', 'cmdline']):
+                            try:
+                                if proc.info['name'] and proc.info['name'].lower() in ['chrome.exe', 'msedge.exe', 'firefox.exe']:
+                                    cmdline = proc.info.get('cmdline')
+                                    if cmdline and any('ACE\\BrowserProfile' in str(arg) for arg in cmdline):
+                                        proc.kill()
+                            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                                pass
+                        
+                        await asyncio.sleep(1.5)
+                        # Retry once after cleanup
+                        if b_type == "firefox":
+                            self._context = await self._playwright.firefox.launch_persistent_context(user_data_dir=profile_path, headless=False, no_viewport=True)
+                        elif b_type == "webkit":
+                            self._context = await self._playwright.webkit.launch_persistent_context(user_data_dir=profile_path, headless=False, no_viewport=True)
+                        else:
+                            self._context = await self._playwright.chromium.launch_persistent_context(
+                                user_data_dir=profile_path, channel="chrome", headless=False, no_viewport=True,
+                                args=["--start-maximized", "--disable-blink-features=AutomationControlled", "--no-first-run", "--no-default-browser-check", "--test-type"],
+                                ignore_default_args=["--enable-automation"]
+                            )
                     
                     try:
                         if b_type not in ["firefox", "webkit"]:

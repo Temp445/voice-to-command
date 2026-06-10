@@ -14,7 +14,7 @@
   "tauri": {
     "allowlist": {
       "all": false,
-      "shell": { "all": false, "open": true },
+      "shell": { "all": false, "open": true, "execute": true, "sidecar": true },
       "window": {
         "all": false,
         "close": true,
@@ -31,7 +31,7 @@
       "http": {
         "all": true,
         "request": true,
-        "scope": ["http://127.0.0.1:8000/**", "ws://127.0.0.1:8000/**"]
+        "scope": ["http://**", "ws://**"]
       }
     },
     "bundle": {
@@ -49,8 +49,8 @@
         "timestampUrl": ""
       },
       "resources": [],
-      "externalBin": [],
-      "copyright": "© 2024 ACE",
+      "externalBin": ["../../backend/dist/ace-backend"],
+      "copyright": "© 2026 ACE",
       "category": "Utility",
       "shortDescription": "AI-powered desktop voice controller",
       "longDescription": "ACE is a production-grade AI-powered desktop voice control and automation system"

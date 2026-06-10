@@ -1,3 +1,5 @@
+import { invoke } from '@tauri-apps/api/tauri';
+
 // Ensure we don't accidentally use a dev tunnel URL when running locally, but allow it for remote devices
 const isLocalhost = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
 
@@ -9,12 +11,44 @@ function getBaseUrl() {
   return "http://127.0.0.1:8000/api";
 }
 
-let BASE = isLocalhost ? "http://127.0.0.1:8000/api" : (process.env.NEXT_PUBLIC_API_URL || getBaseUrl());
-if (BASE.endsWith('/')) BASE = BASE.slice(0, -1);
-if (!BASE.endsWith('/api')) BASE += "/api";
+let resolvedBaseUrl: string | null = null;
+export let resolvedBackendPort = 8000;
+
+export async function getResolvedBaseUrl(): Promise<string> {
+  if (resolvedBaseUrl) return resolvedBaseUrl;
+
+  let port = 8000;
+  if (typeof window !== 'undefined' && (window as any).__TAURI_IPC__) {
+    try {
+      port = await invoke('get_backend_port');
+    } catch (e) {
+      console.warn("Failed to get backend port from Tauri, using default 8000", e);
+    }
+  } else if (process.env.NEXT_PUBLIC_API_PORT) {
+    port = parseInt(process.env.NEXT_PUBLIC_API_PORT, 10);
+  }
+
+  let base = `http://127.0.0.1:${port}/api`;
+  if (!isLocalhost && !(typeof window !== 'undefined' && (window as any).__TAURI_IPC__)) {
+    base = process.env.NEXT_PUBLIC_API_URL || getBaseUrl();
+  }
+  
+  if (base.endsWith('/')) base = base.slice(0, -1);
+  if (!base.endsWith('/api')) base += "/api";
+  
+  resolvedBaseUrl = base;
+  resolvedBackendPort = port;
+  return base;
+}
+
+export async function getBackendWsUrl(): Promise<string> {
+  if (!resolvedBaseUrl) await getResolvedBaseUrl();
+  return `ws://127.0.0.1:${resolvedBackendPort}/ws`;
+}
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
+  const base = await getResolvedBaseUrl();
+  const res = await fetch(`${base}${path}`, {
     headers: { "Content-Type": "application/json", ...options.headers },
     cache: "no-store",
     ...options,

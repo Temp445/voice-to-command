@@ -435,15 +435,6 @@ class OverlayApp(QWidget):
 
         pill_layout.addStretch(1)
 
-        # ── Right-side action icons ────────────────────────────────────────
-        # Suggestion: yellow when enabled, dim white when disabled
-        self.suggest_btn = IconButton(
-            "lightbulb", "Get suggestion",
-            enabled_icon_color="#fbbf24",   # amber/yellow
-            disabled_icon_color="#e5e7eb",  # light grey
-        )
-        self.suggest_btn.clicked.connect(self._on_suggest_clicked)
-        pill_layout.addWidget(self.suggest_btn)
 
         # Replay: white when enabled, dim white when disabled
         self.replay_btn = IconButton(
@@ -630,12 +621,7 @@ class OverlayApp(QWidget):
 
     def _on_status(self, text: str):
         """Handle special prefixed messages from backend."""
-        if text.startswith("__suggestion__"):
-            # Only show if suggestion feature is enabled
-            if self._suggest_enabled:
-                content = text[len("__suggestion__"):]
-                self.show_card_signal.emit("💡 Suggestion", content)
-        elif text.startswith("__replay__"):
+        if text.startswith("__replay__"):
             content = text[len("__replay__"):]
             self.show_card_signal.emit("🔁 Last Response", content)
         elif text == "__replay_empty__":
@@ -649,15 +635,8 @@ class OverlayApp(QWidget):
 
     def _show_card(self, title: str, body: str):
         """Display a floating card below the pill and activate the triggering button."""
-        # Determine which mode this is
-        if title.startswith("💡"):
-            self._card_mode = "suggestion"
-            self.suggest_btn.set_active(True)
-            self.replay_btn.set_active(False)
-        else:
-            self._card_mode = "replay"
-            self.replay_btn.set_active(True)
-            self.suggest_btn.set_active(False)
+        self._card_mode = "replay"
+        self.replay_btn.set_active(True)
 
         self.card_title.setText(title)
         self.card_body.setText(body)
@@ -671,14 +650,11 @@ class OverlayApp(QWidget):
         self.card.show()
         self.card.raise_()
 
-        # Auto-hide ONLY for replay mode. Suggestions stay open until manually closed or next command.
-        if self._card_mode == "replay":
-            self._card_hide_timer.start(8000)
+        self._card_hide_timer.start(8000)
 
     def _hide_card(self):
         self.card.hide()
         self._card_mode = None
-        self.suggest_btn.set_active(False)
         self.replay_btn.set_active(False)
 
     # ── Button handlers ───────────────────────────────────────────────────────
@@ -696,23 +672,7 @@ class OverlayApp(QWidget):
             asyncio.create_task(send_command("trigger_listen"))
         # if processing or speaking, ignore click
 
-    def _on_suggest_clicked(self):
-        """Toggle suggestion feature ON (yellow) / OFF (white)."""
-        self._suggest_enabled = not self._suggest_enabled
-        self._update_suggest_btn_color()
-        if not self._suggest_enabled:
-            # If turning OFF, hide any open suggestion card
-            if self._card_mode == "suggestion" and self.card.isVisible():
-                self._hide_card()
-        # No backend call — it's a pure local display toggle
 
-    def _update_suggest_btn_color(self):
-        """Sync the suggestion button color to its enabled/disabled state."""
-        if self._suggest_enabled:
-            self.suggest_btn._enabled_icon_color = "#fbbf24"  # yellow
-        else:
-            self.suggest_btn._enabled_icon_color = "#e5e7eb"  # white/grey (looks off)
-        self.suggest_btn.update()
 
     def _on_replay_clicked(self):
         """Request the backend to replay the last spoken TTS."""
@@ -758,7 +718,9 @@ class OverlayApp(QWidget):
 
 async def websocket_client(overlay: OverlayApp):
     global active_websocket
-    uri = "ws://127.0.0.1:8000/ws"
+    import os
+    port = os.environ.get("BACKEND_PORT", "8000")
+    uri = f"ws://127.0.0.1:{port}/ws"
     while True:
         try:
             async with websockets.connect(uri) as ws:
@@ -769,7 +731,7 @@ async def websocket_client(overlay: OverlayApp):
                 # Fetch initial settings
                 try:
                     import urllib.request
-                    with urllib.request.urlopen("http://127.0.0.1:8000/api/settings") as response:
+                    with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/settings") as response:
                         settings_data = json.loads(response.read().decode())
                         overlay.update_settings_signal.emit(settings_data)
                 except Exception as e:

@@ -1816,5 +1816,11 @@
     "exe_name": "rdpclip.exe",
     "path": "C:\\Windows\\System32\\rdpclip.exe",
     "source": "process"
+  },
+  "pyinstaller": {
+    "name": "pyinstaller",
+    "exe_name": "pyinstaller.exe",
+    "path": "E:\\Nivin_Sync\\ACE\\Voice\\Voice_Controller_v1\\backend\\.venv\\Scripts\\pyinstaller.exe",
+    "source": "process"
   }
 }

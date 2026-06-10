@@ -11,6 +11,7 @@ export interface CommandEntry {
   source: "voice" | "text";
   duration_ms?: number;
   executed_at?: string;
+  routed_by_llm?: boolean;
 }
 
 interface CommandStore {
@@ -22,23 +23,32 @@ interface CommandStore {
   clear: () => void;
 }
 
-export const useCommandStore = create<CommandStore>((set) => ({
-  history: [],
-  pending: null,
+import { persist } from "zustand/middleware";
 
-  addEntry: (entry) =>
-    set((s) => {
-      if (s.history.some((e) => e.id === entry.id)) {
-        return { history: s.history.map((e) => (e.id === entry.id ? { ...e, ...entry } : e)) };
-      }
-      return { history: [entry, ...s.history].slice(0, 500) };
+export const useCommandStore = create<CommandStore>()(
+  persist(
+    (set) => ({
+      history: [],
+      pending: null,
+
+      addEntry: (entry) =>
+        set((s) => {
+          if (s.history.some((e) => e.id === entry.id)) {
+            return { history: s.history.map((e) => (e.id === entry.id ? { ...e, ...entry } : e)) };
+          }
+          return { history: [entry, ...s.history].slice(0, 500) };
+        }),
+
+      updateEntry: (id, patch) =>
+        set((s) => ({
+          history: s.history.map((e) => (e.id === id ? { ...e, ...patch } : e)),
+        })),
+
+      setPending: (text) => set({ pending: text }),
+      clear:      () => set({ history: [] }),
     }),
-
-  updateEntry: (id, patch) =>
-    set((s) => ({
-      history: s.history.map((e) => (e.id === id ? { ...e, ...patch } : e)),
-    })),
-
-  setPending: (text) => set({ pending: text }),
-  clear:      () => set({ history: [] }),
-}));
+    {
+      name: "command-history-storage",
+    }
+  )
+);

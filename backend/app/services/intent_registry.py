@@ -210,30 +210,10 @@ async def handle_browser_list_options(element: str = "", **_) -> str:
     try:
         # 1. Try semantic combobox
         combobox = page.get_by_role('combobox', name=re.compile(element, re.IGNORECASE))
-        if await combobox.count() > 0:
+        if await combobox.count() == 1:
             await combobox.first.click(force=True)
             return f"Opened {element} dropdown."
-            
-        # 2. Try finding a label and clicking it (often focuses the input) or finding the input next to it
-        label = page.locator(f"label:has-text('{element}')")
-        if await label.count() > 0:
-            for_attr = await label.first.get_attribute("for")
-            if for_attr:
-                target = page.locator(f"#{for_attr}")
-                if await target.count() > 0:
-                    await target.click(force=True)
-                    return f"Opened {element} dropdown via label."
-            # Click label as fallback
-            await label.first.click(force=True)
-            return f"Clicked label for {element}."
-
-        # 3. Fallback text search for placeholders or custom divs
-        loc = page.locator(f"text=/{element}/i").filter(has_not=page.locator("body, html, main, form"))
-        if await loc.count() > 0:
-            await loc.first.click(force=True)
-            return f"Clicked {element} to display options."
-            
-        # 4. Ultimate fallback to DOM Agent
+        # 2. Ultimate fallback to DOM Agent
         from automation.browser.dom_agent import DOMAgent
         agent = DOMAgent(page)
         res = await agent.execute_intent(f"click the {element} dropdown")
@@ -338,7 +318,7 @@ async def handle_browser_summarize_page(**_) -> str:
     from app.services.llm.llm_service import llm_service
     content = await BrowserController().extract_page_content()
     prompt = f"Please summarize the following webpage content:\n\n{content[:5000]}"
-    summary = await llm_service.generate_response(prompt)
+    summary = await llm_service.generate(prompt)
     return f"Summary:\n{summary}"
 
 async def handle_browser_full_screenshot(**_) -> str:

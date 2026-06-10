@@ -7,6 +7,7 @@ import { useCommandStore } from "@/store/commandStore";
 import { useSettingsStore } from "@/store/settingsStore";
 
 import { useRemoteMic } from "@/hooks/useRemoteMic";
+import { useWSStore } from "@/hooks/useWebSocket";
 
 const STATS = [
   { key: "voice",    icon: Mic,   label: "Voice",       color: "var(--foreground)" },
@@ -20,6 +21,7 @@ export function StatusBar() {
   const { history } = useCommandStore();
   const settings = useSettingsStore();
   const { isRecording, toggleRecording } = useRemoteMic();
+  const { connected } = useWSStore();
 
   const values: Record<string, string> = {
     voice:    pipelineState,
@@ -35,18 +37,20 @@ export function StatusBar() {
         <h3 style={{ fontSize: "0.8125rem", fontWeight: 600, color: "var(--foreground)", textTransform: "uppercase", letterSpacing: "0.06em" }}>System Status</h3>
         <button 
           onClick={toggleRecording}
+          disabled={!connected}
           style={{
             padding: "0.4rem 0.8rem",
             fontSize: "0.8rem",
             borderRadius: "0.5rem",
-            background: isRecording ? "rgba(239,68,68,0.15)" : "rgba(34,197,94,0.15)",
-            color: isRecording ? "#ef4444" : "#22c55e",
-            border: `1px solid ${isRecording ? "rgba(239,68,68,0.4)" : "rgba(34,197,94,0.4)"}`,
-            cursor: "pointer",
+            background: !connected ? "var(--secondary)" : isRecording ? "rgba(239,68,68,0.15)" : "rgba(34,197,94,0.15)",
+            color: !connected ? "var(--muted-foreground)" : isRecording ? "#ef4444" : "#22c55e",
+            border: `1px solid ${!connected ? "var(--border)" : isRecording ? "rgba(239,68,68,0.4)" : "rgba(34,197,94,0.4)"}`,
+            cursor: !connected ? "not-allowed" : "pointer",
             display: "flex",
             alignItems: "center",
             gap: "0.4rem",
-            transition: "all 0.2s"
+            transition: "all 0.2s",
+            opacity: !connected ? 0.6 : 1
           }}
         >
           <Mic style={{ width: "0.9rem", height: "0.9rem" }} />

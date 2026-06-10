@@ -62,10 +62,22 @@ npm run tauri:dev
 
 ### 6. Build Production .exe
 
-```bash
+First, package the Python backend into a standalone executable:
+
+```powershell
+cd backend
+.\.venv\Scripts\activate
+pyinstaller ace-backend.spec -y
+Copy-Item "dist\ace-backend.exe" -Destination "dist\ace-backend-x86_64-pc-windows-msvc.exe" -Force
+cd ..
+```
+
+Then, compile the Tauri frontend application:
+
+```powershell
 cd frontend
 npm run tauri:build
-# → Generates: src-tauri/target/release/ace-voice-controller.exe
+# → Generates: src-tauri/target/release/bundle/msi/
 ```
 
 ## Features

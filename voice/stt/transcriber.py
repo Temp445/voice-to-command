@@ -50,7 +50,7 @@ class Transcriber:
 
         segments, info = model.transcribe(
             audio_np,
-            beam_size=5,
+            beam_size=1,                  # Greedy decoding: massively reduces CPU processing time
             language="en",
             condition_on_previous_text=False,
             temperature=0.0,              # Deterministic — eliminates hallucinations on short phrases

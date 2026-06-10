@@ -6,7 +6,8 @@ import { Settings, Mic, Volume2, Globe, Shield, CheckCircle2, Eye, EyeOff, Bot, 
 import { Sidebar } from "@/components/layout/Sidebar";
 import { TopBar } from "@/components/layout/TopBar";
 import { useSettingsStore } from "@/store/settingsStore";
-import { api } from "@/lib/api";
+import { useWSStore } from "@/hooks/useWebSocket";
+import { api, getResolvedBaseUrl, resolvedBackendPort } from "@/lib/api";
 
 const card    = { background: "var(--card)", border: "1px solid var(--border)", borderRadius: "1rem", overflow: "hidden", boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)" };
 const hdr     = { padding: "1.25rem 1.5rem", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: "0.75rem", background: "rgba(255,255,255,0.02)" };
@@ -46,6 +47,7 @@ const TABS = [
 
 export default function SettingsPage() {
   const settings = useSettingsStore();
+  const { connected } = useWSStore();
   const [activeTab, setActiveTab] = useState("voice");
   const [saving,  setSaving]  = useState(false);
   const [saved,   setSaved]   = useState(false);
@@ -117,7 +119,8 @@ export default function SettingsPage() {
     if (!testTtsText.trim()) return;
     setTestingTts(true);
     try {
-      const response = await fetch("http://localhost:8000/api/voice/test-tts", {
+      const base = await getResolvedBaseUrl();
+      const response = await fetch(`${base}/voice/test-tts`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text: testTtsText, provider: settings.ttsProvider, piper_voice: settings.piperVoice }),
       });
@@ -148,7 +151,9 @@ export default function SettingsPage() {
       }
       mediaStreamRef.current = stream;
       
-      const wsUrl = window.location.protocol === "https:" ? "wss://" : "ws://" + window.location.host.split(":")[0] + ":8000/api/voice/ws-test-stt";
+      await getResolvedBaseUrl();
+      const host = window.location.hostname === "localhost" ? "127.0.0.1" : window.location.host.split(":")[0];
+      const wsUrl = (window.location.protocol === "https:" ? "wss://" : "ws://") + host + ":" + resolvedBackendPort + "/api/voice/ws-test-stt";
       const ws = new WebSocket(wsUrl);
       sttWsRef.current = ws;
       
@@ -636,17 +641,24 @@ export default function SettingsPage() {
 
             {/* Main Content Area */}
             <div style={{ flex: 1, minWidth: 0, paddingBottom: "4rem" }}>
-              <AnimatePresence mode="wait">
-                <motion.div
-                  key={activeTab}
-                  initial={{ opacity: 0, y: 15 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -15 }}
-                  transition={{ duration: 0.2, ease: "easeOut" }}
-                >
-                  {renderTabContent()}
-                </motion.div>
-              </AnimatePresence>
+              {!connected && (
+                <div style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", color: "#ef4444", padding: "1rem", borderRadius: "0.75rem", marginBottom: "1.5rem", display: "flex", alignItems: "center", gap: "0.75rem", fontWeight: 500, fontSize: "0.875rem" }}>
+                  Server is currently offline. Settings cannot be modified.
+                </div>
+              )}
+              <div style={{ opacity: !connected ? 0.5 : 1, pointerEvents: !connected ? "none" : "auto", transition: "all 0.2s" }}>
+                <AnimatePresence mode="wait">
+                  <motion.div
+                    key={activeTab}
+                    initial={{ opacity: 0, y: 15 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -15 }}
+                    transition={{ duration: 0.2, ease: "easeOut" }}
+                  >
+                    {renderTabContent()}
+                  </motion.div>
+                </AnimatePresence>
+              </div>
             </div>
 
           </div>

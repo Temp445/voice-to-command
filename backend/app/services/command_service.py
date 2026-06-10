@@ -310,7 +310,7 @@ class CommandService:
 
         res_dict = await self._execute_intent(intent_name, params, text, start)
         if locals().get("llm_routed", False):
-            res_dict["result"] = f"{res_dict.get('result', '')} [🤖 Routed by LLM]"
+            res_dict["routed_by_llm"] = True
         return res_dict
 
     async def _execute_intent(self, intent_name: str, params: dict, text: str, start: float) -> dict[str, Any]:
@@ -377,12 +377,27 @@ class CommandService:
                 except Exception as browser_e:
                     logger.debug(f"Browser fallback also failed: {browser_e}")
 
+            error_type = type(e).__name__
+            error_str = str(e)
+            
+            # User-friendly error translations
+            if "BrowserType.launch_persistent_context" in error_str or "locked" in error_str.lower():
+                user_msg = "The web browser failed to open because it is locked by another process. Please try again."
+            elif "object has no attribute" in error_str or "NoneType" in error_str:
+                user_msg = "I encountered a temporary software error while executing this. Please try again."
+            elif "net::ERR_" in error_str or "Timeout" in error_type:
+                user_msg = "Network connection failed or timed out while trying to reach the website."
+            elif "not found" in error_str.lower():
+                user_msg = "I couldn't find the requested application or element."
+            else:
+                user_msg = f"Sorry, I couldn't complete that action. ({error_type})"
+
             logger.error(f"Handler '{intent_name}' raised: {e}")
             return {
                 "intent": intent_name,
                 "parameters": params,
                 "status": "failed",
-                "result": str(e),
+                "result": user_msg,
                 "duration_ms": int((time.perf_counter() - start) * 1000),
             }
 
@@ -472,40 +487,7 @@ class CommandService:
             for i in self._intents
         ]
 
-    def get_suggestions(self, limit: int = 4) -> dict:
-        """Return context-aware suggestions based on the current domain."""
-        import random
-        
-        domain_intents = [i for i in self._intents if i.domain == self.current_domain and not i.is_fallback and i.examples]
-        global_intents = [i for i in self._intents if i.domain == "global" and not i.is_fallback and i.examples]
-        
-        suggestions = []
-        
-        # Pick 1 global intent example if available
-        if global_intents and random.random() > 0.3:
-            global_choice = random.choice(global_intents)
-            suggestions.append(random.choice(global_choice.examples))
-            
-        # Fill the rest with domain-specific intents
-        remaining = limit - len(suggestions)
-        if domain_intents and remaining > 0:
-            # Shuffle domain intents to get variety
-            sampled_intents = random.sample(domain_intents, min(remaining, len(domain_intents)))
-            for intent in sampled_intents:
-                suggestions.append(random.choice(intent.examples))
-                
-        # If we still need more, fill with any examples from domain intents
-        if len(suggestions) < limit and domain_intents:
-            all_domain_examples = [ex for i in domain_intents for ex in i.examples]
-            needed = limit - len(suggestions)
-            suggestions.extend(random.sample(all_domain_examples, min(needed, len(all_domain_examples))))
-            
-        random.shuffle(suggestions)
-        
-        return {
-            "domain": self.current_domain,
-            "suggestions": suggestions[:limit]
-        }
+
 
 
 # Singleton

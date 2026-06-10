@@ -108,10 +108,10 @@ class AudioCapture:
                         denoised_frames = []
                         # denoise_chunk yields (speech_prob, denoised_frame)
                         for _, frame in self._denoiser.denoise_chunk(chunk_np):
-                            denoised_frames.append(frame)
+                            denoised_frames.append(np.ravel(frame))
                             
                         if denoised_frames:
-                            raw = np.concatenate(denoised_frames).tobytes()
+                            raw = np.concatenate(denoised_frames).astype(np.int16).tobytes()
                     except Exception as e:
                         # Fallback to original raw audio if it fails
                         logger.error(f"RNNoise processing error: {e}")
@@ -147,10 +147,10 @@ class AudioCapture:
     def stop_recording_early(self) -> None:
         self._force_stop_recording = True
 
-    def get_speech_segment(self, silence_chunks: int = 20, timeout: float = 10.0) -> bytes:
+    def get_speech_segment(self, silence_chunks: int = 10, timeout: float = 10.0) -> bytes:
         """
         Collect speech until `silence_chunks` consecutive silent frames (each ~100ms).
-        Default 12 chunks = ~1.2s of trailing silence — enough to know the user stopped
+        Default 10 chunks = ~1.0s of trailing silence — enough to know the user stopped
         speaking without making them wait 3+ seconds.
         Returns concatenated audio bytes.
         """
@@ -174,7 +174,7 @@ class AudioCapture:
 
         return b"".join(frames)
 
-    def stream_speech_segment(self, silence_chunks: int = 20, timeout: float = 10.0, yield_interval_chunks: int = 15, max_initial_silence_chunks: int = 20):
+    def stream_speech_segment(self, silence_chunks: int = 10, timeout: float = 10.0, yield_interval_chunks: int = 15, max_initial_silence_chunks: int = 20):
         """
         Generator that yields (audio_bytes, is_final) periodically as speech is collected.
         yield_interval_chunks of 15 ~ 450ms between partial yields.

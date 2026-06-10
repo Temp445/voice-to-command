@@ -224,26 +224,7 @@ async def lifespan(app: FastAPI):
             asyncio.run_coroutine_threadsafe(
                 ws_manager.broadcast("command_executed", result), loop
             )
-            # Auto-suggest next commands if the command succeeded
-            if result.get("status") == "success":
-                try:
-                    from app.services.command_service import command_service
-                    import random
-                    suggs = command_service.get_suggestions(limit=4)
-                    items = suggs.get("suggestions", [])
-                    if items:
-                        # Format as: 'Try: "go to login" · "click sign up" · "scroll down"'
-                        quoted = [f'"{s}"' for s in items[:3]]
-                        hint = "Try: " + " · ".join(quoted)
-                        asyncio.run_coroutine_threadsafe(
-                            ws_manager.broadcast("transcript", {
-                                "text": f"__suggestion__{hint}",
-                                "is_final": True
-                            }), loop
-                        )
-                except Exception:
-                    pass
-
+            # Removed suggestions block
         pipeline = VoicePipeline(
             on_state_change=on_state_change,
             on_transcript=on_transcript,
@@ -307,23 +288,6 @@ app.include_router(llm_router.router,    prefix="/api/llm",        tags=["AI Ass
 
 # ─── Test Endpoints (Dev only) ───────────────────────────────────────────────
 
-@app.get("/api/test/suggestion", tags=["Dev"])
-async def test_suggestion_broadcast():
-    """Broadcast a mock suggestion to all connected websocket clients (including overlay)."""
-    from app.services.command_service import command_service
-    import random
-    suggs = command_service.get_suggestions(limit=4)
-    items = suggs.get("suggestions", [])
-    if items:
-        quoted = [f'"{s}"' for s in items[:3]]
-        hint = "Try: " + " · ".join(quoted)
-    else:
-        hint = 'Try: "open chrome" · "close window" · "volume up"'
-    await ws_manager.broadcast("transcript", {
-        "text": f"__suggestion__{hint}",
-        "is_final": True
-    })
-    return {"status": "broadcast_sent", "suggestion": hint, "domain": suggs.get("domain")}
 
 @app.get("/api/test/replay", tags=["Dev"])
 async def test_replay_broadcast():

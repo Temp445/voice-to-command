@@ -47,23 +47,11 @@ async def execute_command(request: Request, body: ExecuteCommandRequest, backgro
         "intent": entry.intent,
         "status": entry.status,
         "result": entry.result,
-        "source": entry.source,
+        "source": body.source,
+        "routed_by_llm": result.get("routed_by_llm", False)
     })
 
-    # If successful, auto-broadcast suggestions for the overlay
-    if result.get("status") == "success":
-        try:
-            suggs = command_service.get_suggestions(limit=4)
-            items = suggs.get("suggestions", [])
-            if items:
-                quoted = [f'"{s}"' for s in items[:3]]
-                hint = "Try: " + " · ".join(quoted)
-                await ws_manager.broadcast("transcript", {
-                    "text": f"__suggestion__{hint}",
-                    "is_final": True
-                })
-        except Exception as e:
-            logger.warning(f"Failed to broadcast suggestions: {e}")
+
 
     # Speak the response using the TTS system (if triggered via text/console)
     if body.source == "text" and result.get("status") == "success" and result.get("result"):
@@ -115,8 +103,3 @@ async def clear_history(db: AsyncSession = Depends(get_db)):
 async def list_intents():
     """Return all registered command intents."""
     return command_service.list_intents()
-
-@router.get("/suggestions")
-async def get_suggestions(limit: int = 4):
-    """Return context-aware command suggestions."""
-    return command_service.get_suggestions(limit)

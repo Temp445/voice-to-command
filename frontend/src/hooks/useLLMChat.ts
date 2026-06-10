@@ -1,5 +1,7 @@
 import { useState, useRef, useCallback } from "react";
 
+import { useChatStore } from "@/store/chatStore";
+
 export interface ChatMessage {
   id: string;
   role: "user" | "assistant";
@@ -8,7 +10,7 @@ export interface ChatMessage {
 }
 
 export function useLLMChat() {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const { messages, setMessages, clear } = useChatStore();
   const [isTyping, setIsTyping] = useState(false);
   
   // This uses the browser's native fetch API to read the stream token by token
@@ -69,7 +71,7 @@ export function useLLMChat() {
   }, []);
 
   const clearChat = useCallback(async () => {
-    setMessages([]);
+    clear();
     try {
       const BASE = typeof window !== 'undefined' && window.location.hostname.includes("devtunnels.ms") 
         ? window.location.origin.replace("-3000", "-8000") + "/api"

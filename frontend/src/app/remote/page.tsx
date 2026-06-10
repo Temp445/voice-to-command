@@ -85,7 +85,7 @@ export default function MobileRemote() {
     
     setStatus("Sending...");
     try {
-      const res = await api.executeCommand(commandText, "mobile-remote");
+      const res: any = await api.executeCommand(commandText, "mobile-remote");
       if (res.status !== "success") {
         useToastStore.getState().toast({
           type: "error",

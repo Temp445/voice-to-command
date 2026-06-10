@@ -251,7 +251,8 @@ Page Context (Headings):
 {headings}
 
 Note: The user may be interacting with the Acesoftcloud CRM. Keep CRM terminology (Leads, Opportunities, Tickets, Invoices, Follow-ups) in mind when selecting elements.
-IMPORTANT: The user might refer to elements that do not have explicit text labels (e.g., "start date" or "end date" might just be calendar icons with type="date" next to each other). Use the 'type' attribute and the element's position (smaller Y coordinate = higher up, adjacent elements = date ranges) to infer their purpose.
+IMPORTANT: If the user intends to interact with a form field (like "select product", "enter name"), strongly prioritize elements whose context indicates they are inside a form or creation panel (e.g., context containing 'Create', 'New', 'Add') over elements located in data tables or lists.
+The user might refer to elements that do not have explicit text labels (e.g., "start date" or "end date" might just be calendar icons with type="date" next to each other). Use the 'type' attribute and the element's position (smaller Y coordinate = higher up, adjacent elements = date ranges) to infer their purpose.
 
 CRITICAL: Do NOT guess or make loose matches if the context contradicts the user's intent. For example, if the user asks for a specific date like "May 20", but the Page Context indicates the current month is "June", do NOT select the "20" button. 
 If the user specifies a serial number (e.g., "S.No 2", "row 2"), you MUST match the exact number at the beginning of the row's context, and do NOT confuse it with an Order ID or Document Number that happens to contain that digit (like "ORD-0002").
@@ -555,7 +556,7 @@ Reply ONLY with a comma-separated list of integer IDs (e.g., '45' or '26, 27'). 
             return raw_result
             
         try:
-            prompt = f"User command: '{intent}'. System result: '{raw_result}'. Rewrite this into a very short, conversational confirmation as a helpful voice assistant (e.g. 'I've signed you in', 'I clicked the button for you', 'I typed John into the name field'). Keep it under 1 short sentence."
+            prompt = f"User command: '{intent}'. System result: '{raw_result}'. Rewrite this into a very short, conversational confirmation as a helpful voice assistant (e.g. 'Signed you in', 'Opened the dropdown', 'Typed John into the name field'). Do NOT use the phrase 'for you' or sound overly eager. Keep it under 1 short sentence."
             friendly_result = await llm_service.chat(prompt)
             return friendly_result.strip()
         except Exception as e:
