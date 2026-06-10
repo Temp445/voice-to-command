@@ -38,7 +38,7 @@ class AudioCapture:
         # Level 3 is too aggressive and causes legitimate speech frames to be dropped,
         # leading to garbled or truncated audio sent to Whisper.
         noise_cancelling = getattr(settings, 'stt_noise_cancellation', True)
-        vad_aggressiveness = 3
+        vad_aggressiveness = 2
         
         self._vad = webrtcvad.Vad(vad_aggressiveness)
         self._audio = pyaudio.PyAudio()
@@ -47,16 +47,11 @@ class AudioCapture:
         self._thread: threading.Thread | None = None
         self._noise_cancelling = noise_cancelling
         
-        if self._noise_cancelling:
-            try:
-                from pyrnnoise import RNNoise
-                self._denoiser = RNNoise(sample_rate=SAMPLE_RATE)
-                logger.info("✅ RNNoise initialized for noise cancellation")
-            except Exception as e:
-                logger.warning(f"⚠️ Failed to init RNNoise: {e}")
-                self._denoiser = None
-        else:
-            self._denoiser = None
+        # NOTE: pyrnnoise is disabled. Its dependency chain (pyrnnoise → audiolab → av.option)
+        # is permanently broken: av.option was removed in PyAV 14+, and audiolab also relies
+        # on Codec.canonical_name which doesn't exist in older PyAV versions.
+        # Noise cancellation is skipped; WebRTC VAD still filters non-speech frames adequately.
+        self._denoiser = None
         self._force_stop_recording = False
 
     def start(self) -> None:

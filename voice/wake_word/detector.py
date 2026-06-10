@@ -60,9 +60,15 @@ class WakeWordDetector:
         else:
             logger.info(f"Loading OpenWakeWord model for: '{self.wake_word}' (using '{model_name}')")
         
-        # We explicitly omit openwakeword.utils.download_models() because it attempts to
+        # We explicitly omit openwakeword.utils.download_models() without arguments because it attempts to
         # download ALL models (30+ files) which frequently causes HuggingFace connection timeouts.
-        # The OWWModel constructor will automatically download just the requested model.
+        # Instead, we download just the specific model we need.
+        try:
+            from openwakeword.utils import download_models
+            download_models(model_names=[f"{model_name}_v0.1"])
+        except Exception as e:
+            logger.warning(f"Could not download model {model_name}: {e}")
+            
         return OWWModel(wakeword_models=[model_name], inference_framework="onnx")
 
     def start(self) -> None:

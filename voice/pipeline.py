@@ -130,6 +130,10 @@ class VoicePipeline:
             asyncio.run_coroutine_threadsafe(_cancel_and_stop(), self._loop)
         if hasattr(self, "_loop_thread") and self._loop_thread:
             self._loop_thread.join(timeout=3)
+        try:
+            pygame.mixer.quit()
+        except Exception:
+            pass
         logger.info("🎙️ Voice pipeline stopped")
 
     # ─── State ───────────────────────────────────────────────────────────────

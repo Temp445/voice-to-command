@@ -1822,5 +1822,611 @@
     "exe_name": "pyinstaller.exe",
     "path": "E:\\Nivin_Sync\\ACE\\Voice\\Voice_Controller_v1\\backend\\.venv\\Scripts\\pyinstaller.exe",
     "source": "process"
+  },
+  "livecaptions": {
+    "name": "LiveCaptions",
+    "exe_name": "LiveCaptions.exe",
+    "path": "C:\\WINDOWS\\system32\\LiveCaptions.exe",
+    "source": "start_menu"
+  },
+  "voiceaccess": {
+    "name": "VoiceAccess",
+    "exe_name": "voiceaccess.exe",
+    "path": "C:\\WINDOWS\\system32\\voiceaccess.exe",
+    "source": "start_menu"
+  },
+  "antigravity ide": {
+    "name": "Antigravity IDE",
+    "exe_name": "Antigravity IDE.exe",
+    "path": "C:\\Users\\nithi\\AppData\\Local\\Programs\\Antigravity IDE\\Antigravity IDE.exe",
+    "source": "start_menu"
+  },
+  "windows media player legacy": {
+    "name": "Windows Media Player Legacy",
+    "exe_name": "wmplayer.exe",
+    "path": "C:\\Program Files (x86)\\Windows Media Player\\wmplayer.exe",
+    "source": "start_menu"
+  },
+  "geforce experience": {
+    "name": "GeForce Experience",
+    "exe_name": "NVIDIA GeForce Experience.exe",
+    "path": "C:\\Program Files\\NVIDIA Corporation\\NVIDIA GeForce Experience\\NVIDIA GeForce Experience.exe",
+    "source": "start_menu"
+  },
+  "developer command prompt for vs": {
+    "name": "Developer Command Prompt for VS",
+    "exe_name": "cmd.exe",
+    "path": "C:\\Windows\\System32\\cmd.exe",
+    "source": "start_menu"
+  },
+  "developer powershell for vs": {
+    "name": "Developer PowerShell for VS",
+    "exe_name": "powershell.exe",
+    "path": "C:\\Windows\\SysWOW64\\WindowsPowerShell\\v1.0\\powershell.exe",
+    "source": "start_menu"
+  },
+  "x64 native tools command prompt for vs": {
+    "name": "x64 Native Tools Command Prompt for VS",
+    "exe_name": "cmd.exe",
+    "path": "C:\\Windows\\System32\\cmd.exe",
+    "source": "start_menu"
+  },
+  "x64_x86 cross tools command prompt for vs": {
+    "name": "x64_x86 Cross Tools Command Prompt for VS",
+    "exe_name": "cmd.exe",
+    "path": "C:\\Windows\\System32\\cmd.exe",
+    "source": "start_menu"
+  },
+  "x86 native tools command prompt for vs": {
+    "name": "x86 Native Tools Command Prompt for VS",
+    "exe_name": "cmd.exe",
+    "path": "C:\\Windows\\System32\\cmd.exe",
+    "source": "start_menu"
+  },
+  "x86_x64 cross tools command prompt for vs": {
+    "name": "x86_x64 Cross Tools Command Prompt for VS",
+    "exe_name": "cmd.exe",
+    "path": "C:\\Windows\\System32\\cmd.exe",
+    "source": "start_menu"
+  },
+  "nithin": {
+    "name": "Nithin - Chrome",
+    "exe_name": "chrome.exe",
+    "path": "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+    "source": "desktop"
+  },
+  "user experience improvement program service": {
+    "name": "User Experience Improvement Program Service",
+    "exe_name": "MSG.exe",
+    "path": "C:\\Program Files\\Acer\\User Experience Improvement Program Service\\Framework\\MSG.exe",
+    "source": "registry"
+  },
+  "care center service": {
+    "name": "Care Center Service",
+    "exe_name": "FUB.exe",
+    "path": "C:\\Program Files (x86)\\Acer\\Care Center\\FUB.exe",
+    "source": "registry"
+  },
+  "nvidia frameview sdk": {
+    "name": "NVIDIA FrameView SDK 1.3.8107.31782123",
+    "exe_name": "nvfvsdksvc_x64.exe",
+    "path": "C:\\Program Files\\NVIDIA Corporation\\FrameViewSDK\\nvfvsdksvc_x64.exe",
+    "source": "registry"
+  },
+  "nvidia shield streaming": {
+    "name": "NVIDIA SHIELD Streaming",
+    "exe_name": "nvstreamer.exe",
+    "path": "C:\\Program Files\\NVIDIA Corporation\\NvStreamSrv\\nvstreamer.exe",
+    "source": "registry"
+  },
+  "nvidia install application": {
+    "name": "NVIDIA Install Application",
+    "exe_name": "SETUP.EXE",
+    "path": "C:\\Program Files\\NVIDIA Corporation\\Installer2\\InstallerCore\\SETUP.EXE",
+    "source": "registry"
+  },
+  "nvidia container": {
+    "name": "NVIDIA Container",
+    "exe_name": "nvcontainer.exe",
+    "path": "C:\\Program Files\\NVIDIA Corporation\\NvContainer\\nvcontainer.exe",
+    "source": "registry"
+  },
+  "nvidia nodejs": {
+    "name": "NVIDIA NodeJS",
+    "exe_name": "nvnodejslauncher.exe",
+    "path": "C:\\Program Files (x86)\\NVIDIA Corporation\\NvNode\\nvnodejslauncher.exe",
+    "source": "registry"
+  },
+  "nvidia shadowplay": {
+    "name": "NVIDIA ShadowPlay 3.26.0.160",
+    "exe_name": "nvsphelper64.exe",
+    "path": "C:\\Program Files\\NVIDIA Corporation\\ShadowPlay\\nvsphelper64.exe",
+    "source": "registry"
+  },
+  "copilot": {
+    "name": "Copilot",
+    "exe_name": "mscopilot.exe",
+    "path": "C:\\Program Files (x86)\\Microsoft\\Copilot\\Application\\mscopilot.exe",
+    "source": "registry"
+  },
+  "webadvisor by mcafee": {
+    "name": "WebAdvisor by McAfee",
+    "exe_name": "mcse.exe",
+    "path": "C:\\Program Files\\McAfee\\WebAdvisor\\mcse.exe",
+    "source": "registry"
+  },
+  "acerccagent": {
+    "name": "AcerCCAgent",
+    "exe_name": "Launcher.exe",
+    "path": "C:\\Program Files\\AcerCCAgent\\Launcher.exe",
+    "source": "program_files"
+  },
+  "acerdiagent": {
+    "name": "AcerDIAgent",
+    "exe_name": "Launcher.exe",
+    "path": "C:\\Program Files\\AcerDIAgent\\Launcher.exe",
+    "source": "program_files"
+  },
+  "acerqaagent": {
+    "name": "AcerQAAgent",
+    "exe_name": "Launcher.exe",
+    "path": "C:\\Program Files\\AcerQAAgent\\Launcher.exe",
+    "source": "program_files"
+  },
+  "nvdisplay.container": {
+    "name": "NVDisplay.Container",
+    "exe_name": "NVDisplay.Container.exe",
+    "path": "C:\\Windows\\System32\\DriverStore\\FileRepository\\nvaci.inf_amd64_7698bd69a8365768\\Display.NvContainer\\NVDisplay.Container.exe",
+    "source": "process"
+  },
+  "kapsservice": {
+    "name": "KAPSService",
+    "exe_name": "KAPSService.exe",
+    "path": "C:\\Windows\\System32\\drivers\\RivetNetworks\\Killer\\KAPSService.exe",
+    "source": "process"
+  },
+  "securityhealthsystray": {
+    "name": "SecurityHealthSystray",
+    "exe_name": "SecurityHealthSystray.exe",
+    "path": "C:\\Windows\\System32\\SecurityHealthSystray.exe",
+    "source": "process"
+  },
+  "storpsctl": {
+    "name": "StorPSCTL",
+    "exe_name": "StorPSCTL.exe",
+    "path": "C:\\Program Files\\Acer\\StorPSCTL\\StorPSCTL.exe",
+    "source": "process"
+  },
+  "intelcphdcpsvc": {
+    "name": "IntelCpHDCPSvc",
+    "exe_name": "IntelCpHDCPSvc.exe",
+    "path": "C:\\Windows\\System32\\DriverStore\\FileRepository\\iigd_dch.inf_amd64_89db58ae936de7ec\\IntelCpHDCPSvc.exe",
+    "source": "process"
+  },
+  "aqauserps": {
+    "name": "AQAUserPS",
+    "exe_name": "AQAUserPS.exe",
+    "path": "C:\\Program Files\\AcerQAAgent\\AQAUserPS.exe",
+    "source": "process"
+  },
+  "accstd": {
+    "name": "ACCStd",
+    "exe_name": "ACCStd.exe",
+    "path": "C:\\Program Files (x86)\\Acer\\Care Center\\ACCStd.exe",
+    "source": "process"
+  },
+  "appactions": {
+    "name": "AppActions",
+    "exe_name": "AppActions.exe",
+    "path": "C:\\Windows\\SystemApps\\MicrosoftWindows.Client.CBS_cw5n1h2txyewy\\AppActions.exe",
+    "source": "process"
+  },
+  "searchhost": {
+    "name": "SearchHost",
+    "exe_name": "SearchHost.exe",
+    "path": "C:\\Windows\\SystemApps\\MicrosoftWindows.Client.CBS_cw5n1h2txyewy\\SearchHost.exe",
+    "source": "process"
+  },
+  "aaadsvc": {
+    "name": "AAADSvc",
+    "exe_name": "AAADSvc.exe",
+    "path": "C:\\Windows\\System32\\DriverStore\\FileRepository\\acerartaimmxdrivercomponent.inf_amd64_263409b7d8b5c3fa\\AAADSvc.exe",
+    "source": "process"
+  },
+  "acercentralservice": {
+    "name": "AcerCentralService",
+    "exe_name": "AcerCentralService.exe",
+    "path": "C:\\Windows\\System32\\DriverStore\\FileRepository\\predatorservice.inf_amd64_c634eb8e856fb962\\AcerCentralService.exe",
+    "source": "process"
+  },
+  "artaimmxservice": {
+    "name": "ARTAimmxService",
+    "exe_name": "ARTAimmxService.exe",
+    "path": "C:\\Windows\\System32\\DriverStore\\FileRepository\\acerartaimmxdrivercomponent.inf_amd64_263409b7d8b5c3fa\\ARTAimmxService.exe",
+    "source": "process"
+  },
+  "adesv2svc": {
+    "name": "ADESv2Svc",
+    "exe_name": "ADESv2Svc.exe",
+    "path": "C:\\Windows\\System32\\DriverStore\\FileRepository\\acerdeviceenablingservicecomponent.inf_amd64_2cdf5cd411dbbf8e\\ADESv2Svc.exe",
+    "source": "process"
+  },
+  "accsvc": {
+    "name": "ACCSvc",
+    "exe_name": "ACCSvc.exe",
+    "path": "C:\\Program Files (x86)\\Acer\\Care Center\\ACCSvc.exe",
+    "source": "process"
+  },
+  "acerlightingservice": {
+    "name": "AcerLightingService",
+    "exe_name": "AcerLightingService.exe",
+    "path": "C:\\Windows\\System32\\DriverStore\\FileRepository\\predatorservice.inf_amd64_c634eb8e856fb962\\AcerLightingService.exe",
+    "source": "process"
+  },
+  "acerpixyservice": {
+    "name": "AcerPixyService",
+    "exe_name": "AcerPixyService.exe",
+    "path": "C:\\Windows\\System32\\DriverStore\\FileRepository\\acerartaimmxdrivercomponent.inf_amd64_263409b7d8b5c3fa\\AcerPixyService.exe",
+    "source": "process"
+  },
+  "acerservicewrapper": {
+    "name": "AcerServiceWrapper",
+    "exe_name": "AcerServiceWrapper.exe",
+    "path": "C:\\Windows\\System32\\DriverStore\\FileRepository\\acerservicecomponent.inf_amd64_1c7965d8acb49f4b\\AcerServiceWrapper.exe",
+    "source": "process"
+  },
+  "acergaicameraservice": {
+    "name": "AcerGAICameraService",
+    "exe_name": "AcerGAICameraService.exe",
+    "path": "C:\\Windows\\System32\\DriverStore\\FileRepository\\acergaicameracomponent.inf_amd64_96e61d1a348ad182\\AcerGAICameraService.exe",
+    "source": "process"
+  },
+  "acersystemcentralservice": {
+    "name": "AcerSystemCentralService",
+    "exe_name": "AcerSystemCentralService.exe",
+    "path": "C:\\Windows\\System32\\DriverStore\\FileRepository\\sysmonitorservice.inf_amd64_9a721f842c75068a\\x64\\AcerSystemCentralService.exe",
+    "source": "process"
+  },
+  "dtsapo4service": {
+    "name": "DtsApo4Service",
+    "exe_name": "DtsApo4Service.exe",
+    "path": "C:\\Windows\\System32\\DTS\\PC\\APO4x\\DtsApo4Service.exe",
+    "source": "process"
+  },
+  "intelaudioservice": {
+    "name": "IntelAudioService",
+    "exe_name": "IntelAudioService.exe",
+    "path": "C:\\Windows\\System32\\DriverStore\\FileRepository\\intcoed.inf_amd64_33284f5d2f7b1562\\AS\\IAS\\IntelAudioService.exe",
+    "source": "process"
+  },
+  "oneapp.igcc.winservice": {
+    "name": "OneApp.IGCC.WinService",
+    "exe_name": "OneApp.IGCC.WinService.exe",
+    "path": "C:\\Windows\\System32\\DriverStore\\FileRepository\\igcc_dch.inf_amd64_64b0f9d7dd157b51\\OneApp.IGCC.WinService.exe",
+    "source": "process"
+  },
+  "servicehost": {
+    "name": "servicehost",
+    "exe_name": "servicehost.exe",
+    "path": "C:\\Program Files\\McAfee\\WebAdvisor\\servicehost.exe",
+    "source": "process"
+  },
+  "killeranalyticsservice": {
+    "name": "KillerAnalyticsService",
+    "exe_name": "KillerAnalyticsService.exe",
+    "path": "C:\\Windows\\System32\\drivers\\RivetNetworks\\Killer\\KillerAnalyticsService.exe",
+    "source": "process"
+  },
+  "rstmwservice": {
+    "name": "RstMwService",
+    "exe_name": "RstMwService.exe",
+    "path": "C:\\Windows\\System32\\DriverStore\\FileRepository\\iastorvd.inf_amd64_346bd04e375689ec\\RstMwService.exe",
+    "source": "process"
+  },
+  "mpdefendercoreservice": {
+    "name": "MpDefenderCoreService",
+    "exe_name": "MpDefenderCoreService.exe",
+    "path": "C:\\ProgramData\\Microsoft\\Windows Defender\\Platform\\4.18.26040.7-0\\MpDefenderCoreService.exe",
+    "source": "process"
+  },
+  "ipfsvc": {
+    "name": "ipfsvc",
+    "exe_name": "ipfsvc.exe",
+    "path": "C:\\Windows\\System32\\DriverStore\\FileRepository\\dtt_sw.inf_amd64_d6f52e3fdecf287d\\ipfsvc.exe",
+    "source": "process"
+  },
+  "thunderboltservice": {
+    "name": "ThunderboltService",
+    "exe_name": "ThunderboltService.exe",
+    "path": "C:\\Windows\\ThunderboltService.exe",
+    "source": "process"
+  },
+  "rtkauduservice64": {
+    "name": "RtkAudUService64",
+    "exe_name": "RtkAudUService64.exe",
+    "path": "C:\\Windows\\System32\\DriverStore\\FileRepository\\realtekservice.inf_amd64_b751f9ef4da58448\\RtkAudUService64.exe",
+    "source": "process"
+  },
+  "tbtp2pshortcutservice": {
+    "name": "TbtP2pShortcutService",
+    "exe_name": "TbtP2pShortcutService.exe",
+    "path": "C:\\Windows\\TbtP2pShortcutService.exe",
+    "source": "process"
+  },
+  "jhi_service": {
+    "name": "jhi_service",
+    "exe_name": "jhi_service.exe",
+    "path": "C:\\Windows\\System32\\DriverStore\\FileRepository\\dal.inf_amd64_af50fdb80983f7bc\\jhi_service.exe",
+    "source": "process"
+  },
+  "wmiregistrationservice": {
+    "name": "WMIRegistrationService",
+    "exe_name": "WMIRegistrationService.exe",
+    "path": "C:\\Windows\\System32\\DriverStore\\FileRepository\\mewmiprov.inf_amd64_06c43e1ee675eae7\\WMIRegistrationService.exe",
+    "source": "process"
+  },
+  "msmpeng": {
+    "name": "MsMpEng",
+    "exe_name": "MsMpEng.exe",
+    "path": "C:\\ProgramData\\Microsoft\\Windows Defender\\Platform\\4.18.26040.7-0\\MsMpEng.exe",
+    "source": "process"
+  },
+  "ipf_uf": {
+    "name": "ipf_uf",
+    "exe_name": "ipf_uf.exe",
+    "path": "C:\\Windows\\System32\\DriverStore\\FileRepository\\ipf_cpu.inf_amd64_7218f3b363a821fe\\ipf_uf.exe",
+    "source": "process"
+  },
+  "aceragentservice": {
+    "name": "AcerAgentService",
+    "exe_name": "AcerAgentService.exe",
+    "path": "C:\\Windows\\System32\\DriverStore\\FileRepository\\predatorservice.inf_amd64_c634eb8e856fb962\\AcerAgentService.exe",
+    "source": "process"
+  },
+  "acerservice": {
+    "name": "AcerService",
+    "exe_name": "AcerService.exe",
+    "path": "C:\\Windows\\System32\\DriverStore\\FileRepository\\acerservicecomponent.inf_amd64_1c7965d8acb49f4b\\AcerService.exe",
+    "source": "process"
+  },
+  "killernetworkservice": {
+    "name": "KillerNetworkService",
+    "exe_name": "KillerNetworkService.exe",
+    "path": "C:\\Windows\\System32\\drivers\\RivetNetworks\\Killer\\KillerNetworkService.exe",
+    "source": "process"
+  },
+  "logi_lamparray_service": {
+    "name": "logi_lamparray_service",
+    "exe_name": "logi_lamparray_service.exe",
+    "path": "C:\\Windows\\System32\\DriverStore\\FileRepository\\logi_lamparray_usb.inf_amd64_cdf3ca3c77d5f267\\logi_lamparray_service.exe",
+    "source": "process"
+  },
+  "kndbwmservice": {
+    "name": "KNDBWMService",
+    "exe_name": "KNDBWMService.exe",
+    "path": "C:\\Windows\\System32\\drivers\\RivetNetworks\\Killer\\KNDBWMService.exe",
+    "source": "process"
+  },
+  "kndbwm": {
+    "name": "KNDBWM",
+    "exe_name": "KNDBWM.exe",
+    "path": "C:\\Windows\\System32\\drivers\\RivetNetworks\\Killer\\KNDBWM.exe",
+    "source": "process"
+  },
+  "kaps": {
+    "name": "KAPS",
+    "exe_name": "KAPS.exe",
+    "path": "C:\\Windows\\System32\\drivers\\RivetNetworks\\Killer\\KAPS.exe",
+    "source": "process"
+  },
+  "unsecapp": {
+    "name": "unsecapp",
+    "exe_name": "unsecapp.exe",
+    "path": "C:\\Windows\\System32\\wbem\\unsecapp.exe",
+    "source": "process"
+  },
+  "acerhardwareservice": {
+    "name": "AcerHardwareService",
+    "exe_name": "AcerHardwareService.exe",
+    "path": "C:\\Windows\\System32\\DriverStore\\FileRepository\\predatorservice.inf_amd64_c634eb8e856fb962\\AcerHardwareService.exe",
+    "source": "process"
+  },
+  "acersysmonitorservice": {
+    "name": "AcerSysMonitorService",
+    "exe_name": "AcerSysMonitorService.exe",
+    "path": "C:\\Windows\\System32\\DriverStore\\FileRepository\\sysmonitorservice.inf_amd64_9a721f842c75068a\\x64\\AcerSysMonitorService.exe",
+    "source": "process"
+  },
+  "mscopilot": {
+    "name": "mscopilot",
+    "exe_name": "mscopilot.exe",
+    "path": "C:\\Program Files (x86)\\Microsoft\\Copilot\\Application\\mscopilot.exe",
+    "source": "process"
+  },
+  "ngciso": {
+    "name": "NgcIso",
+    "exe_name": "NgcIso.exe",
+    "path": "C:\\Windows\\System32\\NgcIso.exe",
+    "source": "process"
+  },
+  "wlanext": {
+    "name": "wlanext",
+    "exe_name": "wlanext.exe",
+    "path": "C:\\Windows\\System32\\wlanext.exe",
+    "source": "process"
+  },
+  "shellhost": {
+    "name": "ShellHost",
+    "exe_name": "ShellHost.exe",
+    "path": "C:\\Windows\\System32\\ShellHost.exe",
+    "source": "process"
+  },
+  "aggregatorhost": {
+    "name": "AggregatorHost",
+    "exe_name": "AggregatorHost.exe",
+    "path": "C:\\Windows\\System32\\AggregatorHost.exe",
+    "source": "process"
+  },
+  "nissrv": {
+    "name": "NisSrv",
+    "exe_name": "NisSrv.exe",
+    "path": "C:\\ProgramData\\Microsoft\\Windows Defender\\Platform\\4.18.26040.7-0\\NisSrv.exe",
+    "source": "process"
+  },
+  "acerregistrationbackgroundtask": {
+    "name": "AcerRegistrationBackGroundTask",
+    "exe_name": "AcerRegistrationBackGroundTask.exe",
+    "path": "C:\\Program Files\\WindowsApps\\acerincorporated.acerregistration_2.0.3044.0_x64__48frkmn4z8aw4\\DesktopApp\\AcerRegistrationBackGroundTask.exe",
+    "source": "process"
+  },
+  "ubtservice": {
+    "name": "UBTService",
+    "exe_name": "UBTService.exe",
+    "path": "C:\\Program Files\\Acer\\User Experience Improvement Program Service\\Framework\\UBTService.exe",
+    "source": "process"
+  },
+  "camusage": {
+    "name": "CamUsage",
+    "exe_name": "CamUsage.exe",
+    "path": "C:\\Program Files\\Acer\\User Experience Improvement Program Service\\Framework\\CamUsage.exe",
+    "source": "process"
+  },
+  "micusage": {
+    "name": "MicUsage",
+    "exe_name": "MicUsage.exe",
+    "path": "C:\\Program Files\\Acer\\User Experience Improvement Program Service\\Framework\\MicUsage.exe",
+    "source": "process"
+  },
+  "openrgb": {
+    "name": "OpenRGB",
+    "exe_name": "OpenRGB.exe",
+    "path": "C:\\Windows\\System32\\DriverStore\\FileRepository\\predatorservice.inf_amd64_c634eb8e856fb962\\OpenRGB.exe",
+    "source": "process"
+  },
+  "predatorsense": {
+    "name": "PredatorSense",
+    "exe_name": "PredatorSense.exe",
+    "path": "C:\\Program Files\\WindowsApps\\ulictekinc.predatorsensefornotebook_5.0.1463.0_x64__nt9dgb7efx6bt\\app\\PredatorSense.exe",
+    "source": "process"
+  },
+  "crossdeviceresume": {
+    "name": "CrossDeviceResume",
+    "exe_name": "CrossDeviceResume.exe",
+    "path": "C:\\Windows\\SystemApps\\MicrosoftWindows.Client.CBS_cw5n1h2txyewy\\CrossDeviceResume.exe",
+    "source": "process"
+  },
+  "uihost": {
+    "name": "uihost",
+    "exe_name": "uihost.exe",
+    "path": "C:\\Program Files\\McAfee\\WebAdvisor\\uihost.exe",
+    "source": "process"
+  },
+  "acersyshardwareservice": {
+    "name": "AcerSysHardwareService",
+    "exe_name": "AcerSysHardwareService.exe",
+    "path": "C:\\Windows\\System32\\DriverStore\\FileRepository\\sysmonitorservice.inf_amd64_9a721f842c75068a\\x64\\AcerSysHardwareService.exe",
+    "source": "process"
+  },
+  "adesv2bw": {
+    "name": "ADESv2BW",
+    "exe_name": "ADESv2BW.exe",
+    "path": "C:\\Windows\\System32\\DriverStore\\FileRepository\\acerdeviceenablingservicecomponent.inf_amd64_2cdf5cd411dbbf8e\\ADESv2BW.exe",
+    "source": "process"
+  },
+  "acergaicameraw": {
+    "name": "AcerGAICameraW",
+    "exe_name": "AcerGAICameraW.exe",
+    "path": "C:\\Windows\\System32\\DriverStore\\FileRepository\\acergaicameracomponent.inf_amd64_96e61d1a348ad182\\AcerGAICameraW.exe",
+    "source": "process"
+  },
+  "crossdeviceservice": {
+    "name": "CrossDeviceService",
+    "exe_name": "CrossDeviceService.exe",
+    "path": "C:\\Program Files\\WindowsApps\\MicrosoftWindows.CrossDevice_1.26032.83.0_x64__cw5n1h2txyewy\\CrossDeviceService.exe",
+    "source": "process"
+  },
+  "accuserps": {
+    "name": "ACCUserPS",
+    "exe_name": "ACCUserPS.exe",
+    "path": "C:\\Program Files\\AcerCCAgent\\ACCUserPS.exe",
+    "source": "process"
+  },
+  "ipf_helper": {
+    "name": "ipf_helper",
+    "exe_name": "ipf_helper.exe",
+    "path": "C:\\Windows\\System32\\DriverStore\\FileRepository\\ipf_cpu.inf_amd64_7218f3b363a821fe\\ipf_helper.exe",
+    "source": "process"
+  },
+  "widgets": {
+    "name": "Widgets",
+    "exe_name": "Widgets.exe",
+    "path": "C:\\Program Files\\WindowsApps\\MicrosoftWindows.Client.WebExperience_526.11701.50.0_x64__cw5n1h2txyewy\\Dashboard\\Widgets.exe",
+    "source": "process"
+  },
+  "backgroundtransferhost": {
+    "name": "BackgroundTransferHost",
+    "exe_name": "BackgroundTransferHost.exe",
+    "path": "C:\\Windows\\System32\\BackgroundTransferHost.exe",
+    "source": "process"
+  },
+  "mpcmdrun": {
+    "name": "MpCmdRun",
+    "exe_name": "MpCmdRun.exe",
+    "path": "C:\\ProgramData\\Microsoft\\Windows Defender\\Platform\\4.18.26040.7-0\\MpCmdRun.exe",
+    "source": "process"
+  },
+  "widgetservice": {
+    "name": "WidgetService",
+    "exe_name": "WidgetService.exe",
+    "path": "C:\\Program Files\\WindowsApps\\Microsoft.WidgetsPlatformRuntime_1.6.19.0_x64__8wekyb3d8bbwe\\WidgetService\\WidgetService.exe",
+    "source": "process"
+  },
+  "wsl": {
+    "name": "wsl",
+    "exe_name": "wsl.exe",
+    "path": "C:\\Windows\\System32\\wsl.exe",
+    "source": "process"
+  },
+  "storedesktopextension": {
+    "name": "StoreDesktopExtension",
+    "exe_name": "StoreDesktopExtension.exe",
+    "path": "C:\\Program Files\\WindowsApps\\Microsoft.WindowsStore_22604.1401.8.0_x64__8wekyb3d8bbwe\\StoreDesktopExtension.exe",
+    "source": "process"
+  },
+  "mousocoreworker": {
+    "name": "MoUsoCoreWorker",
+    "exe_name": "MoUsoCoreWorker.exe",
+    "path": "C:\\Windows\\UUS\\amd64\\MoUsoCoreWorker.exe",
+    "source": "process"
+  },
+  "appmonitorplugin": {
+    "name": "AppMonitorPlugIn",
+    "exe_name": "AppMonitorPlugIn.exe",
+    "path": "C:\\Program Files\\Acer\\User Experience Improvement Program Service\\Plugin\\AppMonitor\\AppMonitorPlugIn.exe",
+    "source": "process"
+  },
+  "mscopilot_proxy": {
+    "name": "mscopilot_proxy",
+    "exe_name": "mscopilot_proxy.exe",
+    "path": "C:\\Program Files (x86)\\Microsoft\\Copilot\\Application\\mscopilot_proxy.exe",
+    "source": "process"
+  },
+  "ace-backend": {
+    "name": "ace-backend",
+    "exe_name": "ace-backend.exe",
+    "path": "C:\\New Folder\\ace-backend.exe",
+    "source": "process"
+  },
+  "rtkuwp": {
+    "name": "RtkUWP",
+    "exe_name": "RtkUWP.exe",
+    "path": "C:\\Program Files\\WindowsApps\\realteksemiconductorcorp.realtekaudiocontrol_1.51.325.0_x64__dt26b99r8h8gj\\RtkUWP.exe",
+    "source": "process"
+  },
+  "acerpurifiedvoiceapp": {
+    "name": "AcerPurifiedVoiceApp",
+    "exe_name": "AcerPurifiedVoiceApp.exe",
+    "path": "C:\\Program Files\\WindowsApps\\acerincorporated.acerpurifiedvoiceconsoler_2.0.9.0_x64__48frkmn4z8aw4\\AcerPurifiedVoiceApp.exe",
+    "source": "process"
   }
 }

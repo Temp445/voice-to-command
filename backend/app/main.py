@@ -252,6 +252,7 @@ async def lifespan(app: FastAPI):
     if getattr(app.state, "overlay_process", None):
         try:
             app.state.overlay_process.terminate()
+            app.state.overlay_process.wait(timeout=3)
         except:
             pass
 

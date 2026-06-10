@@ -9,6 +9,7 @@ datas_list = [
 ]
 datas_list += collect_data_files('openwakeword')
 datas_list += collect_data_files('av')
+datas_list += collect_data_files('piper')
 
 a = Analysis(
     ['run.py'],

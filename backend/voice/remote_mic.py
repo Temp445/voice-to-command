@@ -46,11 +46,11 @@ def _local_mic_loop():
         return
         
     try:
-        stream = p.open(format=pyaudio.paInt16, channels=1, rate=16000, input=True, frames_per_buffer=1280)
+        stream = p.open(format=pyaudio.paInt16, channels=1, rate=16000, input=True, frames_per_buffer=1440)
         logger.info("🎤 Local microphone broadcast started.")
         while _local_mic_running:
-            if stream.get_read_available() >= 1280:
-                raw = stream.read(1280, exception_on_overflow=False)
+            if stream.get_read_available() >= 1440:
+                raw = stream.read(1440, exception_on_overflow=False)
                 put_chunk(raw)
             else:
                 time.sleep(0.01)
