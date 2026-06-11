@@ -9,6 +9,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field
 
 import sys
+import os
 
 if getattr(sys, 'frozen', False):
     # Running in PyInstaller bundle
@@ -18,6 +19,16 @@ else:
     _ROOT = Path(__file__).resolve().parent.parent.parent  # Voice_Controller_v1/
 
 _ENV_FILE = _ROOT / ".env" if (_ROOT / ".env").exists() else Path(".env")
+
+# --- AppData Directory for Production Files ---
+if sys.platform == "win32":
+    appdata_base = os.getenv("LOCALAPPDATA") or os.getenv("APPDATA") or str(Path.home())
+    _APPDATA_DIR = Path(appdata_base) / "ACEVoiceController"
+else:
+    _APPDATA_DIR = Path.home() / ".config" / "ACEVoiceController"
+
+_APPDATA_DIR.mkdir(parents=True, exist_ok=True)
+(_APPDATA_DIR / "logs").mkdir(parents=True, exist_ok=True)
 
 
 class Settings(BaseSettings):
@@ -45,7 +56,7 @@ class Settings(BaseSettings):
     supabase_publishable_key: str = ""
 
     # --- Database (Supabase PostgreSQL) ---
-    database_url: str = "sqlite+aiosqlite:///./ace.db"
+    database_url: str = f"sqlite+aiosqlite:///{_APPDATA_DIR.as_posix()}/ace.db"
 
     # --- Voice ---
     wake_word: str = "alexa"  # Must match OWW model: hey_jarvis, alexa, hey_mycroft, hey_rhasspy
@@ -65,7 +76,7 @@ class Settings(BaseSettings):
 
     # --- Logging ---
     log_level: str = "INFO"
-    log_file: str = "logs/ace.log"
+    log_file: str = str(_APPDATA_DIR / "logs" / "ace.log")
 
     # --- CRM Integration ---
     crm_url: str = "https://crm.acesoftcloud.in/"

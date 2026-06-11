@@ -21,7 +21,16 @@ except ImportError:
     WATCHFILES_AVAILABLE = False
     logger.warning("watchfiles not installed. FileIndexer will not update in real-time.")
 
-DB_PATH = Path(__file__).resolve().parent.parent.parent / "file_cache.db"
+import sys
+# --- AppData Directory for Production Files ---
+if sys.platform == "win32":
+    appdata_base = os.getenv("LOCALAPPDATA") or os.getenv("APPDATA") or str(Path.home())
+    _APPDATA_DIR = Path(appdata_base) / "ACEVoiceController"
+else:
+    _APPDATA_DIR = Path.home() / ".config" / "ACEVoiceController"
+
+_APPDATA_DIR.mkdir(parents=True, exist_ok=True)
+DB_PATH = _APPDATA_DIR / "file_cache.db"
 
 # Exclude heavy, system, or hidden directories to speed up scanning
 EXCLUDED_DIRS = {

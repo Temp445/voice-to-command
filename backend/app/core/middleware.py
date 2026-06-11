@@ -19,8 +19,14 @@ def register_middleware(app: FastAPI) -> None:
     # CORS — allow Tauri webview origin
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["tauri://localhost", "http://localhost:3000", "http://127.0.0.1:3000", "https://hl41p943-3000.inc1.devtunnels.ms"],
-        allow_credentials=True,
+        allow_origins=[
+            "tauri://localhost", 
+            "https://tauri.localhost", 
+            "http://tauri.localhost", 
+            "http://localhost:3000", 
+            "http://127.0.0.1:3000", 
+            "https://hl41p943-3000.inc1.devtunnels.ms"
+        ],        allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
     )

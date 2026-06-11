@@ -2434,5 +2434,11 @@
     "exe_name": "build-script-build.exe",
     "path": "E:\\Nivin_Sync\\ACE\\Voice\\Voice_Controller_v1\\frontend\\src-tauri\\target\\release\\build\\ace-voice-controller-10bcd8620a028e67\\build-script-build.exe",
     "source": "process"
+  },
+  "lockapp": {
+    "name": "LockApp",
+    "exe_name": "LockApp.exe",
+    "path": "C:\\Windows\\SystemApps\\Microsoft.LockApp_cw5n1h2txyewy\\LockApp.exe",
+    "source": "process"
   }
 }
