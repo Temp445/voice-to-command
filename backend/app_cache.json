@@ -2428,5 +2428,11 @@
     "exe_name": "AcerPurifiedVoiceApp.exe",
     "path": "C:\\Program Files\\WindowsApps\\acerincorporated.acerpurifiedvoiceconsoler_2.0.9.0_x64__48frkmn4z8aw4\\AcerPurifiedVoiceApp.exe",
     "source": "process"
+  },
+  "build-script-build": {
+    "name": "build-script-build",
+    "exe_name": "build-script-build.exe",
+    "path": "E:\\Nivin_Sync\\ACE\\Voice\\Voice_Controller_v1\\frontend\\src-tauri\\target\\release\\build\\ace-voice-controller-10bcd8620a028e67\\build-script-build.exe",
+    "source": "process"
   }
 }

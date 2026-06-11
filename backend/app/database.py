@@ -12,7 +12,10 @@ engine = create_async_engine(
     settings.database_url,
     echo=settings.debug,
     future=True,
-    connect_args={"check_same_thread": False} if "sqlite" in settings.database_url else {},
+    connect_args={
+        "timeout": 15,
+        "check_same_thread": False,
+    } if "sqlite" in settings.database_url else {}
 )
 
 AsyncSessionLocal = async_sessionmaker(
@@ -43,30 +46,6 @@ async def get_db() -> AsyncSession:
 
 
 async def init_db() -> None:
-    """Create all tables on startup (local SQLite)."""
+    """Create all tables on startup (PostgreSQL/Supabase)."""
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-        
-        # Migration: add active_mode_timeout if it doesn't exist
-        try:
-            from sqlalchemy import text
-            await conn.execute(text("ALTER TABLE settings ADD COLUMN active_mode_timeout INTEGER DEFAULT 120"))
-        except Exception:
-            pass  # Column likely already exists
-            
-        # Migration: add require_wake_word_always if it doesn't exist
-        try:
-            await conn.execute(text("ALTER TABLE settings ADD COLUMN require_wake_word_always BOOLEAN DEFAULT 1"))
-        except Exception:
-            pass
-
-        # Migration: add shortcuts
-        try:
-            await conn.execute(text("ALTER TABLE settings ADD COLUMN overlay_shortcut VARCHAR(50) DEFAULT 'Alt+A'"))
-        except Exception:
-            pass
-
-        try:
-            await conn.execute(text("ALTER TABLE settings ADD COLUMN listen_shortcut VARCHAR(50) DEFAULT 'Alt+S'"))
-        except Exception:
-            pass

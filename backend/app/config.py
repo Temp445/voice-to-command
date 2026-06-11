@@ -42,11 +42,10 @@ class Settings(BaseSettings):
 
     # --- Supabase ---
     supabase_url: str = ""
-    supabase_anon_key: str = ""
-    supabase_service_role_key: str = ""
+    supabase_publishable_key: str = ""
 
-    # --- Database (local SQLite fallback) ---
-    database_url: str = "sqlite+aiosqlite:///./ace_local.db"
+    # --- Database (Supabase PostgreSQL) ---
+    database_url: str = "sqlite+aiosqlite:///./ace.db"
 
     # --- Voice ---
     wake_word: str = "alexa"  # Must match OWW model: hey_jarvis, alexa, hey_mycroft, hey_rhasspy

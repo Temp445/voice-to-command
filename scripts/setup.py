@@ -114,7 +114,7 @@ def main():
     print("\n\n✅ Setup complete!")
     print("=" * 45)
     print("\nNext steps:")
-    print("  1️⃣  Edit .env → add your SUPABASE_URL + SUPABASE_ANON_KEY")
+    print("  1️⃣  Edit .env → add your SUPABASE_URL + SUPABASE_PUBLISHABLE_KEY")
     print("  2️⃣  Run Supabase SQL: database/supabase_schema.sql")
     print("  3️⃣  Start backend:  cd backend && python -m app.main")
     print("  4️⃣  Start frontend: cd frontend && npm install")
