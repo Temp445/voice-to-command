@@ -8,6 +8,7 @@ interface SettingsStore {
   sttNoiseCancellation: boolean;
   whisperModel: "tiny" | "base" | "small" | "medium" | "large-v2" | "large-v3";
   activeModeTimeout: number;
+  requireWakeWordAlways: boolean;
   ttsProvider: "piper" | "gtts";
   piperVoice: string;
   theme: "dark" | "light";
@@ -16,6 +17,8 @@ interface SettingsStore {
   minimizeToTray: boolean;
   browserAnimationsEnabled: boolean;
   enableDesktopOverlay: boolean;
+  overlayShortcut: string;
+  listenShortcut: string;
   
   // CRM Integration
   crmUrl: string;
@@ -48,6 +51,7 @@ export const useSettingsStore = create<SettingsStore>()(
       sttNoiseCancellation: true,
       whisperModel:   "base",
       activeModeTimeout: 120,
+      requireWakeWordAlways: true,
       ttsProvider:    "piper",
       piperVoice:     "en_US-lessac-medium",
       theme:          "dark",
@@ -56,6 +60,8 @@ export const useSettingsStore = create<SettingsStore>()(
       minimizeToTray: true,
       browserAnimationsEnabled: true,
       enableDesktopOverlay: true,
+      overlayShortcut: "Alt+A",
+      listenShortcut: "Alt+S",
 
       // CRM Defaults
       crmUrl:         "https://crm.acesoftcloud.in/",

@@ -1,6 +1,7 @@
 "use client";
 
-import { Bell, Search, User, Wifi, WifiOff } from "lucide-react";
+import Link from "next/link";
+import { User, Wifi, WifiOff } from "lucide-react";
 import { useVoiceStore } from "@/store/voiceStore";
 import { useWebSocket } from "@/hooks/useWebSocket";
 
@@ -23,21 +24,8 @@ export function TopBar() {
       borderBottom: "1px solid var(--border)", background: "var(--background)", flexShrink: 0,
       userSelect: "none"
     }}>
-      {/* Search */}
-      <div style={{ flex: 1, maxWidth: "28rem", position: "relative" }}>
-        <Search style={{ position: "absolute", left: "0.75rem", top: "50%", transform: "translateY(-50%)", width: "0.875rem", height: "0.875rem", color: "var(--muted-foreground)" }} />
-        <input
-          type="text"
-          placeholder="Search commands..."
-          style={{
-            width: "100%", background: "var(--secondary)", border: "1px solid var(--border)", borderRadius: "0.5rem",
-            padding: "0.4rem 1rem 0.4rem 2.25rem", fontSize: "0.8125rem", color: "var(--foreground)",
-            outline: "none", transition: "border 0.15s",
-          }}
-          onFocus={(e) => { (e.target as HTMLInputElement).style.borderColor = "var(--ring)"; }}
-          onBlur={(e) => { (e.target as HTMLInputElement).style.borderColor = "var(--border)"; }}
-        />
-      </div>
+      {/* Empty flex spacer to push the right items to the edge */}
+      <div style={{ flex: 1 }} />
 
       <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginLeft: "auto" }}>
         {/* WS status */}
@@ -57,23 +45,15 @@ export function TopBar() {
           {pipelineState}
         </div>
 
-        {/* Bell */}
-        <button
-          style={{ width: "2rem", height: "2rem", borderRadius: "0.375rem", display: "flex", alignItems: "center", justifyContent: "center", background: "transparent", border: "1px solid transparent", color: "var(--muted-foreground)", cursor: "pointer", position: "relative", transition: "all 0.15s" }}
-          onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "var(--secondary)"; (e.currentTarget as HTMLButtonElement).style.borderColor = "var(--border)"; (e.currentTarget as HTMLButtonElement).style.color = "var(--foreground)"; }}
-          onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "transparent"; (e.currentTarget as HTMLButtonElement).style.borderColor = "transparent"; (e.currentTarget as HTMLButtonElement).style.color = "var(--muted-foreground)"; }}
-        >
-          <Bell style={{ width: "0.875rem", height: "0.875rem" }} />
-          <span style={{ position: "absolute", top: "0.3rem", right: "0.3rem", width: "0.35rem", height: "0.35rem", background: "var(--foreground)", borderRadius: "9999px" }} />
-        </button>
+
 
         {/* Avatar */}
-        <button style={{
+        <Link href="/profile" style={{
           width: "2rem", height: "2rem", borderRadius: "9999px", background: "var(--foreground)",
-          color: "var(--background)", display: "flex", alignItems: "center", justifyContent: "center", border: "none", cursor: "pointer",
+          color: "var(--background)", display: "flex", alignItems: "center", justifyContent: "center", border: "none", cursor: "pointer", textDecoration: "none"
         }}>
           <User style={{ width: "0.875rem", height: "0.875rem" }} />
-        </button>
+        </Link>
       </div>
     </header>
   );

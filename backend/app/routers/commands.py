@@ -23,6 +23,15 @@ async def execute_command(request: Request, body: ExecuteCommandRequest, backgro
     """Parse and execute a text or voice command."""
     logger.info(f"Executing command [{body.source}]: '{body.text}'")
 
+    pipeline = getattr(request.app.state, "pipeline", None)
+    if pipeline:
+        from voice.pipeline import PipelineState
+        pipeline._set_state(PipelineState.PROCESSING)
+        
+    if body.source == "text":
+        logger.info(f"Broadcasting text transcript to overlay: {body.text}")
+        await ws_manager.broadcast("transcript", {"text": body.text, "is_final": True})
+
     result = await command_service.parse_and_execute(body.text)
 
     entry = CommandHistory(
@@ -54,18 +63,21 @@ async def execute_command(request: Request, body: ExecuteCommandRequest, backgro
 
 
     # Speak the response using the TTS system (if triggered via text/console)
-    if body.source == "text" and result.get("status") == "success" and result.get("result"):
-        try:
-            pipeline = request.app.state.pipeline
-            # Run the speaking in background so we return the HTTP response immediately
-            import asyncio
-            async def _speak_and_reset():
-                from voice.pipeline import PipelineState
-                await pipeline._speak(result.get("result"))
+    if pipeline:
+        from voice.pipeline import PipelineState
+        if body.source == "text" and result.get("status") == "success" and result.get("result"):
+            try:
+                # Run the speaking in background so we return the HTTP response immediately
+                import asyncio
+                async def _speak_and_reset():
+                    await pipeline._speak(result.get("result"))
+                    pipeline._set_state(PipelineState.IDLE)
+                asyncio.create_task(_speak_and_reset())
+            except Exception as e:
+                logger.warning(f"Failed to play TTS for text command: {e}")
                 pipeline._set_state(PipelineState.IDLE)
-            asyncio.create_task(_speak_and_reset())
-        except Exception as e:
-            logger.warning(f"Failed to play TTS for text command: {e}")
+        else:
+            pipeline._set_state(PipelineState.IDLE)
 
     return entry
 

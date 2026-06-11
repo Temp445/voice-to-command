@@ -41,7 +41,7 @@ export default function ConsolePage() {
           {/* Header */}
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
             <div>
-              <h1 style={{ fontSize: "1.875rem", fontWeight: 800, color: "var(--foreground)", letterSpacing: "-0.02em", display: "flex", alignItems: "center", gap: "0.625rem" }}>
+              <h1 style={{ fontSize: "1.75rem", fontWeight: 600, color: "var(--foreground)", letterSpacing: "-0.02em", display: "flex", alignItems: "center", gap: "0.625rem" }}>
                 <Terminal style={{ width: "1.5rem", height: "1.5rem" }} /> Command Console
               </h1>
               <p style={{ color: "var(--muted-foreground)", fontSize: "0.875rem", marginTop: "0.25rem" }}>Type commands to control your desktop</p>

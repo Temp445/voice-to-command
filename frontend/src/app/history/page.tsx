@@ -5,6 +5,7 @@ import { Sidebar } from "@/components/layout/Sidebar";
 import { TopBar } from "@/components/layout/TopBar";
 import { History, Trash2, Calendar, Clock, Loader2, AlertCircle } from "lucide-react";
 import { motion } from "framer-motion";
+import { getResolvedBaseUrl } from "@/lib/api";
 
 interface CommandHistoryEntry {
   id: string;
@@ -29,7 +30,8 @@ export default function HistoryPage() {
     setLoading(true);
     try {
       // Fetch up to 100 items for the history view
-      const res = await fetch("http://127.0.0.1:8000/api/commands/history?limit=100");
+      const base = await getResolvedBaseUrl();
+      const res = await fetch(`${base}/commands/history?limit=100`);
       if (res.ok) {
         const data = await res.json();
         setHistory(data);
@@ -47,7 +49,8 @@ export default function HistoryPage() {
 
   const deleteItem = async (id: string) => {
     try {
-      const res = await fetch(`http://127.0.0.1:8000/api/commands/history/${id}`, {
+      const base = await getResolvedBaseUrl();
+      const res = await fetch(`${base}/commands/history/${id}`, {
         method: "DELETE"
       });
       if (res.ok) {
@@ -64,7 +67,8 @@ export default function HistoryPage() {
 
   const confirmClearHistory = async () => {
     try {
-      const res = await fetch(`http://127.0.0.1:8000/api/commands/history`, {
+      const base = await getResolvedBaseUrl();
+      const res = await fetch(`${base}/commands/history`, {
         method: "DELETE"
       });
       if (res.ok) {
@@ -151,7 +155,7 @@ export default function HistoryPage() {
           {/* Header */}
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
             <div>
-              <h1 style={{ fontSize: "1.875rem", fontWeight: 800, color: "var(--foreground)", letterSpacing: "-0.02em", display: "flex", alignItems: "center", gap: "0.625rem" }}>
+              <h1 style={{ fontSize: "1.75rem", fontWeight: 600, color: "var(--foreground)", letterSpacing: "-0.02em", display: "flex", alignItems: "center", gap: "0.625rem" }}>
                 <History style={{ width: "1.5rem", height: "1.5rem" }} /> Command History
               </h1>
               <p style={{ color: "var(--muted-foreground)", fontSize: "0.875rem", marginTop: "0.25rem" }}>Review your past voice and text commands</p>

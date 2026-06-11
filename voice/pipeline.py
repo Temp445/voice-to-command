@@ -296,6 +296,10 @@ class VoicePipeline:
                     response_text = result.get("result", "Done")
                     await self._speak(response_text)
                     
+                    if getattr(settings, 'require_wake_word_always', False):
+                        logger.info("Require wake word always is enabled. Exiting Active Mode after single command.")
+                        break
+
                     # Reset deadline after execution to give another full window
                     deadline = time.time() + active_timeout
                 

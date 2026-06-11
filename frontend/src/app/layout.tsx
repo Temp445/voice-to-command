@@ -2,6 +2,9 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { ThemeProvider } from "@/components/layout/ThemeProvider";
 import { Toaster } from "@/components/ui/toaster";
+import { ShortcutManager } from "@/components/layout/ShortcutManager";
+import { WebSocketManager } from "@/hooks/useWebSocket";
+import { AuthWrapper } from "@/components/auth/AuthWrapper";
 
 export const metadata: Metadata = {
   title: "ACE Voice Controller",
@@ -12,8 +15,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className="dark" suppressHydrationWarning>
       <body className="font-sans antialiased">
-        <ThemeProvider>{children}</ThemeProvider>
-        <Toaster />
+        <AuthWrapper>
+          <ThemeProvider>{children}</ThemeProvider>
+          <Toaster />
+          <ShortcutManager />
+          <WebSocketManager />
+        </AuthWrapper>
       </body>
     </html>
   );

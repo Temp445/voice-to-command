@@ -73,6 +73,7 @@ class UserSettings(Base):
     stt_noise_cancellation: Mapped[bool] = mapped_column(Boolean, default=True)
     whisper_model: Mapped[str] = mapped_column(String(20), default="base")
     active_mode_timeout: Mapped[int] = mapped_column(default=120)
+    require_wake_word_always: Mapped[bool] = mapped_column(Boolean, default=True)
 
     # TTS
     tts_provider: Mapped[str] = mapped_column(String(20), default="piper")
@@ -89,6 +90,8 @@ class UserSettings(Base):
     minimize_to_tray: Mapped[bool] = mapped_column(Boolean, default=True)
     browser_animations_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     enable_desktop_overlay: Mapped[bool] = mapped_column(Boolean, default=True)
+    overlay_shortcut: Mapped[str] = mapped_column(String(50), default="Alt+A")
+    listen_shortcut: Mapped[str] = mapped_column(String(50), default="Alt+S")
 
     # CRM Integration
     crm_url: Mapped[str] = mapped_column(String(500), default="https://crm.acesoftcloud.in/")

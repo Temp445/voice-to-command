@@ -4,6 +4,8 @@ import { useEffect, useRef, useCallback } from "react";
 import { useVoiceStore } from "@/store/voiceStore";
 import { useCommandStore } from "@/store/commandStore";
 import { create } from "zustand";
+import { useSettingsStore } from "@/store/settingsStore";
+import { getBackendWsUrl } from "@/lib/api";
 
 interface WSStore { 
   connected: boolean; 
@@ -18,25 +20,16 @@ export const useWSStore = create<WSStore>((set) => ({
   setSendBytes: (fn) => set({ sendBytes: fn }),
 }));
 
-export function useWebSocket() {
+export function WebSocketManager() {
   const wsRef = useRef<WebSocket | null>(null);
   const { setPipelineState, setTranscript, setWakeWordActive } = useVoiceStore();
   const { addEntry, updateEntry } = useCommandStore();
     const { connected, setConnected, setSendBytes } = useWSStore();
 
-    const connect = useCallback(() => {
+    const connect = useCallback(async () => {
       if (wsRef.current?.readyState === WebSocket.OPEN) return;
 
-      let wsUrl = "ws://127.0.0.1:8000/ws";
-      
-      if (process.env.NEXT_PUBLIC_API_URL) {
-        const baseUrl = process.env.NEXT_PUBLIC_API_URL.replace(/\/api$/, "");
-        wsUrl = baseUrl.replace(/^http/, "ws") + "/ws";
-      } else if (typeof window !== "undefined" && window.location.hostname.includes("devtunnels.ms")) {
-        const isHttps = window.location.protocol === "https:";
-        const host = window.location.host.replace("-3000", "-8000");
-        wsUrl = `${isHttps ? "wss" : "ws"}://${host}/ws`;
-      }
+      const wsUrl = await getBackendWsUrl();
 
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
@@ -77,7 +70,14 @@ export function useWebSocket() {
             setTimeout(() => setWakeWordActive(false), 2000);
             break;
           case "settings_updated":
-            // Handled by settings store
+            const updatePayload: any = {};
+            if (data.enable_desktop_overlay !== undefined) updatePayload.enableDesktopOverlay = data.enable_desktop_overlay;
+            if (data.wake_word !== undefined) updatePayload.wakeWord = data.wake_word;
+            if (data.tts_provider !== undefined) updatePayload.ttsProvider = data.tts_provider;
+            
+            if (Object.keys(updatePayload).length > 0) {
+              useSettingsStore.getState().update(updatePayload);
+            }
             break;
         }
       } catch {}
@@ -103,5 +103,10 @@ export function useWebSocket() {
     };
   }, [connect]);
 
+  return null;
+}
+
+export function useWebSocket() {
+  const { connected } = useWSStore();
   return { connected };
 }

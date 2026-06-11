@@ -21,8 +21,8 @@ export default function DashboardPage() {
 
             {/* Header */}
             <div>
-              <h1 style={{ fontSize: "2.25rem", fontWeight: 800, color: "var(--foreground)", letterSpacing: "-0.02em" }}>
-                ACE Dashboard
+              <h1 style={{ fontSize: "1.75rem", fontWeight: 600, color: "var(--foreground)", letterSpacing: "-0.02em" }}>
+               Dashboard
               </h1>
               <p style={{ color: "var(--muted-foreground)", marginTop: "0.375rem", fontSize: "0.9375rem" }}>
                 Your AI-powered desktop assistant — always listening, always ready.

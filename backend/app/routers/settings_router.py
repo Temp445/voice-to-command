@@ -33,6 +33,7 @@ def _build_response(s: UserSettings) -> SettingsResponse:
         stt_provider=s.stt_provider,
         stt_noise_cancellation=s.stt_noise_cancellation,
         active_mode_timeout=s.active_mode_timeout,
+        require_wake_word_always=s.require_wake_word_always,
         tts_provider=s.tts_provider,
         piper_voice=s.piper_voice,
         theme=s.theme,
@@ -41,6 +42,8 @@ def _build_response(s: UserSettings) -> SettingsResponse:
         minimize_to_tray=s.minimize_to_tray,
         browser_animations_enabled=s.browser_animations_enabled,
         enable_desktop_overlay=s.enable_desktop_overlay,
+        overlay_shortcut=s.overlay_shortcut,
+        listen_shortcut=s.listen_shortcut,
         gtts_configured=bool(s.gtts_api_key_encrypted),
         crm_url=s.crm_url,
         crm_keywords=s.crm_keywords,
@@ -120,7 +123,11 @@ async def update_settings(body: SettingsUpdate, request: Request, db: AsyncSessi
                 request.app.state.overlay_process = None
 
     # Broadcast voice pipeline hot-reload signal
-    await ws_manager.broadcast("settings_updated", {"tts_provider": s.tts_provider, "wake_word": s.wake_word})
+    await ws_manager.broadcast("settings_updated", {
+        "tts_provider": s.tts_provider, 
+        "wake_word": s.wake_word,
+        "enable_desktop_overlay": s.enable_desktop_overlay
+    })
 
     return _build_response(s)
 

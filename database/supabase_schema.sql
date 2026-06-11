@@ -10,6 +10,7 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE TABLE IF NOT EXISTS public.users (
     id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     email           TEXT UNIQUE NOT NULL,
+    hashed_password TEXT NOT NULL,
     display_name    TEXT,
     is_active       BOOLEAN DEFAULT TRUE,
     supabase_uid    UUID REFERENCES auth.users(id) ON DELETE SET NULL,
@@ -19,26 +20,42 @@ CREATE TABLE IF NOT EXISTS public.users (
 
 -- ─── Settings ────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS public.settings (
-    id                      UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id                 UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
-    wake_word               TEXT DEFAULT 'alexa',
-    whisper_model           TEXT DEFAULT 'base',
-    tts_provider            TEXT DEFAULT 'piper',
-    gtts_api_key_encrypted  TEXT,
-    piper_voice             TEXT DEFAULT 'en_US-lessac-medium',
-    theme                   TEXT DEFAULT 'dark',
-    sidebar_collapsed       BOOLEAN DEFAULT FALSE,
-    browser_type            TEXT DEFAULT 'chromium',
-    startup_on_boot         BOOLEAN DEFAULT TRUE,
-    minimize_to_tray        BOOLEAN DEFAULT TRUE,
-    updated_at              TIMESTAMPTZ DEFAULT NOW(),
+    id                          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id                     UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+    wake_word                   TEXT DEFAULT 'alexa',
+    stt_provider                TEXT DEFAULT 'whisper',
+    stt_noise_cancellation      BOOLEAN DEFAULT TRUE,
+    whisper_model               TEXT DEFAULT 'base',
+    active_mode_timeout         INTEGER DEFAULT 120,
+    require_wake_word_always    BOOLEAN DEFAULT TRUE,
+    tts_provider                TEXT DEFAULT 'piper',
+    gtts_api_key_encrypted      TEXT,
+    piper_voice                 TEXT DEFAULT 'en_US-lessac-medium',
+    theme                       TEXT DEFAULT 'dark',
+    sidebar_collapsed           BOOLEAN DEFAULT FALSE,
+    browser_type                TEXT DEFAULT 'chromium',
+    startup_on_boot             BOOLEAN DEFAULT TRUE,
+    minimize_to_tray            BOOLEAN DEFAULT TRUE,
+    browser_animations_enabled  BOOLEAN DEFAULT TRUE,
+    enable_desktop_overlay      BOOLEAN DEFAULT TRUE,
+    overlay_shortcut            TEXT DEFAULT 'Alt+A',
+    listen_shortcut             TEXT DEFAULT 'Alt+S',
+    crm_url                     TEXT DEFAULT 'https://crm.acesoftcloud.in/',
+    crm_keywords                TEXT DEFAULT 'open my crm, open crm, open ace crm',
+    llm_enabled                 BOOLEAN DEFAULT FALSE,
+    llm_provider                TEXT DEFAULT 'groq',
+    llm_model                   TEXT DEFAULT 'llama-3.3-70b-versatile',
+    llm_api_key_encrypted       TEXT,
+    llm_temperature             FLOAT DEFAULT 0.7,
+    llm_mode                    TEXT DEFAULT 'fallback',
+    updated_at                  TIMESTAMPTZ DEFAULT NOW(),
     UNIQUE(user_id)
 );
 
 -- ─── Command History ─────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS public.command_history (
     id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id         UUID REFERENCES public.users(id) ON DELETE CASCADE,
+    user_id         UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
     raw_text        TEXT NOT NULL,
     intent          TEXT,
     parameters      JSONB DEFAULT '{}',
@@ -149,3 +166,33 @@ CREATE TRIGGER trg_settings_updated_at
 CREATE TRIGGER trg_workflows_updated_at
     BEFORE UPDATE ON public.workflows
     FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
+
+-- ─── Auto-Sync Auth Users to Public Users ────────────────────
+CREATE OR REPLACE FUNCTION public.handle_new_user() 
+RETURNS TRIGGER AS $$
+BEGIN
+  INSERT INTO public.users (id, email, hashed_password, display_name, supabase_uid)
+  VALUES (
+    NEW.id,
+    NEW.email,
+    'managed_by_supabase', -- Local password hash isn't used for Supabase auth
+    NEW.raw_user_meta_data->>'display_name',
+    NEW.id
+  );
+
+  -- Auto-create default settings
+  INSERT INTO public.settings (user_id) VALUES (NEW.id);
+
+  -- Auto-create default voice profile
+  INSERT INTO public.voice_profiles (user_id, name, voice_id, is_default)
+  VALUES (NEW.id, 'Default Voice', 'en_US-lessac-medium', TRUE);
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Trigger the function every time a user is created
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();

@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback } from "react";
 
 import { useChatStore } from "@/store/chatStore";
+import { getResolvedBaseUrl } from "@/lib/api";
 
 export interface ChatMessage {
   id: string;
@@ -31,9 +32,7 @@ export function useLLMChat() {
     setMessages(prev => [...prev, { id: assistantId, role: "assistant", content: "", timestamp: new Date() }]);
 
     try {
-      const BASE = typeof window !== 'undefined' && window.location.hostname.includes("devtunnels.ms") 
-        ? window.location.origin.replace("-3000", "-8000") + "/api"
-        : "http://127.0.0.1:8000/api";
+      const BASE = await getResolvedBaseUrl();
         
       const response = await fetch(`${BASE}/llm/chat`, {
         method: "POST",
@@ -73,9 +72,7 @@ export function useLLMChat() {
   const clearChat = useCallback(async () => {
     clear();
     try {
-      const BASE = typeof window !== 'undefined' && window.location.hostname.includes("devtunnels.ms") 
-        ? window.location.origin.replace("-3000", "-8000") + "/api"
-        : "http://127.0.0.1:8000/api";
+      const BASE = await getResolvedBaseUrl();
       await fetch(`${BASE}/llm/history`, { method: "DELETE" });
     } catch (e) {
       console.error("Failed to clear history on backend");

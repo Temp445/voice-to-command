@@ -31,7 +31,7 @@ def make_pixmap(name: str, color: str, size: int = 18, rotation: int = 0) -> QPi
     pix = QPixmap()
     pix.loadFromData(svg, "SVG")
     if rotation:
-        from PyQt6.QtCore import QTransform
+        from PyQt6.QtGui import QTransform
         t = QTransform()
         t.translate(pix.width() / 2, pix.height() / 2)
         t.rotate(rotation)
@@ -360,7 +360,6 @@ class OverlayApp(QWidget):
         self._ws_connected = False
         self._card_mode = None          # "suggestion" | "replay" | None
         self._wake_word = "alexa"
-        self._suggest_enabled = True    # yellow = ON, white = OFF
         self._card_hide_timer = QTimer(self)
         self._card_hide_timer.setSingleShot(True)
         self._card_hide_timer.timeout.connect(self._hide_card)
@@ -368,6 +367,11 @@ class OverlayApp(QWidget):
         self._sub_label_timer = QTimer(self)
         self._sub_label_timer.setSingleShot(True)
         self._sub_label_timer.timeout.connect(self._reset_sub_label)
+
+        self._last_transcript = ""
+        self._transcript_clear_timer = QTimer(self)
+        self._transcript_clear_timer.setSingleShot(True)
+        self._transcript_clear_timer.timeout.connect(self._clear_transcript)
         
         self.drop_zone = DropZoneWindow()
         screen = QApplication.primaryScreen().geometry()
@@ -384,11 +388,6 @@ class OverlayApp(QWidget):
         self.anim_timer = QTimer(self)
         self.anim_timer.timeout.connect(self._tick)
         self.anim_timer.start(80)
-
-        # Clock timer
-        self.clock_timer = QTimer(self)
-        self.clock_timer.timeout.connect(self._update_clock)
-        self.clock_timer.start(1000)
 
     # ── UI Construction ───────────────────────────────────────────────────────
 
@@ -444,17 +443,6 @@ class OverlayApp(QWidget):
         )
         self.replay_btn.clicked.connect(self._on_replay_clicked)
         pill_layout.addWidget(self.replay_btn)
-
-        # Separator
-        sep = QLabel("·")
-        sep.setFont(QFont("Segoe UI", 9))
-        pill_layout.addWidget(sep)
-
-        # ── Clock ──────────────────────────────────────────────────────────
-        self.clock_label = QLabel()
-        self.clock_label.setFont(QFont("Segoe UI", 9, QFont.Weight.Bold))
-        self._update_clock()
-        pill_layout.addWidget(self.clock_label)
 
         # ── Style ──────────────────────────────────────────────────────────
         self.setStyleSheet("""
@@ -539,12 +527,6 @@ class OverlayApp(QWidget):
         x = (screen.width() - self.width()) // 2
         self.move(x, 14)
 
-    # ── Clock ─────────────────────────────────────────────────────────────────
-
-    def _update_clock(self):
-        t = datetime.now().strftime("%I:%M %p").lstrip("0")
-        self.clock_label.setText(t)
-
     # ── Animation tick ────────────────────────────────────────────────────────
 
     def _tick(self):
@@ -557,35 +539,51 @@ class OverlayApp(QWidget):
 
     # ── State management ──────────────────────────────────────────────────────
 
+    def _clear_transcript(self):
+        self._last_transcript = ""
+        if self.current_state in ("idle", "error"):
+            self._on_state(self.current_state)
+
     def _on_state(self, state: str):
         self.current_state = state
         self.mic_btn.set_state(state)
         is_idle = state in ("idle", "error")
 
-        # Enable suggest/replay only when ACE is idle
-        self.suggest_btn.set_enabled_state(is_idle)
+        # Enable replay only when ACE is idle
         self.replay_btn.set_enabled_state(is_idle)
 
         if state == "listening":
+            self._last_transcript = ""
             self.status_label.setText("Listening...")
             self.sub_label.setText("Click mic to stop  ·  Speak now")
             self.status_label.setStyleSheet("color: #f87171;")
             self._set_pill_accent("#ef4444")
             self._hide_card()  # Auto-hide card when a new command starts
         elif state == "processing":
-            self.status_label.setText("Processing...")
+            self.status_label.setText(self._last_transcript if self._last_transcript else "Processing...")
             self.sub_label.setText("Executing your command")
             self.status_label.setStyleSheet("color: #fbbf24;")
             self._set_pill_accent("#eab308")
             self._hide_card()  # Auto-hide card when a new command starts
         elif state == "speaking":
-            self.status_label.setText("Speaking...")
+            self.status_label.setText(self._last_transcript if self._last_transcript else "Speaking...")
             self.sub_label.setText("ACE is responding")
             self.status_label.setStyleSheet("color: #60a5fa;")
             self._set_pill_accent("#3b82f6")
         else:
-            self.status_label.setText("ACE is ready")
-            self.status_label.setStyleSheet("color: #e5e7eb;")
+            if self._last_transcript:
+                self.status_label.setText(self._last_transcript)
+                if self._last_transcript.startswith('✓'):
+                    self.status_label.setStyleSheet("color: #10b981;")
+                elif self._last_transcript.startswith('✗'):
+                    self.status_label.setStyleSheet("color: #ef4444;")
+                else:
+                    self.status_label.setStyleSheet("color: #fbbf24;")
+                self._transcript_clear_timer.start(6000)
+            else:
+                self.status_label.setText("ACE is ready")
+                self.status_label.setStyleSheet("color: #e5e7eb;")
+                
             self.sub_label.setText(f"Wake word: {self._wake_word}")
             self._set_pill_accent(None)
 
@@ -627,8 +625,18 @@ class OverlayApp(QWidget):
         elif text == "__replay_empty__":
             self.show_card_signal.emit("🔁 Last Response", "Nothing to replay yet.")
         elif text.startswith('"') or text.startswith('✓') or text.startswith('✗'):
-            self.sub_label.setText(text)
-            self._sub_label_timer.start(4000)  # Revert to normal after 4s
+            self._last_transcript = text
+            if self.current_state in ("processing", "speaking", "idle"):
+                self.status_label.setText(text)
+                if text.startswith('✓'):
+                    self.status_label.setStyleSheet("color: #10b981;")
+                elif text.startswith('✗'):
+                    self.status_label.setStyleSheet("color: #ef4444;")
+                else:
+                    self.status_label.setStyleSheet("color: #fbbf24;")
+                    
+            if self.current_state in ("idle", "error"):
+                self._transcript_clear_timer.start(6000)
         elif text not in ("Listening...", "Processing...", "Speaking...", "ACE is idle", "ACE is ready", "Connected"):
             self.sub_label.setText(text)
             self._sub_label_timer.start(4000)
@@ -708,10 +716,27 @@ class OverlayApp(QWidget):
             self.drop_zone.hide()
             
             if getattr(self, '_over_drop_zone', False):
+                self._disable_overlay()
                 self.close()
                 sys.exit(0)
                 
         super().mouseReleaseEvent(event)
+
+    def _disable_overlay(self):
+        import urllib.request
+        import json
+        import os
+        try:
+            port = os.environ.get("BACKEND_PORT", "8000")
+            req = urllib.request.Request(
+                f"http://127.0.0.1:{port}/api/settings",
+                data=json.dumps({"enable_desktop_overlay": False}).encode(),
+                headers={"Content-Type": "application/json"},
+                method="PATCH"
+            )
+            urllib.request.urlopen(req, timeout=2)
+        except Exception as e:
+            print(f"Failed to disable overlay via API: {e}")
 
 
 # ─── WebSocket client ─────────────────────────────────────────────────────────

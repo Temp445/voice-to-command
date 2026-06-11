@@ -35,6 +35,7 @@ class SettingsUpdate(BaseModel):
     stt_provider: str | None = None
     stt_noise_cancellation: bool | None = None
     active_mode_timeout: int | None = None
+    require_wake_word_always: bool | None = None
     tts_provider: str | None = None
     gtts_api_key: str | None = None       # raw; encrypted before storage
     piper_voice: str | None = None
@@ -44,6 +45,8 @@ class SettingsUpdate(BaseModel):
     minimize_to_tray: bool | None = None
     browser_animations_enabled: bool | None = None
     enable_desktop_overlay: bool | None = None
+    overlay_shortcut: str | None = None
+    listen_shortcut: str | None = None
     crm_url: str | None = None
     crm_keywords: str | None = None
     # LLM
@@ -61,6 +64,7 @@ class SettingsResponse(BaseModel):
     stt_provider: str
     stt_noise_cancellation: bool
     active_mode_timeout: int
+    require_wake_word_always: bool
     tts_provider: str
     piper_voice: str
     theme: str
@@ -69,6 +73,8 @@ class SettingsResponse(BaseModel):
     minimize_to_tray: bool
     browser_animations_enabled: bool
     enable_desktop_overlay: bool
+    overlay_shortcut: str
+    listen_shortcut: str
     gtts_configured: bool   # True if API key is set
     crm_url: str
     crm_keywords: str

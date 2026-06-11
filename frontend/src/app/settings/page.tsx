@@ -79,6 +79,7 @@ export default function SettingsPage() {
       settings.update({
         wakeWord: data.wake_word, sttProvider: data.stt_provider, sttNoiseCancellation: data.stt_noise_cancellation,
         whisperModel: data.whisper_model, ttsProvider: data.tts_provider, piperVoice: data.piper_voice,
+        activeModeTimeout: data.active_mode_timeout, requireWakeWordAlways: data.require_wake_word_always,
         browserType: data.browser_type, startupOnBoot: data.startup_on_boot, minimizeToTray: data.minimize_to_tray,
         theme: data.theme, browserAnimationsEnabled: data.browser_animations_enabled, enableDesktopOverlay: data.enable_desktop_overlay,
         crmUrl: data.crm_url, crmKeywords: data.crm_keywords,
@@ -99,6 +100,7 @@ export default function SettingsPage() {
     settings.wakeWord, settings.sttProvider, settings.sttNoiseCancellation, settings.whisperModel,
     settings.ttsProvider, settings.piperVoice, settings.theme, settings.browserType,
     settings.startupOnBoot, settings.minimizeToTray, settings.browserAnimationsEnabled, settings.enableDesktopOverlay,
+    settings.activeModeTimeout, settings.requireWakeWordAlways,
     settings.crmUrl, settings.crmKeywords,
     settings.llmEnabled, settings.llmProvider, settings.llmModel, settings.llmMode,
     settings.llmTemperature, settings.llmApiKey
@@ -231,6 +233,7 @@ export default function SettingsPage() {
       const patch: Record<string, unknown> = {
         wake_word: settings.wakeWord, stt_provider: settings.sttProvider, stt_noise_cancellation: settings.sttNoiseCancellation,
         whisper_model: settings.whisperModel, tts_provider: settings.ttsProvider, piper_voice: settings.piperVoice,
+        active_mode_timeout: settings.activeModeTimeout, require_wake_word_always: settings.requireWakeWordAlways,
         browser_type: settings.browserType, startup_on_boot: settings.startupOnBoot, minimize_to_tray: settings.minimizeToTray,
         theme: settings.theme, browser_animations_enabled: settings.browserAnimationsEnabled, enable_desktop_overlay: settings.enableDesktopOverlay,
         crm_url: settings.crmUrl, crm_keywords: settings.crmKeywords,
@@ -308,22 +311,75 @@ export default function SettingsPage() {
               </div>
 
               <div>
-                <p style={lbl}>Active Mode Timeout (Seconds)</p>
-                <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
-                  <input
-                    type="range"
-                    min="10"
-                    max="600"
-                    step="10"
-                    value={settings.activeModeTimeout || 120}
-                    onChange={(e) => settings.update({ activeModeTimeout: parseInt(e.target.value) })}
-                    style={{ flex: 1, accentColor: "var(--primary)" }}
-                  />
-                  <span style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--foreground)", minWidth: "3rem", textAlign: "right" }}>
-                    {settings.activeModeTimeout || 120}s
-                  </span>
+                <p style={lbl}>Interaction Mode</p>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
+                  {[
+                    { key: "require", label: "Require Wake Word", desc: "Say the wake word for every task" },
+                    { key: "continuous", label: "Continuous Listening", desc: "Stay awake for follow-up commands" },
+                  ].map(({ key, label, desc }) => {
+                    const active = (key === "require" && settings.requireWakeWordAlways) || (key === "continuous" && !settings.requireWakeWordAlways);
+                    return (
+                      <button key={key} onClick={() => settings.update({ requireWakeWordAlways: key === "require" })}
+                        style={{ textAlign: "left", padding: "1.25rem", borderRadius: "0.75rem", cursor: "pointer", transition: "all 0.2s ease", background: active ? "var(--secondary)" : "transparent", border: active ? "2px solid var(--primary)" : "1px solid var(--border)", boxShadow: active ? "0 4px 12px rgba(0,0,0,0.05)" : "none" }}>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.5rem" }}>
+                          <span style={{ fontSize: "0.9375rem", fontWeight: 600, color: "var(--foreground)" }}>{label}</span>
+                        </div>
+                        <p style={{ fontSize: "0.8125rem", color: "var(--muted-foreground)" }}>{desc}</p>
+                        {active && <div style={{ marginTop: "0.75rem", display: "flex", alignItems: "center", gap: "0.25rem", color: "var(--primary)", fontSize: "0.75rem", fontWeight: 600 }}><CheckCircle2 style={{ width: "0.875rem", height: "0.875rem" }} /> Selected</div>}
+                      </button>
+                    );
+                  })}
                 </div>
-                <p style={sub}>How long the assistant stays awake listening for follow-up commands without the wake word.</p>
+              </div>
+
+              {!settings.requireWakeWordAlways && (
+                <div style={{ marginTop: "1rem", padding: "1.25rem", background: "var(--secondary)", borderRadius: "0.75rem", border: "1px solid var(--border)" }}>
+                  <p style={{ fontSize: "0.9375rem", fontWeight: 600, color: "var(--foreground)", marginBottom: "1rem" }}>Active Mode Timeout (Seconds)</p>
+                  <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
+                    <input
+                      type="range"
+                      min="10"
+                      max="600"
+                      step="10"
+                      value={settings.activeModeTimeout || 120}
+                      onChange={(e) => settings.update({ activeModeTimeout: parseInt(e.target.value) })}
+                      style={{ flex: 1, accentColor: "var(--primary)" }}
+                    />
+                    <span style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--foreground)", minWidth: "3rem", textAlign: "right" }}>
+                      {settings.activeModeTimeout || 120}s
+                    </span>
+                  </div>
+                  <p style={sub}>How long the assistant stays awake listening for follow-up commands without the wake word.</p>
+                </div>
+              )}
+
+              <div style={{ marginTop: "1rem", padding: "1.25rem", background: "var(--secondary)", borderRadius: "0.75rem", border: "1px solid var(--border)" }}>
+                <p style={{ fontSize: "0.9375rem", fontWeight: 600, color: "var(--foreground)", marginBottom: "1rem" }}>Global Keyboard Shortcuts</p>
+                
+                <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+                  <div>
+                    <p style={{ fontSize: "0.8125rem", fontWeight: 600, color: "var(--foreground)", marginBottom: "0.25rem" }}>Toggle Desktop Overlay</p>
+                    <input
+                      type="text"
+                      value={settings.overlayShortcut}
+                      onChange={(e) => settings.update({ overlayShortcut: e.target.value })}
+                      placeholder="e.g. Alt+A"
+                      style={{ width: "100%", padding: "0.5rem 0.75rem", borderRadius: "0.5rem", border: "1px solid var(--border)", background: "var(--background)", color: "var(--foreground)", fontSize: "0.875rem", outline: "none" }}
+                    />
+                  </div>
+
+                  <div>
+                    <p style={{ fontSize: "0.8125rem", fontWeight: 600, color: "var(--foreground)", marginBottom: "0.25rem" }}>Skip Wake Word (Trigger Listen)</p>
+                    <input
+                      type="text"
+                      value={settings.listenShortcut}
+                      onChange={(e) => settings.update({ listenShortcut: e.target.value })}
+                      placeholder="e.g. Alt+S"
+                      style={{ width: "100%", padding: "0.5rem 0.75rem", borderRadius: "0.5rem", border: "1px solid var(--border)", background: "var(--background)", color: "var(--foreground)", fontSize: "0.875rem", outline: "none" }}
+                    />
+                  </div>
+                </div>
+                <p style={{ fontSize: "0.75rem", color: "var(--muted-foreground)", marginTop: "0.75rem" }}>Use modifiers like <code>CommandOrControl</code>, <code>Alt</code>, <code>Shift</code>, <code>Super</code> + Letter (e.g. <code>Alt+A</code>). Applies system-wide while ACE is running.</p>
               </div>
 
               <div style={{ marginTop: "1rem", padding: "1.25rem", background: "var(--secondary)", borderRadius: "0.75rem", border: "1px solid var(--border)" }}>
@@ -607,7 +663,7 @@ export default function SettingsPage() {
             {/* Left Navigation Sidebar */}
             <nav style={{ width: "240px", flexShrink: 0, position: "sticky", top: 0, display: "flex", flexDirection: "column", gap: "0.375rem" }}>
               <div style={{ marginBottom: "2rem" }}>
-                <h1 style={{ fontSize: "1.875rem", fontWeight: 800, color: "var(--foreground)", letterSpacing: "-0.02em", display: "flex", alignItems: "center", gap: "0.625rem" }}>
+                <h1 style={{ fontSize: "1.75rem", fontWeight: 600, color: "var(--foreground)", letterSpacing: "-0.02em", display: "flex", alignItems: "center", gap: "0.625rem" }}>
                   <Settings style={{ width: "1.75rem", height: "1.75rem", color: "var(--primary)" }} /> Settings
                 </h1>
               </div>

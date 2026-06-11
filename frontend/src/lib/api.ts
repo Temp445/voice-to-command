@@ -42,14 +42,25 @@ export async function getResolvedBaseUrl(): Promise<string> {
 }
 
 export async function getBackendWsUrl(): Promise<string> {
-  if (!resolvedBaseUrl) await getResolvedBaseUrl();
-  return `ws://127.0.0.1:${resolvedBackendPort}/ws`;
+  const base = await getResolvedBaseUrl();
+  let wsUrl = base.replace(/\/api$/, "/ws");
+  return wsUrl.replace(/^http/, "ws");
 }
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const base = await getResolvedBaseUrl();
+  const headers: Record<string, string> = { "Content-Type": "application/json", ...((options.headers as Record<string, string>) || {}) };
+  
+  // Attach local JWT token if available
+  try {
+    const token = localStorage.getItem("ace-local-token");
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
+  } catch (e) {}
+
   const res = await fetch(`${base}${path}`, {
-    headers: { "Content-Type": "application/json", ...options.headers },
+    headers,
     cache: "no-store",
     ...options,
   });
@@ -98,6 +109,8 @@ export const api = {
     request("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }),
   register: (email: string, password: string, display_name?: string) =>
     request("/auth/register", { method: "POST", body: JSON.stringify({ email, password, display_name }) }),
+  sync:     (access_token: string) =>
+    request("/auth/sync", { method: "POST", body: JSON.stringify({ access_token }) }),
     
   // LLM / AI Assistant
   getLLMProviders: () => request("/llm/providers"),
