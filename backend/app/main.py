@@ -132,114 +132,88 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"⚠️ Browser integration failed: {e}")
 
-    # ── Restore Settings from Supabase (overrides .env if DB has values set) ─
-    try:
-        from app.core.supabase_client import supabase_admin, sb_run
-        from app.routers.settings_router import _apply_llm_settings
-        res = await sb_run(
-            lambda: supabase_admin.table("settings").select("*").order("updated_at", desc=True).limit(1).execute()
-        )
-        if res.data:
-            s = res.data[0]
-            from app.config import settings as global_settings
-            for field in ("wake_word", "whisper_model", "tts_provider", "piper_voice",
-                          "active_mode_timeout", "browser_type", "enable_desktop_overlay",
-                          "crm_url", "crm_keywords", "llm_provider", "llm_model",
-                          "llm_mode", "llm_temperature"):
-                if field in s and s[field] is not None and hasattr(global_settings, field):
-                    setattr(global_settings, field, s[field])
-            if s.get("llm_api_key_encrypted"):
-                _apply_llm_settings(s)
-            logger.info("✅ All settings restored from Supabase")
-    except Exception as e:
-        logger.warning(f"⚠️  Could not restore settings from Supabase: {e}")
+    # ── Background Initialization ───────────────────────────────────────────
+    # Pushing heavy tasks to the background allows Uvicorn to bind the port instantly
+    async def _background_init(app_state, running_loop):
+        # 1. Restore Settings from Supabase (overrides .env if DB has values set)
+        try:
+            from app.core.supabase_client import supabase_admin, sb_run
+            from app.routers.settings_router import _apply_llm_settings
+            res = await sb_run(
+                lambda: supabase_admin.table("settings").select("*").order("updated_at", desc=True).limit(1).execute()
+            )
+            if res.data:
+                s = res.data[0]
+                from app.config import settings as global_settings
+                for field in ("wake_word", "whisper_model", "tts_provider", "piper_voice",
+                              "active_mode_timeout", "browser_type", "enable_desktop_overlay",
+                              "crm_url", "crm_keywords", "llm_provider", "llm_model",
+                              "llm_mode", "llm_temperature"):
+                    if field in s and s[field] is not None and hasattr(global_settings, field):
+                        setattr(global_settings, field, s[field])
+                if s.get("llm_api_key_encrypted"):
+                    _apply_llm_settings(s)
+                logger.info("✅ All settings restored from Supabase")
+        except Exception as e:
+            logger.warning(f"⚠️  Could not restore settings from Supabase: {e}")
 
-    # ── Initialize LLM from .env (fallback if DB has no LLM set) ────────────────────
-    from app.services.llm.llm_service import llm_service
-    if not llm_service.is_ready:
-        _init_llm_from_env()
+        # 2. Initialize LLM from .env (fallback if DB has no LLM set)
+        from app.services.llm.llm_service import llm_service
+        if not llm_service.is_ready:
+            _init_llm_from_env()
 
+        # 3. Start the voice pipeline in the background process
+        try:
+            from voice.pipeline import VoicePipeline, PipelineState
+            from app.websocket.manager import ws_manager
+            from app.routers.voice import _pipeline_state
 
-    # ── Initialize Desktop Overlay ───────────────────────────────────────────
-    try:
-        import subprocess
-        import sys
-        import os
-        from app.config import settings as global_settings
-        if global_settings.enable_desktop_overlay:
-            # Explicitly use the .venv Python executable to prevent worker processes from failing
-            venv_python = os.path.join(str(_ROOT), ".venv", "Scripts", "python.exe")
-            if os.path.exists(venv_python):
-                python_exe = venv_python
-            else:
-                python_exe = sys.executable
-
-            overlay_path = os.path.join(str(_ROOT), "backend", "automation", "desktop", "overlay.py")
-            if not os.path.exists(overlay_path):
-                # Fallback if _ROOT is somehow different
-                overlay_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "automation", "desktop", "overlay.py")
-                
-            if os.path.exists(overlay_path):
-                app.state.overlay_process = subprocess.Popen(
-                    [python_exe, overlay_path],
-                    creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+            def on_state_change(state: PipelineState):
+                _pipeline_state["pipeline_state"] = state.value
+                _pipeline_state["listening"] = (state == PipelineState.LISTENING)
+                _pipeline_state["wake_word_active"] = (state == PipelineState.IDLE)
+                asyncio.run_coroutine_threadsafe(
+                    ws_manager.broadcast("pipeline_state", {"state": state.value}), running_loop
                 )
-                logger.info(f"🖥️ Desktop Overlay started using {python_exe}")
-            else:
-                logger.error(f"❌ Desktop Overlay script not found at {overlay_path}!")
-        else:
-            logger.info("🖥️ Desktop Overlay is disabled in settings.")
-    except Exception as e:
-        logger.warning(f"⚠️ Failed to start Desktop Overlay: {e}")
+                asyncio.run_coroutine_threadsafe(
+                    ws_manager.broadcast(
+                        "wake_word_detected" if state == PipelineState.LISTENING else "pipeline_state",
+                        {"state": state.value, "wake_word_active": _pipeline_state["wake_word_active"]}
+                    ), running_loop
+                )
 
-    # Start the voice pipeline in the backend process
-    try:
-        from voice.pipeline import VoicePipeline, PipelineState
-        from app.websocket.manager import ws_manager
-        from app.routers.voice import _pipeline_state
+            def on_transcript(text: str, is_final: bool):
+                asyncio.run_coroutine_threadsafe(
+                    ws_manager.broadcast("transcript", {"text": text, "is_final": is_final}), running_loop
+                )
 
-        loop = asyncio.get_running_loop()
+            def on_command_result(result: dict):
+                asyncio.run_coroutine_threadsafe(
+                    ws_manager.broadcast("command_executed", result), running_loop
+                )
 
-        def on_state_change(state: PipelineState):
-            _pipeline_state["pipeline_state"] = state.value
-            _pipeline_state["listening"] = (state == PipelineState.LISTENING)
-            _pipeline_state["wake_word_active"] = (state == PipelineState.IDLE)
-            asyncio.run_coroutine_threadsafe(
-                ws_manager.broadcast("pipeline_state", {"state": state.value}), loop
+            # Move VoicePipeline init to a thread to prevent blocking the async loop
+            pipeline = await asyncio.to_thread(
+                VoicePipeline,
+                on_state_change=on_state_change,
+                on_transcript=on_transcript,
+                on_command_result=on_command_result,
             )
+            pipeline.start()
+            app_state.pipeline = pipeline
+            _pipeline_state["wake_word_active"] = True
             asyncio.run_coroutine_threadsafe(
-                ws_manager.broadcast(
-                    "wake_word_detected" if state == PipelineState.LISTENING else "pipeline_state",
-                    {"state": state.value, "wake_word_active": _pipeline_state["wake_word_active"]}
-                ), loop
+                ws_manager.broadcast("pipeline_state", {"state": "idle", "wake_word_active": True}), running_loop
             )
+            logger.info("🎙️ Voice pipeline started — wake word listening in background")
 
-        def on_transcript(text: str, is_final: bool):
-            asyncio.run_coroutine_threadsafe(
-                ws_manager.broadcast("transcript", {"text": text, "is_final": is_final}), loop
-            )
+        except Exception as e:
+            logger.warning(f"⚠️  Voice pipeline failed to start (API will still work): {e}")
+            app_state.pipeline = None
 
-        def on_command_result(result: dict):
-            asyncio.run_coroutine_threadsafe(
-                ws_manager.broadcast("command_executed", result), loop
-            )
-            # Removed suggestions block
-        pipeline = VoicePipeline(
-            on_state_change=on_state_change,
-            on_transcript=on_transcript,
-            on_command_result=on_command_result,
-        )
-        pipeline.start()
-        app.state.pipeline = pipeline
-        _pipeline_state["wake_word_active"] = True
-        asyncio.run_coroutine_threadsafe(
-            ws_manager.broadcast("pipeline_state", {"state": "idle", "wake_word_active": True}), loop
-        )
-        logger.info("🎙️ Voice pipeline started — wake word listening in background")
-
-    except Exception as e:
-        logger.warning(f"⚠️  Voice pipeline failed to start (API will still work): {e}")
-        app.state.pipeline = None
+    # Spawn the background initialization task so lifespan yields immediately
+    loop = asyncio.get_running_loop()
+    asyncio.create_task(_background_init(app.state, loop))
 
     yield
 

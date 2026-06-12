@@ -56,11 +56,11 @@ export function ShortcutManager() {
     }
     async function registerShortcuts() {
       try {
-        const { register, unregisterAll, unregister } = await import('@tauri-apps/api/globalShortcut');
+        const { register, unregisterAll } = await import('@tauri-apps/api/globalShortcut');
         
-        // Always unregister previous shortcuts before registering new ones
-        if (registeredRef.current.overlay) await unregister(registeredRef.current.overlay).catch(console.error);
-        if (registeredRef.current.listen) await unregister(registeredRef.current.listen).catch(console.error);
+        // Always unregister all previous shortcuts before registering new ones
+        // This is robust against Next.js Fast Refresh which might leave stale hotkeys registered
+        await unregisterAll().catch(console.error);
         
         registeredRef.current = {};
 

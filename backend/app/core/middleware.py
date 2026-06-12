@@ -22,7 +22,9 @@ def register_middleware(app: FastAPI) -> None:
         allow_origins=[
             "tauri://localhost", 
             "https://tauri.localhost", 
-            "http://tauri.localhost", 
+            "http://tauri.localhost",
+            "http://localhost:3000",
+            "https://localhost:3000",
             "https://hl41p943-3000.inc1.devtunnels.ms"
         ],
         allow_origin_regex=r"https?://(localhost|127\.0\.0\.1)(:\d+)?.*",

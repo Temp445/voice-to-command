@@ -29,6 +29,7 @@ tauri = { version = "1.6", features = [ "devtools", "shell-execute", "shell-side
   "window-set-title",
   "window-start-dragging",
 ] }
+tauri-plugin-autostart = { git = "https://github.com/tauri-apps/plugins-workspace", branch = "v1" }
 
 [features]
 default = ["custom-protocol"]

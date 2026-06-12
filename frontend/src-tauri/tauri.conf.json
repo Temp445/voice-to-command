@@ -48,8 +48,9 @@
         "digestAlgorithm": "sha256",
         "timestampUrl": ""
       },
-      "resources": [],
-      "externalBin": ["../../backend/dist/ace-backend"],
+      "resources": [
+        "../../backend/dist/ace-backend"
+      ],
       "copyright": "© 2026 ACE",
       "category": "Utility",
       "shortDescription": "AI-powered desktop voice controller",

@@ -5,8 +5,10 @@ use std::sync::Mutex;
 use tauri::{
     CustomMenuItem, Manager, SystemTray, SystemTrayEvent, SystemTrayMenu, SystemTrayMenuItem, State,
 };
+use tauri_plugin_autostart::MacosLauncher;
+use tauri_plugin_autostart::ManagerExt;
 
-use tauri::api::process::Command;
+
 
 struct AppState {
     minimize_to_tray: Mutex<bool>,
@@ -36,6 +38,21 @@ fn hide_to_tray(window: tauri::Window) {
     let _ = window.hide();
 }
 
+#[tauri::command]
+fn enable_autostart(app: tauri::AppHandle) -> Result<(), String> {
+    app.autolaunch().enable().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn disable_autostart(app: tauri::AppHandle) -> Result<(), String> {
+    app.autolaunch().disable().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn is_autostart_enabled(app: tauri::AppHandle) -> Result<bool, String> {
+    app.autolaunch().is_enabled().map_err(|e| e.to_string())
+}
+
 fn get_available_port() -> u16 {
     std::net::TcpListener::bind("127.0.0.1:0")
         .and_then(|listener| listener.local_addr())
@@ -60,15 +77,34 @@ fn main() {
     let port = get_available_port();
 
     tauri::Builder::default()
-        .setup(move |_app| {
-            let mut env = std::collections::HashMap::new();
-            env.insert("BACKEND_PORT".to_string(), port.to_string());
+        .plugin(tauri_plugin_autostart::init(MacosLauncher::LaunchAgent, Some(vec!["--hidden"])))
+        .setup(move |app| {
+            let args: Vec<String> = std::env::args().collect();
+            if args.contains(&"--hidden".to_string()) {
+                if let Some(window) = app.get_window("main") {
+                    let _ = window.hide();
+                }
+            }
+
+            let backend_exe = if cfg!(debug_assertions) {
+                // During tauri dev, use the built executable from dist directly
+                std::path::PathBuf::from("../../backend/dist/ace-backend/ace-backend.exe")
+            } else {
+                // In release, the binary is bundled in the resources folder
+                app.path_resolver()
+                    .resolve_resource("../../backend/dist/ace-backend/ace-backend.exe")
+                    .expect("failed to resolve resource")
+            };
+
+            let mut cmd = std::process::Command::new(backend_exe);
+            cmd.env("BACKEND_PORT", port.to_string());
             
-            let (_rx, _child) = Command::new_sidecar("ace-backend")
-                .expect("failed to create `ace-backend` binary command")
-                .envs(env)
-                .spawn()
-                .expect("Failed to spawn sidecar");
+            if cfg!(debug_assertions) {
+                // Ensure backend runs from project root during dev to find .env file
+                cmd.current_dir("../../");
+            }
+            
+            cmd.spawn().expect("Failed to spawn backend sidecar");
             
             Ok(())
         })
@@ -80,7 +116,10 @@ fn main() {
             sync_minimize_to_tray,
             get_minimize_to_tray,
             hide_to_tray,
-            get_backend_port
+            get_backend_port,
+            enable_autostart,
+            disable_autostart,
+            is_autostart_enabled
         ])
         .system_tray(system_tray)
         .on_system_tray_event(|app, event| match event {

@@ -12,13 +12,22 @@ import sys
 import os
 
 if getattr(sys, 'frozen', False):
-    # Running in PyInstaller bundle
-    _ROOT = Path(sys._MEIPASS)
+    # Running in PyInstaller bundle. Base paths off the executable location.
+    _ROOT = Path(sys.executable).parent
 else:
     # Resolve .env path — works whether you run from project root or backend/
     _ROOT = Path(__file__).resolve().parent.parent.parent  # Voice_Controller_v1/
 
-_ENV_FILE = _ROOT / ".env" if (_ROOT / ".env").exists() else Path(".env")
+# Robustly find .env file
+_env_paths = [
+    _ROOT / ".env",               # Prod (next to exe) or Dev (project root)
+    Path(".env"),                 # Current working directory
+    Path(__file__).resolve().parent.parent.parent / ".env", # Hard fallback to project root
+    Path("..") / ".env",          # CWD is backend/
+    Path("../../..") / ".env",    # CWD is backend/dist/ace-backend/
+]
+
+_ENV_FILE = next((p for p in _env_paths if p.exists()), Path(".env"))
 
 # --- AppData Directory for Production Files ---
 if sys.platform == "win32":

@@ -6,6 +6,8 @@ import { ShortcutManager } from "@/components/layout/ShortcutManager";
 import { WebSocketManager } from "@/hooks/useWebSocket";
 import { AuthWrapper } from "@/components/auth/AuthWrapper";
 
+import { LoadingOverlay } from "@/components/layout/LoadingOverlay";
+
 export const metadata: Metadata = {
   title: "ACE Voice Controller",
   description: "AI-powered desktop voice control and automation system",
@@ -20,6 +22,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <Toaster />
           <ShortcutManager />
           <WebSocketManager />
+          <LoadingOverlay />
         </AuthWrapper>
       </body>
     </html>

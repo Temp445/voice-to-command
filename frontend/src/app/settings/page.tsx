@@ -8,6 +8,7 @@ import { TopBar } from "@/components/layout/TopBar";
 import { useSettingsStore } from "@/store/settingsStore";
 import { useWSStore } from "@/hooks/useWebSocket";
 import { api, getResolvedBaseUrl, resolvedBackendPort } from "@/lib/api";
+import { invoke } from "@tauri-apps/api/tauri";
 
 const card    = { background: "var(--card)", border: "1px solid var(--border)", borderRadius: "1rem", overflow: "hidden", boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)" };
 const hdr     = { padding: "1.25rem 1.5rem", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: "0.75rem", background: "rgba(255,255,255,0.02)" };
@@ -86,13 +87,18 @@ export default function SettingsPage() {
         llmEnabled: data.llm_enabled, llmProvider: data.llm_provider, llmModel: data.llm_model,
         llmMode: data.llm_mode, llmTemperature: data.llm_temperature,
       });
-      // removed undefined setGttsApiKey call
       setInitialLoaded(true);
     }).catch(err => console.error(err));
   }, []);
 
   useEffect(() => {
     if (!initialLoaded) return;
+    
+    // Sync the Start on Boot setting with the OS registry
+    if (window.__TAURI_IPC__) {
+      invoke(settings.startupOnBoot ? "enable_autostart" : "disable_autostart").catch(err => console.error("Autostart sync failed:", err));
+    }
+
     const timer = setTimeout(() => handleSave(), 500);
     return () => clearTimeout(timer);
   }, [

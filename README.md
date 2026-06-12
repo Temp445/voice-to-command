@@ -68,7 +68,9 @@ First, package the Python backend into a standalone executable:
 cd backend
 .\.venv\Scripts\activate
 pyinstaller ace-backend.spec -y
-Copy-Item "dist\ace-backend.exe" -Destination "dist\ace-backend-x86_64-pc-windows-msvc.exe" -Force
+# Copy-Item "dist\ace-backend.exe" -Destination "dist\ace-backend-x86_64-pc-windows-msvc.exe" -Force
+Copy-Item -Path ".\dist\ace-backend\ace-backend.exe" -Destination ".\dist\ace-backend\ace-backend-x86_64-pc-windows-msvc.exe"
+
 cd ..
 ```
 
