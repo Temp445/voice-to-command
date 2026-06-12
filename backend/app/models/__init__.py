@@ -4,7 +4,7 @@ ACE Voice Controller — All SQLAlchemy Models
 
 from datetime import datetime, timezone
 from uuid import uuid4
-from sqlalchemy import String, Text, Boolean, DateTime, ForeignKey, JSON, Enum as SAEnum
+from sqlalchemy import String, Text, Boolean, DateTime, ForeignKey, JSON, Enum as SAEnum, Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 import enum
 
@@ -45,12 +45,12 @@ class LogLevel(str, enum.Enum):
 class User(Base):
     __tablename__ = "users"
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True, default=new_uuid)
     email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
     display_name: Mapped[str] = mapped_column(String(100), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
-    supabase_uid: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    supabase_uid: Mapped[str | None] = mapped_column(Uuid(as_uuid=False), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
@@ -64,7 +64,7 @@ class User(Base):
 class UserSettings(Base):
     __tablename__ = "settings"
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True, default=new_uuid)
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), unique=True, nullable=False)
 
     # Voice
@@ -114,7 +114,7 @@ class UserSettings(Base):
 class CommandHistory(Base):
     __tablename__ = "command_history"
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True, default=new_uuid)
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
     raw_text: Mapped[str] = mapped_column(Text, nullable=False)
     intent: Mapped[str | None] = mapped_column(String(100), nullable=True)
@@ -133,7 +133,7 @@ class CommandHistory(Base):
 class Workflow(Base):
     __tablename__ = "workflows"
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True, default=new_uuid)
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -152,7 +152,7 @@ class Workflow(Base):
 class AutomationLog(Base):
     __tablename__ = "automation_logs"
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True, default=new_uuid)
     user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     action: Mapped[str] = mapped_column(String(200), nullable=False)
     target: Mapped[str | None] = mapped_column(String(500), nullable=True)
@@ -167,7 +167,7 @@ class AutomationLog(Base):
 class Shortcut(Base):
     __tablename__ = "shortcuts"
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True, default=new_uuid)
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
     trigger_phrase: Mapped[str] = mapped_column(String(200), nullable=False)
     action_type: Mapped[str] = mapped_column(String(50), nullable=False)
@@ -181,7 +181,7 @@ class Shortcut(Base):
 class VoiceProfile(Base):
     __tablename__ = "voice_profiles"
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True, default=new_uuid)
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     tts_provider: Mapped[str] = mapped_column(String(20), default="piper")

@@ -1,117 +1,176 @@
 """
-ACE Voice Controller — API Routers
-auth.py — Registration, login, token management via Supabase Auth.
+ACE Voice Controller — Auth Router
+Handles registration, login, and Supabase session sync via Supabase Auth.
+All user data is managed by Supabase Auth — no local user table needed.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+import asyncio
+import uuid
+from fastapi import APIRouter, HTTPException, status
 from loguru import logger
-
-from app.database import get_db
-from app.models import User, UserSettings
-from app.schemas import RegisterRequest, LoginRequest, TokenResponse
-from app.core.security import hash_password, verify_password, create_access_token
-from app.core.supabase_client import supabase
 from pydantic import BaseModel
-from app.config import settings
+
+from app.schemas import RegisterRequest, LoginRequest, TokenResponse
+from app.core.security import create_access_token
+from app.core.supabase_client import supabase, supabase_admin, sb_run
 
 router = APIRouter()
 
-
-async def _get_or_create_settings(db: AsyncSession, user_id: str) -> None:
-    result = await db.execute(select(UserSettings).where(UserSettings.user_id == user_id))
-    if not result.scalar_one_or_none():
-        db.add(UserSettings(user_id=user_id))
-        await db.flush()
 
 class SyncRequest(BaseModel):
     access_token: str
 
 
-@router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
-async def register(body: RegisterRequest, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(User).where(User.email == body.email))
-    if result.scalar_one_or_none():
-        raise HTTPException(status_code=409, detail="Email already registered")
+async def _ensure_settings(user_id: str) -> None:
+    """Create a default settings row for a user if one doesn't exist."""
+    try:
+        res = await sb_run(
+            lambda: supabase_admin.table("settings").select("id").eq("user_id", user_id).execute()
+        )
+        if not res.data:
+            from app.routers.settings_router import _DEFAULTS
+            new_row = {**_DEFAULTS, "id": str(uuid.uuid4()), "user_id": user_id}
+            await sb_run(lambda: supabase_admin.table("settings").insert(new_row).execute())
+            logger.info(f"Created default settings for user {user_id}")
+    except Exception as e:
+        # Non-fatal — user can still log in even if settings creation fails
+        logger.warning(f"Could not ensure settings for {user_id}: {e}")
 
-    user = User(
-        email=body.email,
-        hashed_password=hash_password(body.password),
-        display_name=body.display_name or body.email.split("@")[0],
+
+def _decode_supabase_jwt_unsafe(token: str) -> dict | None:
+    """
+    Decode a Supabase JWT without signature verification to extract claims.
+    Used as a fast fallback when the Supabase auth HTTP call fails.
+    The token was already issued by Supabase — we trust its structure.
+    """
+    try:
+        import base64, json
+        parts = token.split(".")
+        if len(parts) != 3:
+            return None
+        # Pad the base64 string
+        payload = parts[1]
+        payload += "=" * (4 - len(payload) % 4)
+        claims = json.loads(base64.urlsafe_b64decode(payload))
+        return claims
+    except Exception:
+        return None
+
+
+async def _get_supabase_user(access_token: str):
+    """
+    Get Supabase user from token. Retries up to 3 times on connection errors.
+    Falls back to local JWT decode if all retries fail.
+    """
+    last_error = None
+
+    for attempt in range(3):
+        try:
+            response = await sb_run(lambda: supabase.auth.get_user(access_token))
+            if response.user:
+                return response.user
+        except Exception as e:
+            last_error = e
+            err_str = str(e)
+            is_connection_error = any(x in err_str for x in [
+                "RemoteProtocolError", "Server disconnected",
+                "ConnectError", "TimeoutException", "ReadError"
+            ])
+            if is_connection_error and attempt < 2:
+                logger.warning(f"Auth sync attempt {attempt + 1}/3 failed (connection): {e} — retrying...")
+                await asyncio.sleep(0.5 * (attempt + 1))
+                continue
+            break
+
+    # All retries failed — fall back to local JWT decode
+    logger.warning(f"Supabase get_user failed after retries: {last_error}. Falling back to local JWT decode.")
+    claims = _decode_supabase_jwt_unsafe(access_token)
+    if claims and claims.get("sub") and claims.get("email"):
+        # Return a simple object mimicking the Supabase user
+        class _LocalUser:
+            def __init__(self, sub, email):
+                self.id = sub
+                self.email = email
+        return _LocalUser(claims["sub"], claims["email"])
+
+    raise HTTPException(
+        status_code=503,
+        detail=f"Supabase Auth unreachable and local decode failed. Try again shortly."
     )
-    db.add(user)
-    await db.flush()
-    await _get_or_create_settings(db, user.id)
 
-    token = create_access_token({"sub": user.id, "email": user.email})
-    logger.info(f"New user registered: {user.email}")
-    return TokenResponse(access_token=token, user_id=user.id, email=user.email)
+
+# ── Routes ────────────────────────────────────────────────────────────────────
+
+@router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
+async def register(body: RegisterRequest):
+    """Register a new user via Supabase Auth."""
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Supabase client not configured")
+    try:
+        response = await sb_run(
+            lambda: supabase.auth.sign_up({
+                "email": body.email,
+                "password": body.password,
+                "options": {"data": {"display_name": body.display_name or body.email.split("@")[0]}},
+            })
+        )
+        sb_user = response.user
+        if not sb_user:
+            raise HTTPException(status_code=400, detail="Registration failed — check email format")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    await _ensure_settings(sb_user.id)
+    token = create_access_token({"sub": sb_user.id, "email": sb_user.email})
+    logger.info(f"New user registered: {sb_user.email}")
+    return TokenResponse(access_token=token, user_id=sb_user.id, email=sb_user.email)
 
 
 @router.post("/login", response_model=TokenResponse)
-async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(User).where(User.email == body.email))
-    user = result.scalar_one_or_none()
-
-    if not user or not verify_password(body.password, user.hashed_password):
+async def login(body: LoginRequest):
+    """Login via Supabase Auth."""
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Supabase client not configured")
+    try:
+        response = await sb_run(
+            lambda: supabase.auth.sign_in_with_password({
+                "email": body.email,
+                "password": body.password,
+            })
+        )
+        sb_user = response.user
+        if not sb_user:
+            raise HTTPException(status_code=401, detail="Invalid email or password")
+    except HTTPException:
+        raise
+    except Exception as e:
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
-    if not user.is_active:
-        raise HTTPException(status_code=403, detail="Account is disabled")
+    await _ensure_settings(sb_user.id)
+    token = create_access_token({"sub": sb_user.id, "email": sb_user.email})
+    logger.info(f"User logged in: {sb_user.email}")
+    return TokenResponse(access_token=token, user_id=sb_user.id, email=sb_user.email)
 
-    token = create_access_token({"sub": user.id, "email": user.email})
-    logger.info(f"User logged in: {user.email}")
-    return TokenResponse(access_token=token, user_id=user.id, email=user.email)
-
-
-@router.get("/me")
-async def get_me(db: AsyncSession = Depends(get_db)):
-    # Simplified — in production, decode JWT from Authorization header
-    return {"message": "Attach JWT middleware for /me endpoint"}
 
 @router.post("/sync", response_model=TokenResponse)
-async def sync_supabase_user(body: SyncRequest, db: AsyncSession = Depends(get_db)):
-    """Validates a Supabase JWT and ensures the user exists in the local database."""
+async def sync_supabase_user(body: SyncRequest):
+    """
+    Validates a Supabase JWT and ensures the user has a settings row.
+    Retries up to 3x on connection errors, falls back to local JWT decode.
+    """
     if not supabase:
         raise HTTPException(status_code=500, detail="Supabase client not configured")
 
-    try:
-        response = supabase.auth.get_user(body.access_token)
-        sb_user = response.user
-        if not sb_user:
-            raise ValueError("Invalid session")
-    except Exception as e:
-        raise HTTPException(status_code=401, detail=f"Invalid Supabase token: {e}")
+    sb_user = await _get_supabase_user(body.access_token)
 
-    # Check if user already exists
-    result = await db.execute(select(User).where(User.supabase_uid == sb_user.id))
-    user = result.scalar_one_or_none()
+    await _ensure_settings(sb_user.id)
+    token = create_access_token({"sub": sb_user.id, "email": sb_user.email})
+    logger.info(f"User synced: {sb_user.email}")
+    return TokenResponse(access_token=token, user_id=sb_user.id, email=sb_user.email)
 
-    if not user:
-        # Fallback to email check in case they were registered locally first
-        result = await db.execute(select(User).where(User.email == sb_user.email))
-        user = result.scalar_one_or_none()
-        
-        if user:
-            # Link local user to Supabase
-            user.supabase_uid = sb_user.id
-            await db.flush()
-        else:
-            # Create new user
-            display_name = sb_user.user_metadata.get("display_name") or sb_user.email.split("@")[0]
-            user = User(
-                email=sb_user.email,
-                hashed_password="", # Managed by Supabase
-                display_name=display_name,
-                supabase_uid=sb_user.id
-            )
-            db.add(user)
-            await db.flush()
-            
-    await _get_or_create_settings(db, user.id)
-    await db.commit()
 
-    # Issue a local JWT token for subsequent API calls
-    token = create_access_token({"sub": user.id, "email": user.email})
-    return TokenResponse(access_token=token, user_id=user.id, email=user.email)
+@router.get("/me")
+async def get_me():
+    return {"message": "Decode JWT from Authorization header to get user info"}

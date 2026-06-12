@@ -1,88 +1,170 @@
-"""Settings router — Read and update user settings."""
+"""Settings router — Read and update user settings via Supabase client."""
 
-from fastapi import APIRouter, Depends, Request
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
-
-from app.database import get_db
-from app.models import UserSettings
-from app.schemas import SettingsUpdate, SettingsResponse
-from app.core.security import encrypt_api_key, decrypt_api_key
-from app.websocket.manager import ws_manager
+import uuid
+from fastapi import APIRouter, Depends, Request, HTTPException, status
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from loguru import logger
+
+from app.schemas import SettingsUpdate, SettingsResponse
+from app.core.security import encrypt_api_key, decrypt_api_key, decode_access_token
+from app.core.supabase_client import supabase_admin, sb_run
+from app.websocket.manager import ws_manager
 
 router = APIRouter()
 
-_DEFAULT_USER_ID = "00000000-0000-0000-0000-000000000001"  # TODO: real user from JWT
+_bearer = HTTPBearer(auto_error=False)
+_FALLBACK_USER_ID = "00000000-0000-0000-0000-000000000001"
+
+# Default values for a new settings row
+_DEFAULTS = {
+    "wake_word": "alexa",
+    "stt_provider": "whisper",
+    "stt_noise_cancellation": True,
+    "whisper_model": "base",
+    "active_mode_timeout": 120,
+    "require_wake_word_always": True,
+    "tts_provider": "piper",
+    "gtts_api_key_encrypted": None,
+    "piper_voice": "en_US-lessac-medium",
+    "theme": "dark",
+    "sidebar_collapsed": False,
+    "browser_type": "chromium",
+    "startup_on_boot": True,
+    "minimize_to_tray": True,
+    "browser_animations_enabled": True,
+    "enable_desktop_overlay": True,
+    "overlay_shortcut": "Alt+A",
+    "listen_shortcut": "Alt+S",
+    "crm_url": "https://crm.acesoftcloud.in/",
+    "crm_keywords": "open my crm, open crm, open ace crm",
+    "llm_enabled": False,
+    "llm_provider": "groq",
+    "llm_model": "llama-3.3-70b-versatile",
+    "llm_api_key_encrypted": None,
+    "llm_temperature": 0.7,
+    "llm_mode": "fallback",
+}
 
 
-async def _get_settings(db: AsyncSession) -> UserSettings:
-    result = await db.execute(select(UserSettings).where(UserSettings.user_id == _DEFAULT_USER_ID))
-    s = result.scalar_one_or_none()
-    if not s:
-        s = UserSettings(user_id=_DEFAULT_USER_ID)
-        db.add(s)
-        await db.flush()
-    return s
+# ── Auth Dependency ───────────────────────────────────────────────────────────
+
+async def get_current_user_id(
+    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
+) -> str:
+    if not credentials:
+        return _FALLBACK_USER_ID
+    try:
+        payload = decode_access_token(credentials.credentials)
+        user_id = payload.get("sub")
+        if not user_id:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+        return user_id
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired token")
 
 
-def _build_response(s: UserSettings) -> SettingsResponse:
+# ── Internal Helpers ──────────────────────────────────────────────────────────
+
+async def _get_or_create_settings(user_id: str) -> dict:
+    """Fetch settings for user_id; create with defaults if not found."""
+    res = await sb_run(lambda: supabase_admin.table("settings").select("*").eq("user_id", user_id).execute())
+    if res.data:
+        return res.data[0]
+
+    # Row not found — attempt insert with defaults
+    new_row = {**_DEFAULTS, "id": str(uuid.uuid4()), "user_id": user_id}
+    try:
+        await sb_run(lambda: supabase_admin.table("settings").insert(new_row).execute())
+        logger.info(f"Created default settings for user {user_id}")
+        return new_row
+    except Exception as e:
+        if "23505" in str(e):
+            # Duplicate key — row already exists but SELECT couldn't see it (RLS).
+            # Use upsert to fetch + return the existing row.
+            logger.info(f"Settings row exists for {user_id} — fetching via upsert.")
+            try:
+                res2 = await sb_run(
+                    lambda: supabase_admin.table("settings")
+                    .upsert(new_row, on_conflict="user_id")
+                    .execute()
+                )
+                if res2.data:
+                    return res2.data[0]
+            except Exception as e2:
+                logger.warning(f"Upsert fallback also failed: {e2}")
+        else:
+            logger.warning(f"Could not persist settings for user {user_id}: {e}")
+        return new_row  # Return in-memory defaults as safe fallback
+
+
+def _build_response(s: dict) -> SettingsResponse:
     return SettingsResponse(
-        wake_word=s.wake_word,
-        whisper_model=s.whisper_model,
-        stt_provider=s.stt_provider,
-        stt_noise_cancellation=s.stt_noise_cancellation,
-        active_mode_timeout=s.active_mode_timeout,
-        require_wake_word_always=s.require_wake_word_always,
-        tts_provider=s.tts_provider,
-        piper_voice=s.piper_voice,
-        theme=s.theme,
-        browser_type=s.browser_type,
-        startup_on_boot=s.startup_on_boot,
-        minimize_to_tray=s.minimize_to_tray,
-        browser_animations_enabled=s.browser_animations_enabled,
-        enable_desktop_overlay=s.enable_desktop_overlay,
-        overlay_shortcut=s.overlay_shortcut,
-        listen_shortcut=s.listen_shortcut,
-        gtts_configured=bool(s.gtts_api_key_encrypted),
-        crm_url=s.crm_url,
-        crm_keywords=s.crm_keywords,
-        # LLM
-        llm_enabled=s.llm_enabled,
-        llm_provider=s.llm_provider,
-        llm_model=s.llm_model,
-        llm_configured=bool(s.llm_api_key_encrypted),
-        llm_temperature=s.llm_temperature,
-        llm_mode=s.llm_mode,
+        wake_word=s.get("wake_word", "alexa"),
+        whisper_model=s.get("whisper_model", "base"),
+        stt_provider=s.get("stt_provider", "whisper"),
+        stt_noise_cancellation=s.get("stt_noise_cancellation", True),
+        active_mode_timeout=s.get("active_mode_timeout", 120),
+        require_wake_word_always=s.get("require_wake_word_always", True),
+        tts_provider=s.get("tts_provider", "piper"),
+        piper_voice=s.get("piper_voice", "en_US-lessac-medium"),
+        theme=s.get("theme", "dark"),
+        browser_type=s.get("browser_type", "chromium"),
+        startup_on_boot=s.get("startup_on_boot", True),
+        minimize_to_tray=s.get("minimize_to_tray", True),
+        browser_animations_enabled=s.get("browser_animations_enabled", True),
+        enable_desktop_overlay=s.get("enable_desktop_overlay", True),
+        overlay_shortcut=s.get("overlay_shortcut", "Alt+A"),
+        listen_shortcut=s.get("listen_shortcut", "Alt+S"),
+        gtts_configured=bool(s.get("gtts_api_key_encrypted")),
+        crm_url=s.get("crm_url", "https://crm.acesoftcloud.in/"),
+        crm_keywords=s.get("crm_keywords", "open my crm, open crm, open ace crm"),
+        llm_enabled=s.get("llm_enabled", False),
+        llm_provider=s.get("llm_provider", "groq"),
+        llm_model=s.get("llm_model", "llama-3.3-70b-versatile"),
+        llm_configured=bool(s.get("llm_api_key_encrypted")),
+        llm_temperature=s.get("llm_temperature", 0.7),
+        llm_mode=s.get("llm_mode", "fallback"),
     )
 
 
+# ── Routes ────────────────────────────────────────────────────────────────────
+
 @router.get("", response_model=SettingsResponse)
-async def get_settings(db: AsyncSession = Depends(get_db)):
-    s = await _get_settings(db)
+async def get_settings(user_id: str = Depends(get_current_user_id)):
+    s = await _get_or_create_settings(user_id)
     return _build_response(s)
 
 
 @router.patch("", response_model=SettingsResponse)
-async def update_settings(body: SettingsUpdate, request: Request, db: AsyncSession = Depends(get_db)):
-    s = await _get_settings(db)
+async def update_settings(
+    body: SettingsUpdate,
+    request: Request,
+    user_id: str = Depends(get_current_user_id),
+):
+    s = await _get_or_create_settings(user_id)
+    updates: dict = {}
 
     for field, value in body.model_dump(exclude_none=True).items():
         if field == "gtts_api_key" and value:
-            s.gtts_api_key_encrypted = encrypt_api_key(value)
+            updates["gtts_api_key_encrypted"] = encrypt_api_key(value)
         elif field == "llm_api_key" and value:
-            s.llm_api_key_encrypted = encrypt_api_key(value)
-        elif hasattr(s, field):
-            setattr(s, field, value)
-            # Sync to in-memory config so that TTS and STT factories see the update immediately
+            updates["llm_api_key_encrypted"] = encrypt_api_key(value)
+        else:
+            updates[field] = value
+            # Sync to in-memory config
             from app.config import settings as global_settings
             if hasattr(global_settings, field):
                 setattr(global_settings, field, value)
 
-    await db.commit()
+    if updates:
+        await sb_run(
+            lambda: supabase_admin.table("settings").update(updates).eq("user_id", user_id).execute()
+        )
+        s = {**s, **updates}
 
     # Hot-swap LLM provider if LLM settings changed
-    if any(f in body.model_dump(exclude_none=True) for f in ("llm_provider", "llm_model", "llm_api_key", "llm_enabled", "llm_mode", "llm_temperature")):
+    llm_fields = {"llm_provider", "llm_model", "llm_api_key", "llm_enabled", "llm_mode", "llm_temperature"}
+    if any(f in body.model_dump(exclude_none=True) for f in llm_fields):
         _apply_llm_settings(s)
 
     # Hot-reload STT model if it changed
@@ -122,30 +204,29 @@ async def update_settings(body: SettingsUpdate, request: Request, db: AsyncSessi
                     logger.warning(f"Failed to stop Desktop Overlay: {e}")
                 request.app.state.overlay_process = None
 
-    # Broadcast voice pipeline hot-reload signal
     await ws_manager.broadcast("settings_updated", {
-        "tts_provider": s.tts_provider, 
-        "wake_word": s.wake_word,
-        "enable_desktop_overlay": s.enable_desktop_overlay
+        "tts_provider": s.get("tts_provider"),
+        "wake_word": s.get("wake_word"),
+        "enable_desktop_overlay": s.get("enable_desktop_overlay"),
     })
 
     return _build_response(s)
 
 
-def _apply_llm_settings(s: UserSettings) -> None:
+def _apply_llm_settings(s: dict) -> None:
     """Hot-swap the LLM provider based on current settings."""
     from app.services.llm.llm_service import llm_service
-    if not s.llm_enabled or not s.llm_api_key_encrypted:
+    if not s.get("llm_enabled") or not s.get("llm_api_key_encrypted"):
         llm_service.disable("LLM provider not enabled or missing API key. Go to Settings → AI Assistant.")
         return
     try:
-        api_key = decrypt_api_key(s.llm_api_key_encrypted)
+        api_key = decrypt_api_key(s["llm_api_key_encrypted"])
         llm_service.set_provider(
-            provider_name=s.llm_provider,
+            provider_name=s.get("llm_provider", "groq"),
             api_key=api_key,
-            model=s.llm_model,
-            temperature=s.llm_temperature,
-            mode=s.llm_mode,
+            model=s.get("llm_model", "llama-3.3-70b-versatile"),
+            temperature=s.get("llm_temperature", 0.7),
+            mode=s.get("llm_mode", "fallback"),
             enabled=True,
         )
     except Exception as e:

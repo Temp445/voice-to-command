@@ -70,18 +70,17 @@ class CommandService:
 
         # 0. Check for user-defined Macros/Workflows in the database
         try:
-            from app.database import AsyncSessionLocal
-            from app.models import Workflow
-            from sqlalchemy import select
-            async with AsyncSessionLocal() as session:
-                result = await session.execute(select(Workflow))
-                workflows = result.scalars().all()
-                for wf in workflows:
-                    if wf.trigger_phrase.lower() in text.lower():
-                        logger.info(f"Matched workflow macro: {wf.name}")
+            from app.core.supabase_client import supabase_admin, sb_run
+            res = await sb_run(lambda: supabase_admin.table("workflows").select("*").execute())
+            if res.data:
+                for wf in res.data:
+                    trigger_phrase = wf.get("trigger_phrase")
+                    if trigger_phrase and trigger_phrase.lower() in text.lower():
+                        logger.info(f"Matched workflow macro: {wf.get('name')}")
                         results = []
                         import asyncio
-                        for step in wf.steps:
+                        steps = wf.get("steps", [])
+                        for step in steps:
                             action = step.get("action", "")
                             if step.get("delay_ms", 0):
                                 await asyncio.sleep(step["delay_ms"] / 1000)
@@ -93,8 +92,8 @@ class CommandService:
                         
                         return {
                             "intent": "execute_workflow",
-                            "parameters": {"name": wf.name},
-                            "result": f"Executed macro '{wf.name}'. Steps: {len(results)}",
+                            "parameters": {"name": wf.get("name")},
+                            "result": f"Executed macro '{wf.get('name')}'. Steps: {len(results)}",
                             "status": "success",
                             "duration_ms": (time.perf_counter() - start) * 1000,
                             "is_fallback": False

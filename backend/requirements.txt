@@ -10,11 +10,6 @@ uvicorn[standard]
 python-multipart
 websockets
 
-# --- Database ---
-sqlalchemy
-alembic
-asyncpg
-
 # --- Supabase ---
 supabase
 httpx

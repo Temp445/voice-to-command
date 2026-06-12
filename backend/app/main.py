@@ -23,7 +23,6 @@ from loguru import logger
 from app.config import settings
 from app.core.logging import setup_logging
 from app.core.middleware import register_middleware, register_exception_handlers
-from app.database import init_db
 from app.websocket.manager import ws_manager
 from app.services.intent_registry import register_all_intents
 
@@ -96,8 +95,7 @@ async def lifespan(app: FastAPI):
     setup_logging()
     logger.info(f"🚀 Starting {settings.app_name} v{settings.app_version}")
 
-    await init_db()
-    logger.info("✅ Database initialised")
+    logger.info("✅ Database initialised (Supabase client ready)")
 
     # ── Dynamic App Discovery ────────────────────────────────────────────────
     from automation.desktop.app_scanner import AppScanner, get_scanner
@@ -134,31 +132,32 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"⚠️ Browser integration failed: {e}")
 
-    # ── Initialize LLM from .env (quick-start without UI) ────────────────────
-    _init_llm_from_env()
-
-    # ── Restore LLM Settings from DB (overrides .env if DB has a key set) ────
+    # ── Restore Settings from Supabase (overrides .env if DB has values set) ─
     try:
-        from sqlalchemy import select
-        from app.models import UserSettings
-        from app.database import AsyncSessionLocal
+        from app.core.supabase_client import supabase_admin, sb_run
         from app.routers.settings_router import _apply_llm_settings
-        async with AsyncSessionLocal() as db:
-            result = await db.execute(select(UserSettings).limit(1))
-            s = result.scalar_one_or_none()
-            if s:
-                from app.config import settings as global_settings
-                # Sync all fields from DB to in-memory config
-                for field in s.__dict__:
-                    if not field.startswith('_') and hasattr(global_settings, field):
-                        setattr(global_settings, field, getattr(s, field))
-                
-                # Apply LLM specific initializations
-                if s.llm_api_key_encrypted:
-                    _apply_llm_settings(s)
-                logger.info("✅ All settings restored from database")
+        res = await sb_run(
+            lambda: supabase_admin.table("settings").select("*").order("updated_at", desc=True).limit(1).execute()
+        )
+        if res.data:
+            s = res.data[0]
+            from app.config import settings as global_settings
+            for field in ("wake_word", "whisper_model", "tts_provider", "piper_voice",
+                          "active_mode_timeout", "browser_type", "enable_desktop_overlay",
+                          "crm_url", "crm_keywords", "llm_provider", "llm_model",
+                          "llm_mode", "llm_temperature"):
+                if field in s and s[field] is not None and hasattr(global_settings, field):
+                    setattr(global_settings, field, s[field])
+            if s.get("llm_api_key_encrypted"):
+                _apply_llm_settings(s)
+            logger.info("✅ All settings restored from Supabase")
     except Exception as e:
-        logger.warning(f"⚠️  Could not restore LLM settings from DB: {e}")
+        logger.warning(f"⚠️  Could not restore settings from Supabase: {e}")
+
+    # ── Initialize LLM from .env (fallback if DB has no LLM set) ────────────────────
+    from app.services.llm.llm_service import llm_service
+    if not llm_service.is_ready:
+        _init_llm_from_env()
 
 
     # ── Initialize Desktop Overlay ───────────────────────────────────────────

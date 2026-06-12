@@ -995,16 +995,21 @@ async def handle_ask_and_type(question: str = "", **_) -> str:
 
 async def handle_vscode_terminal(**_) -> str:
     from automation.desktop.window_manager import WindowManager
-    from automation.input.keyboard import KeyboardController
+    from automation.input.keyboard_controller import KeyboardController
     import asyncio
     
-    # Try to focus VS Code
-    if WindowManager().focus_by_title("Visual Studio Code"):
+    wm = WindowManager()
+    # Try to focus VS Code or a popular fork
+    if (wm.focus_by_title("Visual Studio Code") or 
+        wm.focus_by_title("Cursor") or 
+        wm.focus_by_title("Windsurf") or 
+        wm.focus_by_title("Antigravity") or 
+        wm.focus_by_title("Voice_Controller_v1")):
         await asyncio.sleep(0.5)
-        # Ctrl + ` shortcut
+        # Ctrl + ` shortcut for terminal
         KeyboardController().press_keys(["ctrl", "`"])
-        return "Opened VS Code terminal."
-    return "Could not find an active VS Code window."
+        return "Opened terminal in the code editor."
+    return "Could not find an active code editor window."
 
 # ─── Register All Intents ────────────────────────────────────────────────────
 

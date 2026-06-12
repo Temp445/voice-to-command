@@ -1,23 +1,38 @@
 """Automation router — Logs and direct action triggers."""
 
-from fastapi import APIRouter, Depends, Request
+from datetime import datetime, timezone
+from fastapi import APIRouter, Request
 from fastapi.responses import FileResponse
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, desc
 
-from app.database import get_db
-from app.models import AutomationLog
 from app.schemas import AutomationLogResponse
+from app.core.supabase_client import supabase_admin, sb_run
 
 router = APIRouter()
 
 
 @router.get("/logs", response_model=list[AutomationLogResponse])
-async def get_logs(limit: int = 100, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(
-        select(AutomationLog).order_by(desc(AutomationLog.created_at)).limit(limit)
+async def get_logs(limit: int = 100):
+    res = await sb_run(
+        lambda: supabase_admin
+        .table("automation_logs")
+        .select("*")
+        .order("created_at", desc=True)
+        .limit(limit)
+        .execute()
     )
-    return result.scalars().all()
+    rows = res.data or []
+    return [
+        AutomationLogResponse(
+            id=r["id"],
+            action=r["action"],
+            target=r.get("target"),
+            status=r.get("status", "success"),
+            details=r.get("details"),
+            level=r.get("level", "info"),
+            created_at=datetime.fromisoformat(r["created_at"]) if isinstance(r["created_at"], str) else r["created_at"],
+        )
+        for r in rows
+    ]
 
 
 @router.get("/apps", summary="List all dynamically discovered apps")

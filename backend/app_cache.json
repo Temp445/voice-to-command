@@ -2440,5 +2440,29 @@
     "exe_name": "LockApp.exe",
     "path": "C:\\Windows\\SystemApps\\Microsoft.LockApp_cw5n1h2txyewy\\LockApp.exe",
     "source": "process"
+  },
+  "makensis": {
+    "name": "makensis",
+    "exe_name": "makensis.exe",
+    "path": "C:\\Users\\Nivin\\AppData\\Local\\tauri\\NSIS\\makensis.exe",
+    "source": "process"
+  },
+  "vssvc": {
+    "name": "VSSVC",
+    "exe_name": "VSSVC.exe",
+    "path": "C:\\Windows\\System32\\VSSVC.exe",
+    "source": "process"
+  },
+  "srtasks": {
+    "name": "SrTasks",
+    "exe_name": "SrTasks.exe",
+    "path": "C:\\Windows\\System32\\SrTasks.exe",
+    "source": "process"
+  },
+  "onedrivelauncher": {
+    "name": "OneDriveLauncher",
+    "exe_name": "OneDriveLauncher.exe",
+    "path": "C:\\Program Files\\Microsoft OneDrive\\26.088.0510.0004\\OneDriveLauncher.exe",
+    "source": "process"
   }
 }

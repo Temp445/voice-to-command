@@ -54,9 +54,7 @@ class Settings(BaseSettings):
     # --- Supabase ---
     supabase_url: str = ""
     supabase_publishable_key: str = ""
-
-    # --- Database (Supabase PostgreSQL) ---
-    database_url: str = f"sqlite+aiosqlite:///{_APPDATA_DIR.as_posix()}/ace.db"
+    supabase_service_key: str = ""
 
     # --- Voice ---
     wake_word: str = "alexa"  # Must match OWW model: hey_jarvis, alexa, hey_mycroft, hey_rhasspy
