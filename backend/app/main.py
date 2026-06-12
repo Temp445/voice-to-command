@@ -60,7 +60,7 @@ def _init_llm_from_env() -> None:
 
     api_key = key_map.get(provider, "").strip()
     if not api_key:
-        logger.warning(f"⚠️  LLM provider '{provider}' set but no API key found in .env")
+        logger.info(f"ℹ️  LLM provider '{provider}' has no API key configured — AI features disabled. Set a key in Settings to enable.")
         return
 
     # Use default model if not specified

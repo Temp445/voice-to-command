@@ -246,7 +246,6 @@ export default function SettingsPage() {
         llm_enabled: settings.llmEnabled, llm_provider: settings.llmProvider, llm_model: settings.llmModel,
         llm_mode: settings.llmMode, llm_temperature: settings.llmTemperature,
       };
-      if (settings.ttsProvider === "gtts") { patch.gtts_api_key = ""; }
       if (settings.llmApiKey) patch.llm_api_key = settings.llmApiKey;
       await api.updateSettings(patch);
       setSaved(true); setTimeout(() => setSaved(false), 2500);

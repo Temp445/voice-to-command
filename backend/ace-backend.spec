@@ -5,7 +5,7 @@ from PyInstaller.utils.hooks import collect_data_files
 
 datas_list = [
     ('automation/desktop/overlay.py', 'automation/desktop'),
-    ('../voice/tts/models/*', 'voice/tts/models')
+    ('../voice/tts/models', 'voice/tts/models')
 ]
 datas_list += collect_data_files('openwakeword')
 datas_list += collect_data_files('av')

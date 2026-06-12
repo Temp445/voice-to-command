@@ -24,7 +24,7 @@ _DEFAULTS = {
     "active_mode_timeout": 120,
     "require_wake_word_always": True,
     "tts_provider": "piper",
-    "gtts_api_key_encrypted": None,
+
     "piper_voice": "en_US-lessac-medium",
     "theme": "dark",
     "sidebar_collapsed": False,
@@ -115,7 +115,7 @@ def _build_response(s: dict) -> SettingsResponse:
         enable_desktop_overlay=s.get("enable_desktop_overlay", True),
         overlay_shortcut=s.get("overlay_shortcut", "Alt+A"),
         listen_shortcut=s.get("listen_shortcut", "Alt+S"),
-        gtts_configured=bool(s.get("gtts_api_key_encrypted")),
+
         crm_url=s.get("crm_url", "https://crm.acesoftcloud.in/"),
         crm_keywords=s.get("crm_keywords", "open my crm, open crm, open ace crm"),
         llm_enabled=s.get("llm_enabled", False),
@@ -145,9 +145,7 @@ async def update_settings(
     updates: dict = {}
 
     for field, value in body.model_dump(exclude_none=True).items():
-        if field == "gtts_api_key" and value:
-            updates["gtts_api_key_encrypted"] = encrypt_api_key(value)
-        elif field == "llm_api_key" and value:
+        if field == "llm_api_key" and value:
             updates["llm_api_key_encrypted"] = encrypt_api_key(value)
         else:
             updates[field] = value
@@ -230,5 +228,10 @@ def _apply_llm_settings(s: dict) -> None:
             enabled=True,
         )
     except Exception as e:
-        logger.error(f"Failed to apply LLM settings: {e}")
-        llm_service.disable(f"Initialization Failed: {e}")
+        from cryptography.fernet import InvalidToken
+        if isinstance(e, InvalidToken):
+            msg = "API key decryption failed — the SECRET_KEY may have changed. Re-enter your API key in Settings → AI Assistant."
+        else:
+            msg = str(e) or repr(e)
+        logger.error(f"Failed to apply LLM settings: {msg}")
+        llm_service.disable(f"Initialization Failed: {msg}")

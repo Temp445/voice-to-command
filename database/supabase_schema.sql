@@ -29,7 +29,6 @@ CREATE TABLE IF NOT EXISTS public.settings (
     active_mode_timeout         INTEGER DEFAULT 120,
     require_wake_word_always    BOOLEAN DEFAULT TRUE,
     tts_provider                TEXT DEFAULT 'piper',
-    gtts_api_key_encrypted      TEXT,
     piper_voice                 TEXT DEFAULT 'en_US-lessac-medium',
     theme                       TEXT DEFAULT 'dark',
     sidebar_collapsed           BOOLEAN DEFAULT FALSE,

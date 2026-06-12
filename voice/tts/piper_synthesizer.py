@@ -31,7 +31,9 @@ class PiperSynthesizer(TTSProvider):
     def __init__(self):
         models_dir_path = Path(settings.piper_models_dir)
         if not models_dir_path.is_absolute():
-            self.models_dir = _ROOT / models_dir_path
+            # Use _DATA_ROOT to properly support PyInstaller _internal structure
+            from app.config import _DATA_ROOT
+            self.models_dir = _DATA_ROOT / models_dir_path
         else:
             self.models_dir = models_dir_path
         self.voice = settings.piper_voice

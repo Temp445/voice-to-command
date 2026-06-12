@@ -14,9 +14,13 @@ import os
 if getattr(sys, 'frozen', False):
     # Running in PyInstaller bundle. Base paths off the executable location.
     _ROOT = Path(sys.executable).parent
+    # Data files are placed in _internal starting in Pyinstaller 6.0 for onedir mode
+    _DATA_ROOT = Path(sys._MEIPASS)
 else:
     # Resolve .env path — works whether you run from project root or backend/
     _ROOT = Path(__file__).resolve().parent.parent.parent  # Voice_Controller_v1/
+    _DATA_ROOT = _ROOT
+
 
 # Robustly find .env file
 _env_paths = [
@@ -72,7 +76,6 @@ class Settings(BaseSettings):
 
     # --- TTS ---
     tts_provider: str = "piper"  # piper | gtts
-    gtts_api_key: str = ""
     piper_voice: str = "en_US-lessac-medium"
     piper_models_dir: str = "voice/tts/models"
 

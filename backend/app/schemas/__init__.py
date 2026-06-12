@@ -37,7 +37,6 @@ class SettingsUpdate(BaseModel):
     active_mode_timeout: int | None = None
     require_wake_word_always: bool | None = None
     tts_provider: str | None = None
-    gtts_api_key: str | None = None       # raw; encrypted before storage
     piper_voice: str | None = None
     theme: str | None = None
     browser_type: str | None = None
@@ -75,7 +74,6 @@ class SettingsResponse(BaseModel):
     enable_desktop_overlay: bool
     overlay_shortcut: str
     listen_shortcut: str
-    gtts_configured: bool   # True if API key is set
     crm_url: str
     crm_keywords: str
     # LLM

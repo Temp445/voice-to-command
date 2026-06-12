@@ -77,7 +77,6 @@ class UserSettings(Base):
 
     # TTS
     tts_provider: Mapped[str] = mapped_column(String(20), default="piper")
-    gtts_api_key_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
     piper_voice: Mapped[str] = mapped_column(String(100), default="en_US-lessac-medium")
 
     # UI

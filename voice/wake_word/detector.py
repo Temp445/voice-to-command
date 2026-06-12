@@ -47,11 +47,14 @@ class WakeWordDetector:
         # OWW supports pre-trained wake words: hey_jarvis, alexa, hey_mycroft, hey_rhasspy
         # The acoustic model must match what is actually spoken
         model_map = {
-            "alexa":      "alexa",
+            "alexa": "alexa",
+            "hey_jarvis": "hey_jarvis",
+            "hey_mycroft": "hey_mycroft",
+            "hey_rhasspy": "hey_rhasspy",
         }
         model_name = model_map.get(self.wake_word, "alexa")
 
-        if self.wake_word != model_name.replace("_", " "):
+        if self.wake_word not in (model_name, model_name.replace("_", " ")):
             logger.warning(
                 f"⚠️  Wake word '{self.wake_word}' has no dedicated offline model. "
                 f"Using '{model_name}' acoustic model. "
