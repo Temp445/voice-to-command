@@ -24,7 +24,6 @@
         "transparent": false,
         "center": true,
         "skipTaskbar": false,
-        "fileDropEnabled": false,
         "label": "main",
         "url": "/"
       }

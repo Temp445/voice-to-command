@@ -38,9 +38,13 @@ interface SettingsStore {
 
 /** Push the persisted minimizeToTray value to the Rust backend on startup */
 export function syncTrayStateOnBoot(minimizeToTray: boolean) {
-  import("@tauri-apps/api/core").then(({ invoke }) => {
-    invoke("sync_minimize_to_tray", { value: minimizeToTray }).catch(console.error);
-  }).catch(() => {/* not in Tauri context (web dev) */});
+  if (typeof window !== "undefined" && window.__TAURI_INTERNALS__) {
+    import("@tauri-apps/api/core").then((tauriCore) => {
+      if (tauriCore && typeof tauriCore.invoke === "function") {
+        tauriCore.invoke("sync_minimize_to_tray", { value: minimizeToTray }).catch(console.error);
+      }
+    }).catch(() => {/* not in Tauri context (web dev) */});
+  }
 }
 
 export const useSettingsStore = create<SettingsStore>()(
@@ -80,9 +84,13 @@ export const useSettingsStore = create<SettingsStore>()(
         set(patch);
         // Sync tray state to Rust backend whenever it changes
         if (patch.minimizeToTray !== undefined) {
-          import("@tauri-apps/api/core").then(({ invoke }) => {
-            invoke("sync_minimize_to_tray", { value: patch.minimizeToTray }).catch(console.error);
-          }).catch(() => {});
+          if (typeof window !== "undefined" && window.__TAURI_INTERNALS__) {
+            import("@tauri-apps/api/core").then((tauriCore) => {
+              if (tauriCore && typeof tauriCore.invoke === "function") {
+                tauriCore.invoke("sync_minimize_to_tray", { value: patch.minimizeToTray }).catch(console.error);
+              }
+            }).catch(() => {});
+          }
         }
       },
     }),

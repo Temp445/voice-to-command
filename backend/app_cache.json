@@ -2518,5 +2518,23 @@
     "exe_name": "SpatialAudioLicenseSrv.exe",
     "path": "C:\\Windows\\System32\\SpatialAudioLicenseSrv.exe",
     "source": "process"
+  },
+  "unreal engine": {
+    "name": "Unreal Engine",
+    "exe_name": "UnrealEditor.exe",
+    "path": "C:\\Program Files\\Epic Games\\UE_5.7\\Engine\\Binaries\\Win64\\UnrealEditor.exe",
+    "source": "desktop"
+  },
+  "vctip": {
+    "name": "vctip",
+    "exe_name": "vctip.exe",
+    "path": "C:\\Program Files (x86)\\Microsoft Visual Studio\\18\\BuildTools\\VC\\Tools\\MSVC\\14.51.36231\\bin\\Hostx64\\x64\\vctip.exe",
+    "source": "process"
+  },
+  "ace-voice-controller": {
+    "name": "ace-voice-controller",
+    "exe_name": "ace-voice-controller.exe",
+    "path": "C:\\Users\\nithi\\Desktop\\Clones\\voice-to-command\\frontend\\src-tauri\\target\\debug\\ace-voice-controller.exe",
+    "source": "process"
   }
 }

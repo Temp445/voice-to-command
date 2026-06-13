@@ -60,7 +60,7 @@ export function ShortcutManager() {
         
         // Always unregister all previous shortcuts before registering new ones
         // This is robust against Next.js Fast Refresh which might leave stale hotkeys registered
-        await unregisterAll().catch(console.error);
+        await unregisterAll().catch(console.warn);
         
         registeredRef.current = {};
 
@@ -72,20 +72,20 @@ export function ShortcutManager() {
              const newState = !currentState;
              updateSettings({ enableDesktopOverlay: newState });
              api.updateSettings({ enable_desktop_overlay: newState }).catch(console.error);
-          }).catch(e => console.error("Failed to register overlay shortcut:", e));
+          }).catch(e => console.warn("Failed to register overlay shortcut:", e));
           registeredRef.current.overlay = overlayShortcut;
         }
 
         // Trigger Listen
         if (listenShortcut) {
           await register(listenShortcut, async () => {
-             await api.activate().catch(e => console.error("Failed to activate listen:", e));
-          }).catch(e => console.error("Failed to register listen shortcut:", e));
+             await api.activate().catch(e => console.warn("Failed to activate listen:", e));
+          }).catch(e => console.warn("Failed to register listen shortcut:", e));
           registeredRef.current.listen = listenShortcut;
         }
 
       } catch (err) {
-        console.error("GlobalShortcut API not available or error:", err);
+        console.warn("GlobalShortcut API not available or error:", err);
       }
     }
 
@@ -95,7 +95,7 @@ export function ShortcutManager() {
       // Cleanup on unmount (or when shortcuts change)
       if ((window as any).__TAURI__) {
         import('@tauri-apps/plugin-global-shortcut').then(({ unregisterAll }) => {
-          unregisterAll().catch(console.error);
+          unregisterAll().catch(console.warn);
           registeredRef.current = {};
         }).catch(() => {});
       }
