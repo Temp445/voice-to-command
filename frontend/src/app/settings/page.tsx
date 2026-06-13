@@ -95,7 +95,7 @@ export default function SettingsPage() {
     if (!initialLoaded) return;
     
     // Sync the Start on Boot setting with the OS registry
-    if (window.__TAURI_IPC__) {
+    if (typeof window !== 'undefined' && '__TAURI_IPC__' in window) {
       invoke(settings.startupOnBoot ? "enable_autostart" : "disable_autostart").catch(err => console.error("Autostart sync failed:", err));
     }
 
