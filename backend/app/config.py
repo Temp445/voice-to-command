@@ -25,6 +25,7 @@ else:
 # Robustly find .env file
 _env_paths = [
     _ROOT / ".env",               # Prod (next to exe) or Dev (project root)
+    _DATA_ROOT / ".env",          # Bundled .env in _MEIPASS
     Path(".env"),                 # Current working directory
     Path(__file__).resolve().parent.parent.parent / ".env", # Hard fallback to project root
     Path("..") / ".env",          # CWD is backend/
