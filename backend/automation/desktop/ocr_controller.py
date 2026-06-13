@@ -50,6 +50,9 @@ class OCRController:
 
     async def _run_windows_native_ocr(self, target_text_lower: str) -> str:
         """Uses Windows 10/11 built-in OCR via winsdk with a temporary file."""
+        if sys.platform != "win32":
+            raise Exception("Windows Native OCR is only available on Windows.")
+            
         try:
             from winsdk.windows.media.ocr import OcrEngine
             from winsdk.windows.globalization import Language

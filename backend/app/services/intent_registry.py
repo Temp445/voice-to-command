@@ -1011,6 +1011,52 @@ async def handle_vscode_terminal(**_) -> str:
         return "Opened terminal in the code editor."
     return "Could not find an active code editor window."
 
+# ─── New Integrations Handlers (Audio, Clipboard, Trash, Summary) ────────────
+
+async def handle_delete_file(target: str = "", **_) -> str:
+    from automation.desktop.file_operations import FileOperations
+    return FileOperations().delete_target(target.strip())
+
+async def handle_clipboard_copy(text: str = "", **_) -> str:
+    from automation.system.clipboard import ClipboardManager
+    return ClipboardManager().write_text(text)
+
+async def handle_clipboard_read(**_) -> str:
+    from automation.system.clipboard import ClipboardManager
+    return ClipboardManager().read_text()
+
+async def handle_browser_extract_text(**_) -> str:
+    from automation.browser.browser_engine import BrowserEngine
+    return await BrowserEngine().extract_clean_text()
+
+async def handle_set_volume(level: str = "", **_) -> str:
+    from automation.system.audio import AudioController
+    import re
+    match = re.search(r'\d+', level)
+    if match:
+        return AudioController().set_system_volume(int(match.group(0)))
+    return "Please specify a volume level."
+
+async def handle_mute(**_) -> str:
+    from automation.system.audio import AudioController
+    return AudioController().mute_system(mute=True)
+
+async def handle_unmute(**_) -> str:
+    from automation.system.audio import AudioController
+    return AudioController().mute_system(mute=False)
+
+async def handle_set_app_volume(app_name: str = "", level: str = "", **_) -> str:
+    from automation.system.audio import AudioController
+    import re
+    match = re.search(r'\d+', level)
+    if match:
+        return AudioController().set_app_volume(app_name, int(match.group(0)))
+    return f"Please specify a volume level for {app_name}."
+
+async def handle_mute_app(app_name: str = "", **_) -> str:
+    from automation.system.audio import AudioController
+    return AudioController().mute_app(app_name, mute=True)
+
 # ─── Register All Intents ────────────────────────────────────────────────────
 
 def register_all_intents() -> None:
@@ -1019,6 +1065,94 @@ def register_all_intents() -> None:
     command_service._intents.clear()
     
     intents = [
+        # Audio Control
+        Intent(
+            name="set_volume",
+            domain="system",
+            patterns=[
+                r"^set\s+(?:the\s+)?(?:system\s+)?volume\s+(?:to\s+)?(?P<level>\d+(?:\s*(?:percent|%))?)$",
+                r"^(?:volume\s+(?:up|down)\s+to|change\s+volume\s+to)\s+(?P<level>\d+(?:\s*(?:percent|%))?)$",
+            ],
+            handler=handle_set_volume,
+            description="Set system volume to a specific percentage",
+            examples=["set volume to 50%", "change volume to 30"],
+            param_names=["level"],
+        ),
+        Intent(
+            name="mute_system",
+            domain="system",
+            patterns=[r"^mute\s+(?:the\s+)?(?:system|audio|sound)?$"],
+            handler=handle_mute,
+            description="Mute the system audio",
+            examples=["mute", "mute system"],
+        ),
+        Intent(
+            name="unmute_system",
+            domain="system",
+            patterns=[r"^unmute\s+(?:the\s+)?(?:system|audio|sound)?$"],
+            handler=handle_unmute,
+            description="Unmute the system audio",
+            examples=["unmute", "unmute system"],
+        ),
+        Intent(
+            name="set_app_volume",
+            domain="system",
+            patterns=[r"^set\s+(?:the\s+)?volume\s+(?:of|for)\s+(?P<app_name>.+?)\s+(?:to\s+)?(?P<level>\d+(?:\s*(?:percent|%))?)$"],
+            handler=handle_set_app_volume,
+            description="Set volume for a specific application",
+            examples=["set volume of spotify to 20%"],
+            param_names=["app_name", "level"],
+        ),
+        Intent(
+            name="mute_app",
+            domain="system",
+            patterns=[r"^mute\s+(?P<app_name>(?!the\s+system|audio|sound).+)$"],
+            handler=handle_mute_app,
+            description="Mute a specific application",
+            examples=["mute spotify", "mute chrome"],
+            param_names=["app_name"],
+        ),
+        # Safe Delete
+        Intent(
+            name="delete_file",
+            domain="desktop",
+            patterns=[r"^delete\s+(?:the\s+)?(?:file|folder\s+)?(?P<target>.+)$"],
+            handler=handle_delete_file,
+            description="Safely delete a file or folder by moving it to the Recycle Bin",
+            examples=["delete the demo file", "delete reports folder"],
+            param_names=["target"],
+        ),
+        # Clipboard
+        Intent(
+            name="clipboard_copy",
+            domain="system",
+            patterns=[
+                r"^copy\s+(?P<text>.+?)\s+(?:to\s+(?:the\s+)?clipboard)$",
+            ],
+            handler=handle_clipboard_copy,
+            description="Copy specific text to the clipboard",
+            examples=["copy this is a test to clipboard"],
+            param_names=["text"],
+        ),
+        Intent(
+            name="clipboard_read",
+            domain="system",
+            patterns=[r"^read\s+(?:the\s+)?clipboard$", r"what(?:\s+is|'s)\s+on\s+(?:the\s+)?clipboard\??$"],
+            handler=handle_clipboard_read,
+            description="Read the current contents of the clipboard",
+            examples=["read the clipboard"],
+        ),
+        # Web Summarize
+        Intent(
+            name="browser_extract_text",
+            domain="browser",
+            patterns=[
+                r"^(?:extract|read|summarize)\s+(?:the\s+)?(?:text|content|page|website|article)(?:\s+from\s+(?:the\s+)?(?:page|browser))?$",
+            ],
+            handler=handle_browser_extract_text,
+            description="Extract and purify all readable text from the current webpage",
+            examples=["read the article", "extract text from the page", "summarize the website"],
+        ),
         # search_google MUST be registered before search_youtube so explicit 'search <query>' always routes to Google
         Intent(
             name="search_google",

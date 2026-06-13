@@ -56,6 +56,9 @@ async def create_workflow(body: WorkflowCreate, user_id: str = Depends(get_curre
         "updated_at": now,
     }
     await sb_run(lambda: supabase_admin.table("workflows").insert(row).execute())
+    # Refresh the in-memory cache so the new workflow is immediately active
+    from app.services.command_service import command_service
+    command_service.refresh_in_background()
     return _row_to_response(row)
 
 
@@ -76,6 +79,9 @@ async def delete_workflow(workflow_id: str, user_id: str = Depends(get_current_u
     )
     if not res.data:
         raise HTTPException(status_code=404, detail="Workflow not found")
+    # Refresh the in-memory cache so the deleted workflow no longer triggers
+    from app.services.command_service import command_service
+    command_service.refresh_in_background()
 
 
 @router.post("/{workflow_id}/run")

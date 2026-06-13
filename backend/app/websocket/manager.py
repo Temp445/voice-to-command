@@ -1,12 +1,21 @@
 """
 ACE Voice Controller — WebSocket Connection Manager
 Manages real-time event broadcasting to all connected Tauri frontends.
+
+Optimizations:
+- Parallel broadcast: all clients receive events simultaneously via asyncio.gather
+- Non-blocking: lock only used for list mutation, never during send
+- Per-client timeout: a stalled client never blocks other clients
 """
 
 import asyncio
+import json
 from typing import Any
 from fastapi import WebSocket
 from loguru import logger
+
+# Max time (seconds) to wait for a single client send before treating it as dead
+_SEND_TIMEOUT = 2.0
 
 
 class ConnectionManager:
@@ -28,20 +37,33 @@ class ConnectionManager:
         logger.info(f"WS client disconnected. Total: {len(self._connections)}")
 
     async def broadcast(self, event: str, data: Any = None) -> None:
-        """Broadcast a typed event to all connected clients."""
-        payload = {"event": event, "data": data}
-        dead: list[WebSocket] = []
+        """
+        Broadcast a typed event to ALL connected clients SIMULTANEOUSLY.
+        Uses asyncio.gather so all clients get the event at the same time
+        instead of one by one. Dead connections are pruned automatically.
+        """
+        if not self._connections:
+            return
 
+        # Pre-serialize once — avoids re-encoding the same JSON N times
+        payload_str = json.dumps({"event": event, "data": data})
+
+        # Snapshot the connections list without holding the lock during sends
         async with self._lock:
             connections = list(self._connections)
 
-        for ws in connections:
+        async def _send_one(ws: WebSocket):
             try:
-                await ws.send_json(payload)
+                await asyncio.wait_for(ws.send_text(payload_str), timeout=_SEND_TIMEOUT)
             except Exception:
-                dead.append(ws)
+                return ws  # Mark as dead
+            return None
 
-        # Prune dead connections
+        # Fire all sends in parallel — all clients receive simultaneously
+        results = await asyncio.gather(*(_send_one(ws) for ws in connections))
+
+        # Prune any dead connections
+        dead = [ws for ws in results if ws is not None]
         if dead:
             async with self._lock:
                 for ws in dead:
@@ -49,9 +71,12 @@ class ConnectionManager:
                         self._connections.remove(ws)
 
     async def send_to(self, websocket: WebSocket, event: str, data: Any = None) -> None:
-        """Send a targeted event to one client."""
+        """Send a targeted event to one specific client."""
         try:
-            await websocket.send_json({"event": event, "data": data})
+            payload_str = json.dumps({"event": event, "data": data})
+            await asyncio.wait_for(
+                websocket.send_text(payload_str), timeout=_SEND_TIMEOUT
+            )
         except Exception as e:
             logger.warning(f"Failed to send to WS client: {e}")
 

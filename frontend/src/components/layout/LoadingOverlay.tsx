@@ -2,7 +2,6 @@
 
 import { useWSStore } from "@/hooks/useWebSocket";
 import { useEffect, useState } from "react";
-import { Loader2 } from "lucide-react";
 
 export function LoadingOverlay() {
   const { connected } = useWSStore();
@@ -39,41 +38,64 @@ export function LoadingOverlay() {
         pointerEvents: connected ? "none" : "all",
       }}
     >
+      <style dangerouslySetInnerHTML={{__html: `
+        @keyframes soundwave {
+          0%, 100% { transform: scaleY(0.3); opacity: 0.5; }
+          50% { transform: scaleY(1); opacity: 1; }
+        }
+        .ai-wave-bar {
+          width: 6px;
+          height: 40px;
+          background: var(--primary);
+          border-radius: 9999px;
+          animation: soundwave 1.2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+          transform-origin: center;
+          box-shadow: 0 0 10px var(--primary);
+        }
+        .ai-wave-bar:nth-child(1) { animation-delay: 0.0s; height: 25px; }
+        .ai-wave-bar:nth-child(2) { animation-delay: 0.15s; height: 40px; }
+        .ai-wave-bar:nth-child(3) { animation-delay: 0.3s; height: 55px; }
+        .ai-wave-bar:nth-child(4) { animation-delay: 0.45s; height: 40px; }
+        .ai-wave-bar:nth-child(5) { animation-delay: 0.6s; height: 25px; }
+      `}} />
+
       <div
         style={{
           display: "flex",
           flexDirection: "column",
           alignItems: "center",
-          gap: "1.5rem",
-          padding: "3rem",
+          gap: "2rem",
+          padding: "3.5rem 4rem",
           borderRadius: "2rem",
-          background: "rgba(255, 255, 255, 0.03)",
+          background: "rgba(255, 255, 255, 0.02)",
           border: "1px solid rgba(255, 255, 255, 0.05)",
           backdropFilter: "blur(20px)",
-          boxShadow: "0 20px 40px rgba(0, 0, 0, 0.2)",
+          boxShadow: "0 30px 60px rgba(0, 0, 0, 0.4)",
         }}
       >
-        <div style={{ position: "relative" }}>
-          {/* Glowing orb effect */}
+        <div style={{ position: "relative", height: "55px", display: "flex", alignItems: "center", gap: "8px" }}>
+          {/* Glowing orb effect behind the waves */}
           <div
             style={{
               position: "absolute",
               top: "50%",
               left: "50%",
               transform: "translate(-50%, -50%)",
-              width: "4rem",
-              height: "4rem",
+              width: "5rem",
+              height: "5rem",
               background: "var(--primary)",
               borderRadius: "50%",
-              filter: "blur(20px)",
-              opacity: 0.3,
+              filter: "blur(30px)",
+              opacity: 0.15,
             }}
           />
-          <Loader2 
-            size={48} 
-            className="animate-spin" 
-            style={{ color: "var(--primary)", position: "relative", zIndex: 1 }} 
-          />
+          
+          {/* Soundwave Bars */}
+          <div className="ai-wave-bar" />
+          <div className="ai-wave-bar" />
+          <div className="ai-wave-bar" />
+          <div className="ai-wave-bar" />
+          <div className="ai-wave-bar" />
         </div>
         
         <div style={{ textAlign: "center", display: "flex", flexDirection: "column", gap: "0.5rem" }}>

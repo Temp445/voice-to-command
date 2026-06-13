@@ -1,65 +1,16 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/schema.json",
+  "productName": "ACE Voice Controller",
+  "version": "1.0.0",
+  "identifier": "com.ace.voice-controller",
   "build": {
     "beforeDevCommand": "npm run dev",
     "beforeBuildCommand": "npm run build",
-    "devPath": "http://localhost:3000",
-    "distDir": "../out",
-    "withGlobalTauri": true
+    "devUrl": "http://localhost:3000",
+    "frontendDist": "../out"
   },
-  "package": {
-    "productName": "ACE Voice Controller",
-    "version": "1.0.0"
-  },
-  "tauri": {
-    "allowlist": {
-      "all": false,
-      "shell": { "all": false, "open": true, "execute": true, "sidecar": true },
-      "window": {
-        "all": false,
-        "close": true,
-        "hide": true,
-        "show": true,
-        "maximize": true,
-        "minimize": true,
-        "unminimize": true,
-        "setTitle": true,
-        "startDragging": true
-      },
-      "notification": { "all": true },
-      "globalShortcut": { "all": true },
-      "http": {
-        "all": true,
-        "request": true,
-        "scope": ["http://**", "ws://**"]
-      }
-    },
-    "bundle": {
-      "active": true,
-      "targets": "all",
-      "identifier": "com.ace.voice-controller",
-      "icon": [
-        "icons/32x32.png",
-        "icons/128x128.png",
-        "icons/icon.ico"
-      ],
-      "windows": {
-        "certificateThumbprint": null,
-        "digestAlgorithm": "sha256",
-        "timestampUrl": ""
-      },
-      "resources": [
-        "../../backend/dist/ace-backend"
-      ],
-      "copyright": "© 2026 ACE",
-      "category": "Utility",
-      "shortDescription": "AI-powered desktop voice controller",
-      "longDescription": "ACE is a production-grade AI-powered desktop voice control and automation system"
-    },
-    "security": { "csp": null },
-    "updater": {
-      "active": false
-    },
+  "app": {
+    "withGlobalTauri": true,
     "windows": [
       {
         "title": "ACE Voice Controller",
@@ -75,14 +26,38 @@
         "skipTaskbar": false,
         "fileDropEnabled": false,
         "label": "main",
-        "url": "index.html"
+        "url": "/"
       }
     ],
-    "systemTray": {
+    "trayIcon": {
       "iconPath": "icons/32x32.png",
       "iconAsTemplate": false,
       "menuOnLeftClick": false,
       "title": "ACE"
+    },
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/icon.ico"
+    ],
+    "resources": [
+      "../../backend/dist/ace-backend"
+    ],
+    "copyright": "© 2026 ACE",
+    "category": "Utility",
+    "shortDescription": "AI-powered desktop voice controller",
+    "longDescription": "ACE is a production-grade AI-powered desktop voice control and automation system",
+    "windows": {
+      "certificateThumbprint": null,
+      "digestAlgorithm": "sha256",
+      "timestampUrl": ""
     }
   }
 }

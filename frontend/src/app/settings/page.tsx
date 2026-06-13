@@ -8,7 +8,7 @@ import { TopBar } from "@/components/layout/TopBar";
 import { useSettingsStore } from "@/store/settingsStore";
 import { useWSStore } from "@/hooks/useWebSocket";
 import { api, getResolvedBaseUrl, resolvedBackendPort } from "@/lib/api";
-import { invoke } from "@tauri-apps/api/tauri";
+import { invoke } from "@tauri-apps/api/core";
 
 const card    = { background: "var(--card)", border: "1px solid var(--border)", borderRadius: "1rem", overflow: "hidden", boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)" };
 const hdr     = { padding: "1.25rem 1.5rem", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: "0.75rem", background: "rgba(255,255,255,0.02)" };
@@ -297,13 +297,13 @@ export default function SettingsPage() {
                 <div>
                   <p style={lbl}>Whisper Model</p>
                   <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-                    {(["tiny", "base", "small", "medium", "large-v2", "large-v3"] as const).map((m) => (
+                    {(["tiny", "base", "small", "medium"] as const).map((m) => (
                       <button key={m} onClick={() => settings.update({ whisperModel: m })} style={settings.whisperModel === m ? btnA : btnI}>
                         {m.charAt(0).toUpperCase() + m.slice(1)}
                       </button>
                     ))}
                   </div>
-                  <p style={sub}>Tiny = fastest · Small = accurate · Large = highly accurate but slow</p>
+                  <p style={sub}>Tiny = fastest · Medium = highly accurate</p>
                 </div>
               )}
               

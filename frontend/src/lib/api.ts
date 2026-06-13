@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/tauri';
+import { invoke } from '@tauri-apps/api/core';
 
 // Ensure we don't accidentally use a dev tunnel URL when running locally, but allow it for remote devices
 const isLocalhost = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
@@ -118,4 +118,14 @@ export const api = {
   testLLM:         () => request("/llm/test", { method: "POST" }),
   chatLLM:         (message: string) => request("/llm/chat", { method: "POST", body: JSON.stringify({ message }) }),
   clearLLMHistory: () => request("/llm/history", { method: "DELETE" }),
+
+  // Health / Ping
+  getHealthPing: async () => {
+    const base = await getResolvedBaseUrl();
+    const start = performance.now();
+    const res = await fetch(`${base}/health`, { cache: "no-store" });
+    const processTime = res.headers.get("X-Process-Time");
+    const networkTime = Math.round(performance.now() - start);
+    return { processTime, networkTime, ok: res.ok };
+  },
 };

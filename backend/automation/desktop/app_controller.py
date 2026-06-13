@@ -18,7 +18,11 @@ from pathlib import Path
 warnings.filterwarnings('ignore', category=RuntimeWarning, message='.*Application is not loaded correctly.*')
 
 import psutil
-import pywinauto
+if sys.platform == "win32":
+    try:
+        import pywinauto
+    except ImportError:
+        pass
 from loguru import logger
 
 from app.core.exceptions import AppNotFound, AutomationError
@@ -111,8 +115,16 @@ class AppController:
         else:
             abs_exe = shutil.which(exe)
 
-        if not abs_exe:
+        if not abs_exe and sys.platform != "darwin":
             return False
+            
+        if sys.platform == "darwin":
+            # On Mac, just try to use 'open -a' with the raw exe name or path
+            import subprocess
+            app_name = Path(exe).stem if Path(exe).is_absolute() else exe
+            subprocess.Popen(["open", "-a", app_name], shell=False)
+            logger.info(f"Launched on Mac: {app_name}")
+            return True
 
         if "chrome.exe" in abs_exe.lower():
             import subprocess
@@ -138,6 +150,10 @@ class AppController:
         """
         Scans for an open File Dialog. If found, forces it to foreground and navigates it.
         """
+        if sys.platform != "win32":
+            logger.debug("navigate_file_dialog is not natively supported on Mac.")
+            return False
+            
         try:
             from pywinauto import Desktop
             import pyautogui
@@ -259,28 +275,37 @@ class AppController:
         if not exe_names:
             exe_names = [clean.lower() + ".exe", clean.lower()]
 
-        # 1. Close via native Windows taskkill
-        # taskkill without /F sends a graceful WM_CLOSE signal.
-        # This natively triggers the "Save/Don't Save" prompt if there are unsaved changes.
-        # If force=True, /F forcefully terminates without saving.
-        for exe in set(exe_names):
-            try:
-                cmd = ["taskkill", "/IM", exe]
-                if force:
-                    cmd.insert(1, "/F")
-                result = subprocess.run(
-                    cmd,
-                    capture_output=True,
-                    text=True,
-                    creationflags=subprocess.CREATE_NO_WINDOW
-                )
-                if result.returncode == 0 or "SUCCESS" in result.stdout:
-                    killed.append(exe)
-            except Exception:
-                pass
+        if sys.platform == "darwin":
+            for exe in set(exe_names):
+                try:
+                    cmd = ["pkill", "-f", exe.replace(".exe", "")]
+                    if force:
+                        cmd.insert(1, "-9")
+                    result = subprocess.run(cmd, capture_output=True, text=True)
+                    if result.returncode == 0:
+                        killed.append(exe)
+                except Exception:
+                    pass
+        else:
+            # 1. Close via native Windows taskkill
+            for exe in set(exe_names):
+                try:
+                    cmd = ["taskkill", "/IM", exe]
+                    if force:
+                        cmd.insert(1, "/F")
+                    result = subprocess.run(
+                        cmd,
+                        capture_output=True,
+                        text=True,
+                        creationflags=subprocess.CREATE_NO_WINDOW
+                    )
+                    if result.returncode == 0 or "SUCCESS" in result.stdout:
+                        killed.append(exe)
+                except Exception:
+                    pass
 
         # 2. Pywinauto fallback for graceful close (if taskkill missed it)
-        if not killed:
+        if not killed and sys.platform == "win32":
             for exe in set(exe_names):
                 try:
                     app = pywinauto.Application(backend="uia").connect(path=exe)

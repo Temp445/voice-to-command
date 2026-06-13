@@ -2,13 +2,11 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use std::sync::Mutex;
-use tauri::{
-    CustomMenuItem, Manager, SystemTray, SystemTrayEvent, SystemTrayMenu, SystemTrayMenuItem, State,
-};
+use tauri::{Manager, State};
+use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
+use tauri::tray::{MouseButton, TrayIconBuilder, TrayIconEvent};
 use tauri_plugin_autostart::MacosLauncher;
 use tauri_plugin_autostart::ManagerExt;
-
-
 
 struct AppState {
     minimize_to_tray: Mutex<bool>,
@@ -16,19 +14,19 @@ struct AppState {
 }
 
 #[tauri::command]
-fn sync_minimize_to_tray(state: State<AppState>, value: bool) {
+fn sync_minimize_to_tray(state: State<'_, AppState>, value: bool) {
     if let Ok(mut minimize) = state.minimize_to_tray.lock() {
         *minimize = value;
     }
 }
 
 #[tauri::command]
-fn get_minimize_to_tray(state: State<AppState>) -> bool {
+fn get_minimize_to_tray(state: State<'_, AppState>) -> bool {
     state.minimize_to_tray.lock().map(|v| *v).unwrap_or(true)
 }
 
 #[tauri::command]
-fn get_backend_port(state: State<AppState>) -> u16 {
+fn get_backend_port(state: State<'_, AppState>) -> u16 {
     state.backend_port
 }
 
@@ -61,27 +59,62 @@ fn get_available_port() -> u16 {
 }
 
 fn main() {
-    // System tray menu
-    let show = CustomMenuItem::new("show".to_string(), "Show ACE");
-    let activate = CustomMenuItem::new("activate".to_string(), "🎤 Activate Listening");
-    let quit = CustomMenuItem::new("quit".to_string(), "Quit");
-
-    let tray_menu = SystemTrayMenu::new()
-        .add_item(show)
-        .add_item(activate)
-        .add_native_item(SystemTrayMenuItem::Separator)
-        .add_item(quit);
-
-    let system_tray = SystemTray::new().with_menu(tray_menu).with_tooltip("ACE Voice Controller");
-
     let port = get_available_port();
 
     tauri::Builder::default()
         .plugin(tauri_plugin_autostart::init(MacosLauncher::LaunchAgent, Some(vec!["--hidden"])))
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .plugin(tauri_plugin_shell::init())
         .setup(move |app| {
+            let show_i = MenuItem::with_id(app, "show", "Show ACE", true, None::<&str>)?;
+            let activate_i = MenuItem::with_id(app, "activate", "🎤 Activate Listening", true, None::<&str>)?;
+            let quit_i = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
+            let separator = PredefinedMenuItem::separator(app)?;
+            let menu = Menu::with_items(app, &[&show_i, &activate_i, &separator, &quit_i])?;
+
+            let _tray = TrayIconBuilder::new()
+                .menu(&menu)
+                .tooltip("ACE Voice Controller")
+                .icon(app.default_window_icon().unwrap().clone())
+                .on_menu_event(|app, event| match event.id.as_ref() {
+                    "show" => {
+                        if let Some(window) = app.get_webview_window("main") {
+                            let _ = window.show();
+                            let _ = window.set_focus();
+                            let _ = window.unminimize();
+                        }
+                    }
+                    "activate" => {
+                        if let Some(window) = app.get_webview_window("main") {
+                            let _ = window.show();
+                            let _ = window.set_focus();
+                            let _ = window.emit("tray-activate", ());
+                        }
+                    }
+                    "quit" => {
+                        std::process::exit(0);
+                    }
+                    _ => {}
+                })
+                .on_tray_icon_event(|tray, event| {
+                    if let TrayIconEvent::Click {
+                        button: MouseButton::Left,
+                        button_state: tauri::tray::MouseButtonState::Up,
+                        ..
+                    } = event {
+                        let app = tray.app_handle();
+                        if let Some(window) = app.get_webview_window("main") {
+                            let _ = window.show();
+                            let _ = window.set_focus();
+                            let _ = window.unminimize();
+                        }
+                    }
+                })
+                .build(app)?;
+
             let args: Vec<String> = std::env::args().collect();
             if args.contains(&"--hidden".to_string()) {
-                if let Some(window) = app.get_window("main") {
+                if let Some(window) = app.get_webview_window("main") {
                     let _ = window.hide();
                 }
             }
@@ -91,9 +124,7 @@ fn main() {
                 std::path::PathBuf::from("../../backend/dist/ace-backend/ace-backend.exe")
             } else {
                 // In release, the binary is bundled in the resources folder
-                app.path_resolver()
-                    .resolve_resource("../../backend/dist/ace-backend/ace-backend.exe")
-                    .expect("failed to resolve resource")
+                app.path().resolve("../../backend/dist/ace-backend/ace-backend.exe", tauri::path::BaseDirectory::Resource).expect("failed to resolve resource")
             };
 
             let mut cmd = std::process::Command::new(backend_exe);
@@ -121,38 +152,8 @@ fn main() {
             disable_autostart,
             is_autostart_enabled
         ])
-        .system_tray(system_tray)
-        .on_system_tray_event(|app, event| match event {
-            SystemTrayEvent::MenuItemClick { id, .. } => match id.as_str() {
-                "show" => {
-                    if let Some(window) = app.get_window("main") {
-                        let _ = window.show();
-                        let _ = window.set_focus();
-                        let _ = window.unminimize();
-                    }
-                }
-                "activate" => {
-                    if let Some(window) = app.get_window("main") {
-                        let _ = window.show();
-                        let _ = window.set_focus();
-                        let _ = window.emit("tray-activate", ());
-                    }
-                }
-                "quit" => std::process::exit(0),
-                _ => {}
-            },
-            SystemTrayEvent::DoubleClick { .. } => {
-                if let Some(window) = app.get_window("main") {
-                    let _ = window.show();
-                    let _ = window.set_focus();
-                    let _ = window.unminimize();
-                }
-            }
-            _ => {}
-        })
-        .on_window_event(|event| {
-            if let tauri::WindowEvent::CloseRequested { api, .. } = event.event() {
-                let window = event.window();
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 let state = window.state::<AppState>();
                 let minimize = state.minimize_to_tray.lock().ok().map(|v| *v).unwrap_or(false);
                 if minimize {

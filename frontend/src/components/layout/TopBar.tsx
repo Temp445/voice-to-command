@@ -1,9 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { User, Wifi, WifiOff } from "lucide-react";
+import { User, Wifi, WifiOff, Activity } from "lucide-react";
 import { useVoiceStore } from "@/store/voiceStore";
 import { useWebSocket } from "@/hooks/useWebSocket";
+import { useEffect, useState } from "react";
+import { api } from "@/lib/api";
 
 const STATE_BADGE: Record<string, { bg: string; color: string; border: string }> = {
   idle:       { bg: "rgba(107,114,128,0.12)", color: "#9CA3AF", border: "rgba(107,114,128,0.2)" },
@@ -17,6 +19,32 @@ export function TopBar() {
   const { pipelineState } = useVoiceStore();
   const { connected } = useWebSocket();
   const badge = STATE_BADGE[pipelineState] || STATE_BADGE.idle;
+  
+  const [ping, setPing] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!connected) {
+      setPing(null);
+      return;
+    }
+    
+    const measurePing = async () => {
+      try {
+        const res = await api.getHealthPing();
+        if (res.processTime) {
+          setPing(res.processTime);
+        } else {
+          setPing(`${res.networkTime}ms`);
+        }
+      } catch (e) {
+        setPing(null);
+      }
+    };
+
+    measurePing();
+    const interval = setInterval(measurePing, 10000);
+    return () => clearInterval(interval);
+  }, [connected]);
 
   return (
     <header data-tauri-drag-region style={{
@@ -28,6 +56,14 @@ export function TopBar() {
       <div style={{ flex: 1 }} />
 
       <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginLeft: "auto" }}>
+        {/* API Ping Status */}
+        {ping && (
+          <div title="Server Ping" style={{ display: "flex", alignItems: "center", gap: "0.25rem", fontSize: "0.75rem", color: "#9CA3AF", marginRight: "0.5rem", cursor: "help" }}>
+            <Activity style={{ width: "0.875rem", height: "0.875rem" }} />
+            <span>{ping}</span>
+          </div>
+        )}
+
         {/* WS status */}
         <div style={{ display: "flex", alignItems: "center", gap: "0.375rem", fontSize: "0.75rem" }}>
           {connected
@@ -44,8 +80,6 @@ export function TopBar() {
         }}>
           {pipelineState}
         </div>
-
-
 
         {/* Avatar */}
         <Link href="/profile" style={{

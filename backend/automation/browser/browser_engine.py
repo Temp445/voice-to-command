@@ -452,6 +452,36 @@ class BrowserEngine:
             return re.sub(r'\n+', '\n', text).strip()
         return await _run_in_playwright(_do())
 
+    async def extract_clean_text(self) -> str:
+        """Extract clean text from the current page using BeautifulSoup4 (bypasses Playwright's inner_text slowness)."""
+        async def _do():
+            page = await self.ensure_browser()
+            html_content = await page.content()
+            try:
+                from bs4 import BeautifulSoup
+                # Parse with lxml for speed
+                soup = BeautifulSoup(html_content, "lxml")
+                
+                # Remove unwanted tags
+                for element in soup(["script", "style", "noscript", "header", "footer", "nav", "svg", "img"]):
+                    element.decompose()
+                    
+                # Extract text
+                text = soup.get_text(separator=' ', strip=True)
+                
+                # Clean up multiple spaces and newlines
+                import re
+                clean_text = re.sub(r'\s+', ' ', text).strip()
+                return clean_text
+            except Exception as e:
+                logger.error(f"BeautifulSoup parsing failed: {e}")
+                # Fallback to Playwright
+                text = await page.inner_text("body")
+                import re
+                return re.sub(r'\n+', '\n', text).strip()
+                
+        return await _run_in_playwright(_do())
+
     # --- Screenshots & Visuals ---
     async def screenshot(self, filename: str = "screenshot.png", full_page: bool = False) -> str:
         async def _do():

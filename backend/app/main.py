@@ -100,17 +100,15 @@ async def lifespan(app: FastAPI):
     # ── Dynamic App Discovery ────────────────────────────────────────────────
     from automation.desktop.app_scanner import AppScanner, get_scanner
     scanner = get_scanner()
-    # Try loading from cache first for a fast start
-    if not scanner.load_cache():
-        logger.info("📡 No app cache found — running full discovery scan...")
+    # Always load whatever exists in cache immediately (fast),
+    # then refresh in the background (never blocks startup)
+    scanner.load_cache()
+    async def _refresh_scan():
         await scanner.scan_and_cache()
-    else:
-        # Refresh cache in the background without blocking startup
-        async def _refresh_scan():
-            await scanner.scan_and_cache()
-        asyncio.create_task(_refresh_scan())
+        logger.info(f"✅ Background app scan complete — {len(scanner.apps)} apps")
+    asyncio.create_task(_refresh_scan())
     app.state.app_scanner = scanner
-    logger.info(f"✅ App discovery ready — {len(scanner.apps)} apps available")
+    logger.info(f"✅ App discovery ready ({len(scanner.apps)} cached apps, refresh running in background)")
 
     # ── Background File Indexer ──────────────────────────────────────────────
     from automation.desktop.file_indexer import get_indexer
@@ -162,7 +160,11 @@ async def lifespan(app: FastAPI):
         if not llm_service.is_ready:
             _init_llm_from_env()
 
-        # 3. Start the voice pipeline in the background process
+        # 3. Pre-load workflow macros into in-memory cache (eliminates per-command DB query)
+        from app.services.command_service import command_service
+        await command_service.refresh_workflows_cache()
+
+        # 4. Start the voice pipeline in the background process
         try:
             from voice.pipeline import VoicePipeline, PipelineState
             from app.websocket.manager import ws_manager
@@ -206,6 +208,15 @@ async def lifespan(app: FastAPI):
                 ws_manager.broadcast("pipeline_state", {"state": "idle", "wake_word_active": True}), running_loop
             )
             logger.info("🎙️ Voice pipeline started — wake word listening in background")
+
+            # 5. Pre-warm Whisper model — loads it into RAM before the first voice command
+            # Eliminates the cold-start delay on the very first transcription
+            try:
+                from voice.stt.transcriber import Transcriber
+                await asyncio.to_thread(Transcriber()._load_model)
+                logger.info("🎙️ Whisper model pre-warmed and ready")
+            except Exception as warm_err:
+                logger.warning(f"⚠️ Could not pre-warm Whisper: {warm_err}")
 
         except Exception as e:
             logger.warning(f"⚠️  Voice pipeline failed to start (API will still work): {e}")

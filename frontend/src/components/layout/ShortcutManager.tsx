@@ -56,7 +56,7 @@ export function ShortcutManager() {
     }
     async function registerShortcuts() {
       try {
-        const { register, unregisterAll } = await import('@tauri-apps/api/globalShortcut');
+        const { register, unregisterAll } = await import('@tauri-apps/plugin-global-shortcut');
         
         // Always unregister all previous shortcuts before registering new ones
         // This is robust against Next.js Fast Refresh which might leave stale hotkeys registered
@@ -94,7 +94,7 @@ export function ShortcutManager() {
     return () => {
       // Cleanup on unmount (or when shortcuts change)
       if ((window as any).__TAURI__) {
-        import('@tauri-apps/api/globalShortcut').then(({ unregisterAll }) => {
+        import('@tauri-apps/plugin-global-shortcut').then(({ unregisterAll }) => {
           unregisterAll().catch(console.error);
           registeredRef.current = {};
         }).catch(() => {});

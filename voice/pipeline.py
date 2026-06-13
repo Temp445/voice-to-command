@@ -5,11 +5,17 @@ State machine: IDLE → LISTENING → PROCESSING → SPEAKING → IDLE
 
 import asyncio
 import io
+import os
 import threading
 import time
 from enum import Enum
 from typing import Callable
+
+# Hide the pygame welcome message from the terminal
+os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide"
 import pygame
+# Pre-initialize mixer BEFORE calling init() — skips exhaustive SDL audio device probing which freezes Windows
+pygame.mixer.pre_init(frequency=22050, size=-16, channels=1, buffer=512)
 import numpy as np
 
 from loguru import logger
@@ -57,8 +63,8 @@ class VoicePipeline:
         self._last_spoken_text: str = ""
         self._manually_stopped: bool = False
 
-        # Init pygame mixer for audio playback
-        pygame.mixer.init(frequency=22050, size=-16, channels=1, buffer=512)
+        # Init pygame mixer for audio playback (instantly uses pre_init defaults)
+        pygame.mixer.init()
 
     # ─── Lifecycle ───────────────────────────────────────────────────────────
 

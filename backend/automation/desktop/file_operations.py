@@ -4,6 +4,7 @@ import os
 import subprocess
 import datetime
 from pathlib import Path
+import send2trash
 
 
 class FileOperations:
@@ -260,3 +261,40 @@ class FileOperations:
             return f"Opened the latest download: {latest_file.name}"
         except Exception as e:
             return f"Failed to open the latest download: {str(e)}"
+
+    def delete_target(self, target_name: str) -> str:
+        """Safely delete a file or folder by moving it to the Recycle Bin."""
+        try:
+            target_path = Path(target_name)
+            
+            # If absolute path and exists, just delete it
+            if target_path.is_absolute() and target_path.exists():
+                send2trash.send2trash(str(target_path))
+                return f"Moved '{target_path.name}' to the Recycle Bin."
+                
+            # Otherwise, use the FileIndexer to find it
+            from automation.desktop.file_indexer import get_indexer
+            indexer = get_indexer()
+            
+            # Try finding as file first, then folder
+            results = indexer.search(target_name, is_folder=False, limit=5)
+            if not results:
+                results = indexer.search(target_name, is_folder=True, limit=5)
+                
+            if not results:
+                return f"Could not find any file or folder named '{target_name}' to delete."
+                
+            exact_matches = [r for r in results if r["name"].lower() == target_name.lower()]
+            if exact_matches:
+                results = exact_matches
+                
+            if len(results) == 1:
+                path_to_delete = results[0]["path"]
+                send2trash.send2trash(path_to_delete)
+                return f"Moved '{results[0]['name']}' to the Recycle Bin."
+                
+            names = [r["name"] for r in results[:3]]
+            return f"MULTIPLE_MATCHES: Found multiple items matching '{target_name}': {', '.join(names)}. Be more specific."
+            
+        except Exception as e:
+            return f"Failed to delete '{target_name}': {e}"

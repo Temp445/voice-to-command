@@ -7,29 +7,18 @@ license = ""
 repository = ""
 default-run = "ace-voice-controller"
 edition = "2021"
-rust-version = "1.60"
+rust-version = "1.77.2"
 
 [build-dependencies]
-tauri-build = { version = "1.5", features = [] }
+tauri-build = { version = "2.0.0", features = [] }
 
 [dependencies]
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
-tauri = { version = "1.6", features = [ "devtools", "shell-execute", "shell-sidecar", "system-tray", "global-shortcut-all",
-  "global-shortcut",
-  "notification-all",
-  "http-all",
-  "shell-open",
-  "window-close",
-  "window-hide",
-  "window-show",
-  "window-maximize",
-  "window-minimize",
-  "window-unminimize",
-  "window-set-title",
-  "window-start-dragging",
-] }
-tauri-plugin-autostart = { git = "https://github.com/tauri-apps/plugins-workspace", branch = "v1" }
+tauri = { version = "2.0.0", features = ["tray-icon"] }
+tauri-plugin-autostart = "2.0.0"
+tauri-plugin-global-shortcut = "2.0.0"
+tauri-plugin-shell = "2.0.0"
 
 [features]
 default = ["custom-protocol"]

@@ -74,3 +74,9 @@ schedule
 winsdk
 PyQt6
 qasync
+pyperclip
+send2trash
+beautifulsoup4
+lxml
+pycaw
+plyer

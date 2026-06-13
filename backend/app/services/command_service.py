@@ -52,6 +52,31 @@ class CommandService:
         self._custom_shortcuts: dict[str, str] = {}  # phrase → action_type
         self.last_target_app: str = ""
         self.current_domain: str = "desktop"
+        # In-memory workflow cache — loaded once on startup, refreshed on change
+        self._workflows_cache: list[dict] = []
+
+    async def refresh_workflows_cache(self) -> None:
+        """Fetch all workflows from Supabase once and store in memory.
+        Call this at startup and after any workflow create/update/delete.
+        """
+        try:
+            from app.core.supabase_client import supabase_admin, sb_run
+            if supabase_admin is None:
+                return
+            res = await sb_run(lambda: supabase_admin.table("workflows").select("*").execute())
+            self._workflows_cache = res.data or []
+            logger.info(f"✅ Workflows cache refreshed: {len(self._workflows_cache)} macros ready")
+        except Exception as e:
+            logger.warning(f"⚠️ Could not refresh workflows cache: {e}")
+
+    def refresh_in_background(self) -> None:
+        """Fire-and-forget cache refresh — call after any workflow change."""
+        import asyncio
+        try:
+            loop = asyncio.get_running_loop()
+            loop.create_task(self.refresh_workflows_cache())
+        except RuntimeError:
+            pass  # No running loop — cache will be refreshed on next request
 
     def register(self, intent: Intent) -> None:
         self._intents.append(intent)
@@ -68,12 +93,10 @@ class CommandService:
         text = text.strip()
         start = time.perf_counter()
 
-        # 0. Check for user-defined Macros/Workflows in the database
+        # 0. Check for user-defined Macros/Workflows — read from in-memory cache (no DB hit)
         try:
-            from app.core.supabase_client import supabase_admin, sb_run
-            res = await sb_run(lambda: supabase_admin.table("workflows").select("*").execute())
-            if res.data:
-                for wf in res.data:
+            if self._workflows_cache:
+                for wf in self._workflows_cache:
                     trigger_phrase = wf.get("trigger_phrase")
                     if trigger_phrase and trigger_phrase.lower() in text.lower():
                         logger.info(f"Matched workflow macro: {wf.get('name')}")
@@ -84,12 +107,10 @@ class CommandService:
                             action = step.get("action", "")
                             if step.get("delay_ms", 0):
                                 await asyncio.sleep(step["delay_ms"] / 1000)
-                            # Recursively call parse_and_execute to run the macro action
-                            # Setting a flag to prevent infinite macro loops
                             if "macro_loop" not in action:
                                 r = await self.parse_and_execute(action)
                                 results.append(r.get("result", ""))
-                        
+
                         return {
                             "intent": "execute_workflow",
                             "parameters": {"name": wf.get("name")},
