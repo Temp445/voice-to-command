@@ -122,6 +122,14 @@ class WorkflowCreate(BaseModel):
     steps: list[WorkflowStep] = []
 
 
+class WorkflowUpdate(BaseModel):
+    name: str | None = None
+    description: str | None = None
+    trigger_phrase: str | None = None
+    steps: list[WorkflowStep] | None = None
+    is_active: bool | None = None
+
+
 class WorkflowResponse(BaseModel):
     id: str
     name: str

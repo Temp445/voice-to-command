@@ -279,9 +279,12 @@ class AppScanner:
                 exe_path = proc.info.get("exe")
                 name = proc.info.get("name", "")
                 if exe_path and name and name.lower() not in _SYSTEM_EXE_BLACKLIST:
-                    if Path(exe_path).exists():
-                        display = Path(exe_path).stem  # raw exe name as display
-                        self._add(display, exe_path, "process")
+                    try:
+                        if Path(exe_path).exists():
+                            display = Path(exe_path).stem  # raw exe name as display
+                            self._add(display, exe_path, "process")
+                    except OSError:
+                        pass
             except (psutil.NoSuchProcess, psutil.AccessDenied):
                 pass
         logger.debug(f"Process scan done. Total so far: {len(self.apps)}")

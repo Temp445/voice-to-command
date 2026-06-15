@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
 
-from app.schemas import WorkflowCreate, WorkflowResponse
+from app.schemas import WorkflowCreate, WorkflowResponse, WorkflowUpdate
 from app.core.supabase_client import supabase_admin, sb_run
 from app.routers.settings_router import get_current_user_id
 
@@ -69,6 +69,42 @@ async def get_workflow(workflow_id: str, user_id: str = Depends(get_current_user
     )
     if not res.data:
         raise HTTPException(status_code=404, detail="Workflow not found")
+    return _row_to_response(res.data[0])
+
+
+@router.patch("/{workflow_id}", response_model=WorkflowResponse)
+async def update_workflow(
+    workflow_id: str,
+    body: WorkflowUpdate,
+    user_id: str = Depends(get_current_user_id)
+):
+    from app.schemas import WorkflowUpdate
+    
+    update_data = body.model_dump(exclude_unset=True)
+    if "steps" in update_data and update_data["steps"] is not None:
+        update_data["steps"] = [s.model_dump() if hasattr(s, "model_dump") else s for s in body.steps]
+        
+    if not update_data:
+        # Nothing to update
+        return await get_workflow(workflow_id, user_id)
+        
+    update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
+    
+    res = await sb_run(
+        lambda: supabase_admin.table("workflows")
+        .update(update_data)
+        .eq("id", workflow_id)
+        .eq("user_id", user_id)
+        .execute()
+    )
+    
+    if not res.data:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+        
+    # Refresh the in-memory cache
+    from app.services.command_service import command_service
+    command_service.refresh_in_background()
+    
     return _row_to_response(res.data[0])
 
 

@@ -98,14 +98,15 @@ class OllamaAdapter(LLMProvider):
                 prompt = f"{system_msg}\n\nUser: {user_msg}" if system_msg else user_msg
                 
                 async with httpx.AsyncClient(timeout=60.0) as client:
-                    resp = await client.post(self._custom_proxy_url, params={"prompt": prompt})
+                    # Attempt to send as form-data in case the proxy expects Form(...) instead of JSON Body
+                    resp = await client.post(self._custom_proxy_url, data={"prompt": prompt})
                     resp.raise_for_status()
                     data = resp.json()
                     prompt_tokens = data.get("prompt_eval_count", 0)
                     completion_tokens = data.get("eval_count", 0)
                     logger.info(f"🤖 LLM Usage (Proxy): Model=custom-proxy, Tokens=({prompt_tokens} prompt, {completion_tokens} completion)")
-                    # The user's proxy returns the Ollama generate response
-                    return data.get("response", str(data))
+                    # The user's proxy returns the generate response or a chat response
+                    return data.get("reply", data.get("response", str(data)))
                     
             # Connect natively to Ollama
             formatted_messages = self._to_ollama_format(messages)

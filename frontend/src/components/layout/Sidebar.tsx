@@ -13,8 +13,8 @@ const NAV_ITEMS = [
   { href: "/chat",       icon: Bot,              label: "Chat"       },
   { href: "/console",    icon: Terminal,         label: "Console"    },
   { href: "/history",    icon: History,          label: "History"    },
-  // { href: "/workflows",  icon: GitBranch,        label: "Workflows"  },
-  // { href: "/automation", icon: Activity,         label: "Automation" },
+  { href: "/workflows",  icon: GitBranch,        label: "Workflows"  },
+  { href: "/automation", icon: Activity,         label: "Automation" },
   { href: "/settings",   icon: Settings,         label: "Settings"   },
 ];
 

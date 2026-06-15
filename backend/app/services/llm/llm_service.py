@@ -37,6 +37,7 @@ Rules:
 - Reply with ONLY a valid JSON object. No markdown formatting, no explanations.
 - Format: {"intent": "<intent_name>", "confidence": <0.0-1.0>, "params": {"<param_name>": "<resolved_value>"}}
 - If the command relies on previous context (e.g., "run it"), use the history to determine what "it" refers to and fill the parameters accordingly.
+- If the user provides a short phrase or noun without a verb (e.g., "ace payroll" or "John Doe") immediately after performing an action (like searching Google, sending an email, etc.), infer that the user wants to repeat that exact same action but with the new parameter.
 - If no intent matches reasonably, return: {"intent": null, "confidence": 0.0, "params": {}}
 - Choose the single best-matching intent.
 """
@@ -112,6 +113,43 @@ class LLMService:
     def _install_hint(self, provider: str) -> str:
         return {"groq": "groq", "openai": "openai", "gemini": "google-generativeai",
                 "claude": "anthropic", "deepseek": "openai", "ollama": "ollama"}.get(provider, provider)
+
+    def _handle_llm_error(self, e: Exception) -> None:
+        """Centralized error handler to surface quota/rate limits to the user."""
+        err_msg = str(e).lower()
+        if any(keyword in err_msg for keyword in ["429", "quota", "limit", "resourceexhausted", "too many requests"]):
+            error_text = "LLM Quota or Rate Limit Exceeded. Please check your API key tier."
+            logger.error(f"Broadcasting quota error to UI and OS: {error_text}")
+            
+            # 1. Native OS Notification
+            try:
+                from winsdk.windows.ui.notifications import ToastNotificationManager, ToastNotification, ToastTemplateType
+                
+                toast_xml = ToastNotificationManager.get_template_content(ToastTemplateType.TOAST_TEXT02)
+                text_nodes = toast_xml.get_elements_by_tag_name("text")
+                text_nodes[0].append_child(toast_xml.create_text_node("ACE AI Limit Exceeded"))
+                text_nodes[1].append_child(toast_xml.create_text_node(error_text))
+                
+                toast = ToastNotification(toast_xml)
+                ToastNotificationManager.create_toast_notifier("ACE Controller").show(toast)
+            except Exception as pe:
+                logger.error(f"Winsdk notification failed: {pe}")
+                
+            # 2. Frontend UI Toast
+            import asyncio
+            from app.websocket.manager import ws_manager
+            
+            async def notify_frontend():
+                try:
+                    await ws_manager.broadcast("system_error", {"error": error_text})
+                except Exception as wse:
+                    logger.error(f"Failed to broadcast system_error: {wse}")
+                    
+            try:
+                loop = asyncio.get_running_loop()
+                loop.create_task(notify_frontend())
+            except RuntimeError:
+                asyncio.run(notify_frontend())
 
     # ── Status ────────────────────────────────────────────────────────────────
 
@@ -198,6 +236,7 @@ class LLMService:
                 return parsed
         except Exception as e:
             logger.warning(f"LLM intent classification failed: {e}")
+            self._handle_llm_error(e)
         return None
 
     # ── Direct Chat ───────────────────────────────────────────────────────────
@@ -215,7 +254,35 @@ class LLMService:
             return reply
         except Exception as e:
             logger.error(f"LLM chat failed: {e}")
+            self._handle_llm_error(e)
             raise
+            
+    async def rewrite_for_speech(self, raw_result: str, original_command: str) -> str:
+        """Rewrite a hardcoded technical result into a conversational sentence."""
+        if not self.is_ready:
+            return raw_result
+            
+        sys_prompt = (
+            "You are ACE, a desktop voice assistant. Rewrite the provided technical result "
+            "into a short, friendly, and natural conversational sentence that will be spoken aloud to the user. "
+            "CRITICAL RULES:\n"
+            "1. Do NOT include any markdown, emojis, or explanations. Keep it under 2 sentences.\n"
+            "2. If the technical result explicitly gives the user a multiple-choice option (e.g., 'Say 1 for X, or 2 for Y', or 'open a file, folder, application, or search Google'), "
+            "you MUST preserve those exact trigger words ('1', '2', 'file', 'folder', 'application', 'search Google'). Do NOT use synonyms for the choices.\n"
+            "3. NEVER invent or add multiple-choice options, questions, or follow-ups if the technical result does not explicitly contain them.\n"
+            "4. If the technical result contains a URL, do NOT read out 'https://', 'http://', or 'www.'. Just say the core domain name naturally (e.g., say 'payroll acesoftcloud' instead of 'https://payroll-acesoftcloud.netlify.app/')."
+        )
+        user_prompt = f"User said: '{original_command}'\nTechnical result: '{raw_result}'\n\nRewrite the result:"
+        
+        try:
+            msgs = self._build_messages(sys_prompt, user_prompt)
+            # Use the user's configured temperature to inject natural variation
+            reply = await self._provider.chat(msgs, temperature=self._temperature)
+            return reply.strip()
+        except Exception as e:
+            logger.warning(f"LLM rewrite failed, falling back to raw result: {e}")
+            self._handle_llm_error(e)
+            return raw_result
 
     async def stream_chat(self, prompt: str) -> AsyncGenerator[str, None]:
         """Stream a response token-by-token. Saves to conversation memory when complete."""

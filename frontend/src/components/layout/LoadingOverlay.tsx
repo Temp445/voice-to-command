@@ -66,11 +66,11 @@ export function LoadingOverlay() {
           alignItems: "center",
           gap: "2rem",
           padding: "3.5rem 4rem",
-          borderRadius: "2rem",
-          background: "rgba(255, 255, 255, 0.02)",
-          border: "1px solid rgba(255, 255, 255, 0.05)",
+          // borderRadius: "2rem",
+          // background: "rgba(255, 255, 255, 0.02)",
+          // border: "1px solid rgba(255, 255, 255, 0.05)",
           backdropFilter: "blur(20px)",
-          boxShadow: "0 30px 60px rgba(0, 0, 0, 0.4)",
+          // boxShadow: "0 30px 60px rgba(0, 0, 0, 0.4)",
         }}
       >
         <div style={{ position: "relative", height: "55px", display: "flex", alignItems: "center", gap: "8px" }}>
@@ -99,12 +99,9 @@ export function LoadingOverlay() {
         </div>
         
         <div style={{ textAlign: "center", display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-          <h2 style={{ fontSize: "1.25rem", fontWeight: 600, color: "var(--foreground)", letterSpacing: "-0.01em" }}>
-            Connecting to ACE Engine
+          <h2 style={{ fontSize: "1.25rem", fontWeight: 600, color: "var(--foreground)", paddingTop: 30, letterSpacing: "-0.01em" }}>
+            Connecting to Server
           </h2>
-          <p style={{ fontSize: "0.875rem", color: "var(--muted-foreground)" }}>
-            Waking up AI models and establishing secure connection...
-          </p>
         </div>
       </div>
     </div>

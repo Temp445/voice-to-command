@@ -2536,5 +2536,17 @@
     "exe_name": "ace-voice-controller.exe",
     "path": "C:\\Users\\nithi\\Desktop\\Clones\\voice-to-command\\frontend\\src-tauri\\target\\debug\\ace-voice-controller.exe",
     "source": "process"
+  },
+  "setup": {
+    "name": "setup",
+    "exe_name": "setup.exe",
+    "path": "C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\149.0.4022.69\\Installer\\setup.exe",
+    "source": "process"
+  },
+  "findstr": {
+    "name": "findstr",
+    "exe_name": "findstr.exe",
+    "path": "C:\\Windows\\System32\\findstr.exe",
+    "source": "process"
   }
 }

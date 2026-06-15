@@ -486,6 +486,12 @@ export default function SettingsPage() {
               const getBillingLink = (p: string) => p==="openai" ? "https://platform.openai.com/account/billing" : p==="groq" ? "https://console.groq.com/settings/billing" : p==="claude" ? "https://console.anthropic.com/settings/billing" : p==="gemini" ? "https://aistudio.google.com/app/billing" : p==="deepseek" ? "https://platform.deepseek.com/usage" : null;
               return (
               <div style={body}>
+                {settings.llmSystemError && (
+                  <div style={{ padding: "1rem", borderRadius: "0.5rem", fontSize: "0.875rem", fontWeight: 500, background: "rgba(239,68,68,0.1)", color: "#dc2626", border: "1px solid #ef444430", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <span>⚠️ {settings.llmSystemError}</span>
+                    <button onClick={() => settings.update({ llmSystemError: null })} style={{ background: "none", border: "none", color: "#dc2626", cursor: "pointer", fontWeight: 600, padding: "0 0.5rem" }}>×</button>
+                  </div>
+                )}
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1.5rem" }}>
                   <div>
                     <p style={lbl}>Provider</p>
@@ -532,7 +538,7 @@ export default function SettingsPage() {
                       <button onClick={() => settings.update({ llmMode: "fallback" })} style={settings.llmMode === "fallback" ? btnA : btnI}>Fallback</button>
                       <button onClick={() => settings.update({ llmMode: "always_on" })} style={settings.llmMode === "always_on" ? btnA : btnI}>Always-On</button>
                     </div>
-                    <p style={sub}>{settings.llmMode === "fallback" ? "Fast & cheap: Calls AI only if intent matches fail" : "Smarter: Routes every command to AI"}</p>
+                    <p style={sub}>{settings.llmMode === "fallback" ? "Low Token Usage: Calls AI only if intent matches fail" : "High Token Usage: Routes every command to AI"}</p>
                   </div>
                   <div>
                     <p style={lbl}>Temperature: {settings.llmTemperature}</p>

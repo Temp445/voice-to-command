@@ -245,6 +245,49 @@ class VoiceBrowserCommands:
     async def execute(self, transcript: str) -> str:
         transcript = transcript.lower().strip()
         
+        # --- Deterministic Fallbacks (Zero LLM Tokens) ---
+        try:
+            page = await self.ctrl._ensure_page()
+            import re
+            
+            # 1. Exact "click <text>" or matching a short phrase directly to a button
+            target_text = transcript
+            if transcript.startswith("click ") and len(transcript) > 6:
+                target_text = transcript[6:].strip()
+                
+            if len(target_text) > 0 and len(target_text.split()) <= 4:
+                locators = [
+                    page.get_by_role("button", name=re.compile(f"^{re.escape(target_text)}$", re.IGNORECASE)),
+                    page.get_by_role("link", name=re.compile(f"^{re.escape(target_text)}$", re.IGNORECASE)),
+                    page.locator(f"text=\"{target_text}\"").filter(has_not=page.locator("body, html, main"))
+                ]
+                for loc in locators:
+                    try:
+                        if await loc.count() > 0:
+                            await loc.first.click(timeout=1000)
+                            return f"Clicked '{target_text}'"
+                    except Exception:
+                        pass
+
+            # 2. Exact "type <text> into <field>"
+            type_match = re.match(r"(?:type|enter|write)\s+(.+?)\s+(?:in|into|to|on)\s+(?:the\s+)?(.+)", transcript)
+            if type_match:
+                value = type_match.group(1).strip()
+                field = type_match.group(2).strip()
+                locators = [
+                    page.get_by_label(re.compile(f"^{re.escape(field)}$", re.IGNORECASE)),
+                    page.get_by_placeholder(re.compile(f"^{re.escape(field)}$", re.IGNORECASE)),
+                ]
+                for loc in locators:
+                    try:
+                        if await loc.count() > 0:
+                            await loc.first.fill(value, timeout=1000)
+                            return f"Typed '{value}' into '{field}'"
+                    except Exception:
+                        pass
+        except Exception as e:
+            logger.debug(f"Deterministic fallback failed: {e}")
+        
         # --- CRM Workflows ---
         if self.crm:
             from app.config import settings
@@ -254,8 +297,16 @@ class VoiceBrowserCommands:
 
             if any(key in transcript for key in crm_keys if key):
                 return await self.crm.open_crm(transcript)
+                
+            # Direct Login Credential Extraction
+            cred_match = re.search(r"(?:email|username)(?:\s+is)?[\s\:]+([^\s\,]+)(?:[\,\s]+and[\,\s]+|[\,\s]+)password(?:\s+is)?[\s\:]+([^\s]+)", transcript, re.IGNORECASE)
+            if cred_match:
+                return await self.crm.login(username=cred_match.group(1), password=cred_match.group(2))
+                
             if "log in" in transcript or "login" in transcript:
                 return await self.crm.login()
+            if "log out" in transcript or "logout" in transcript or "sign out" in transcript:
+                return await self.crm.logout()
             
             # Dynamic creation handling
             if "new " in transcript or "create " in transcript or "add " in transcript or "make " in transcript or "generate " in transcript:
@@ -289,6 +340,23 @@ class VoiceBrowserCommands:
                     query = m.group(2)
                     if entity == "customer": entity = "account"
                     return await self.crm.search_record(entity, query)
+                
+                # Generic search fallback for the browser
+                m_gen = re.match(r"^search\s+(?:for\s+)?(.+)$", transcript)
+                if m_gen:
+                    query = m_gen.group(1).strip()
+                    
+                    tab_match = re.search(r'(?:\s+)?in\s+(?:a\s+|the\s+)?new\s+tab$', query, re.IGNORECASE)
+                    if tab_match:
+                        query = query[:tab_match.start()].strip()
+                        if not query:
+                            return await self.ctrl.new_tab()
+                        await self.ctrl.new_tab()
+                        
+                    url = await self.ctrl.engine.get_url()
+                    if url and "youtube.com" in url:
+                        return await self.ctrl.engine.search_youtube(query)
+                    return await self.ctrl.engine.search_google(query)
                     
             # Grid Interaction Handling
             if "first " in transcript or "top " in transcript:
@@ -378,45 +446,6 @@ class VoiceBrowserCommands:
         if "refresh" in transcript or "reload" in transcript:
             return await self.ctrl.refresh()
 
-        # --- Deterministic Fallbacks (Zero LLM Tokens) ---
-        try:
-            page = await self.ctrl._ensure_page()
-            import re
-            
-            # 1. Exact "click <text>"
-            if transcript.startswith("click ") and len(transcript) > 6:
-                target_text = transcript[6:].strip()
-                locators = [
-                    page.get_by_role("button", name=re.compile(f"^{re.escape(target_text)}$", re.IGNORECASE)),
-                    page.get_by_role("link", name=re.compile(f"^{re.escape(target_text)}$", re.IGNORECASE)),
-                    page.locator(f"text=\"{target_text}\"").filter(has_not=page.locator("body, html, main"))
-                ]
-                for loc in locators:
-                    try:
-                        if await loc.count() > 0:
-                            await loc.first.click(timeout=1000)
-                            return f"Clicked '{target_text}' (deterministic)"
-                    except Exception:
-                        pass
-
-            # 2. Exact "type <text> into <field>"
-            type_match = re.match(r"(?:type|enter|write)\s+(.+?)\s+(?:in|into|to|on)\s+(?:the\s+)?(.+)", transcript)
-            if type_match:
-                value = type_match.group(1).strip()
-                field = type_match.group(2).strip()
-                locators = [
-                    page.get_by_label(re.compile(f"^{re.escape(field)}$", re.IGNORECASE)),
-                    page.get_by_placeholder(re.compile(f"^{re.escape(field)}$", re.IGNORECASE)),
-                ]
-                for loc in locators:
-                    try:
-                        if await loc.count() > 0:
-                            await loc.first.fill(value, timeout=1000)
-                            return f"Typed '{value}' into '{field}' (deterministic)"
-                    except Exception:
-                        pass
-        except Exception as e:
-            logger.debug(f"Deterministic fallback failed: {e}")
 
         # --- Dynamic DOM Agent (Clicking, Typing, Interaction) ---
         try:

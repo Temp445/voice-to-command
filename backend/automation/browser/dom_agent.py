@@ -20,9 +20,10 @@ class DOMAgent:
             const elements = [];
             const interactiveSelectors = [
                 'a', 'button', 'input', 'textarea', 'select', 'summary', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'label', 'li', 'tr', 'td',
-                '[role="button"]', '[role="combobox"]', '[role="menuitem"]', '[role="tab"]', '[onclick]', '[aria-expanded]', '[data-toggle]',
+                'svg', 'img', '[role="button"]', '[role="combobox"]', '[role="menuitem"]', '[role="tab"]', '[onclick]', '[aria-expanded]', '[data-toggle]',
                 '[class*="btn"]', '[class*="button"]', '[class*="accordion"]', '[class*="header"]', '[class*="title"]', '[class*="menu"]', 
-                '[class*="item"]', '[class*="link"]', '[class*="dropdown"]', '[class*="cursor-pointer"]', '[class*="tab"]'
+                '[class*="item"]', '[class*="link"]', '[class*="dropdown"]', '[class*="cursor-pointer"]', '[class*="tab"]',
+                '[class*="avatar"]', '[class*="profile"]', '[class*="user"]'
             ].join(', ');
             
             const allNodes = Array.from(document.querySelectorAll('*'));
@@ -67,13 +68,22 @@ class DOMAgent:
                     }
 
                     // Try to get aria-label, title, or testid
-                    let aria = el.getAttribute('aria-label') || el.getAttribute('title') || el.getAttribute('data-testid') || '';
+                    let aria = el.getAttribute('aria-label') || el.getAttribute('title') || el.getAttribute('data-testid') || el.getAttribute('alt') || '';
                     
-                    // If no text and no aria, check inside for SVG hints
+                    // If no text and no aria, check inside for SVG hints or use own class
                     if (!text && !aria) {
-                        const svg = el.querySelector('svg');
+                        const svg = el.tagName.toLowerCase() === 'svg' ? el : el.querySelector('svg');
                         if (svg) {
-                            aria = svg.getAttribute('aria-label') || svg.getAttribute('title') || svg.getAttribute('data-testid') || svg.getAttribute('class') || '';
+                            let svgClass = svg.getAttribute('class') || '';
+                            if (typeof svgClass === 'object' && svgClass.baseVal) svgClass = svgClass.baseVal;
+                            aria = svg.getAttribute('aria-label') || svg.getAttribute('title') || svg.getAttribute('data-testid') || svgClass || '';
+                        }
+                        if (!aria && el.tagName.toLowerCase() === 'img') {
+                            aria = el.getAttribute('src') || '';
+                        }
+                        if (!aria) {
+                            aria = el.className || '';
+                            if (typeof aria === 'object' && aria.baseVal) aria = aria.baseVal;
                         }
                     }
 
@@ -235,9 +245,9 @@ class DOMAgent:
                 
             element_lines.append(desc)
             
-        if len(element_lines) > 50:
-            logger.warning(f"DOM has {len(element_lines)} interactive elements. Truncating to 50 to prevent TPM errors.")
-            element_lines = element_lines[:50]
+        if len(element_lines) > 150:
+            logger.warning(f"DOM has {len(element_lines)} interactive elements. Truncating to 150 to prevent TPM errors.")
+            element_lines = element_lines[:150]
             
         element_text = "\n".join(element_lines)
         
@@ -386,13 +396,25 @@ Reply ONLY with a comma-separated list of integer IDs (e.g., '45' or '26, 27'). 
                 
                 if current_action == "click":
                     try:
-                        await self.page.click(selector, timeout=3000, force=True)
-                    except Exception:
+                        await self.page.click(selector, timeout=3000)
+                    except Exception as native_err:
+                        logger.warning(f"Native click failed ({native_err}), falling back to robust JS pointer events.")
                         # Fallback to native DOM click if Playwright click fails
                         clicked = await self.page.evaluate(f"""
                             (() => {{
-                                const el = document.querySelector("{selector}");
+                                let el = document.querySelector("{selector}");
                                 if (el) {{
+                                    // Always route click events to the true interactive parent container if one exists.
+                                    // This prevents clicks on inner divs/spans from being swallowed by strict React listeners.
+                                    const parentBtn = el.closest('button, a, [role="button"], .dropdown-toggle');
+                                    if (parentBtn) el = parentBtn;
+                                    
+                                    // Many modern UI libraries (HeadlessUI, Radix, MUI) listen for pointerdown/mousedown 
+                                    // instead of click to open dropdown menus faster.
+                                    el.dispatchEvent(new PointerEvent('pointerdown', {{ bubbles: true, cancelable: true, view: window }}));
+                                    el.dispatchEvent(new MouseEvent('mousedown', {{ bubbles: true, cancelable: true, view: window }}));
+                                    el.dispatchEvent(new PointerEvent('pointerup', {{ bubbles: true, cancelable: true, view: window }}));
+                                    el.dispatchEvent(new MouseEvent('mouseup', {{ bubbles: true, cancelable: true, view: window }}));
                                     el.click();
                                     return true;
                                 }}
@@ -530,12 +552,30 @@ Reply ONLY with a comma-separated list of integer IDs (e.g., '45' or '26, 27'). 
                         logger.warning(f"Native fill failed, falling back to JS injection: {e}")
                         await self.page.evaluate(f"""
                             (() => {{
-                                const el = document.querySelector("{selector}");
-                                if (el) {{
-                                    el.value = `{text_to_type}`;
-                                    el.dispatchEvent(new Event('input', {{ bubbles: true }}));
-                                    el.dispatchEvent(new Event('change', {{ bubbles: true }}));
-                                }}
+                                        let targetEl = document.querySelector("{selector}");
+                                        if (targetEl) {{
+                                            if (targetEl.tagName.toLowerCase() !== 'input' && targetEl.tagName.toLowerCase() !== 'textarea') {{
+                                                const childInput = targetEl.querySelector('input, textarea');
+                                                if (childInput) targetEl = childInput;
+                                            }}
+                                            
+                                            const nativeSetter = Object.getOwnPropertyDescriptor(
+                                                window.HTMLInputElement.prototype, 'value'
+                                            )?.set || Object.getOwnPropertyDescriptor(
+                                                window.HTMLTextAreaElement.prototype, 'value'
+                                            )?.set;
+                                            
+                                            if (nativeSetter) {{
+                                                nativeSetter.call(targetEl, `{text_to_type}`);
+                                            }} else {{
+                                                targetEl.value = `{text_to_type}`;
+                                            }}
+                                            
+                                            targetEl.dispatchEvent(new Event('input', {{ bubbles: true }}));
+                                            targetEl.dispatchEvent(new Event('change', {{ bubbles: true }}));
+                                        }} else {{
+                                            throw new Error("Element " + "{selector}" + " no longer exists in DOM.");
+                                        }}
                             }})()
                         """)
                     results.append(f"Typed '{text_to_type}' into the element.")
@@ -651,11 +691,29 @@ Reply strictly in JSON format where keys are the integer IDs and values are the 
                             except Exception as e:
                                 await self.page.evaluate(f"""
                                     (() => {{
-                                        const el = document.querySelector("{selector}");
-                                        if (el) {{
-                                            el.value = `{text_to_type}`;
-                                            el.dispatchEvent(new Event('input', {{ bubbles: true }}));
-                                            el.dispatchEvent(new Event('change', {{ bubbles: true }}));
+                                        let targetEl = document.querySelector("{selector}");
+                                        if (targetEl) {{
+                                            if (targetEl.tagName.toLowerCase() !== 'input' && targetEl.tagName.toLowerCase() !== 'textarea') {{
+                                                const childInput = targetEl.querySelector('input, textarea');
+                                                if (childInput) targetEl = childInput;
+                                            }}
+                                            
+                                            const nativeSetter = Object.getOwnPropertyDescriptor(
+                                                window.HTMLInputElement.prototype, 'value'
+                                            )?.set || Object.getOwnPropertyDescriptor(
+                                                window.HTMLTextAreaElement.prototype, 'value'
+                                            )?.set;
+                                            
+                                            if (nativeSetter) {{
+                                                nativeSetter.call(targetEl, `{text_to_type}`);
+                                            }} else {{
+                                                targetEl.value = `{text_to_type}`;
+                                            }}
+                                            
+                                            targetEl.dispatchEvent(new Event('input', {{ bubbles: true }}));
+                                            targetEl.dispatchEvent(new Event('change', {{ bubbles: true }}));
+                                        }} else {{
+                                            throw new Error("Element " + "{selector}" + " no longer exists in DOM.");
                                         }}
                                     }})()
                                 """)

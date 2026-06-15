@@ -602,7 +602,16 @@ class BrowserEngine:
             import urllib.parse
             encoded_query = urllib.parse.quote_plus(query)
             search_url = f"https://www.google.com/search?q={encoded_query}"
-            await page.goto(search_url, wait_until="domcontentloaded", timeout=15000)
+            
+            from playwright.async_api import TimeoutError as PlaywrightTimeoutError
+            try:
+                await page.goto(search_url, wait_until="domcontentloaded", timeout=30000)
+            except PlaywrightTimeoutError:
+                logger.warning(f"Timeout navigating to Google search, retrying...")
+                try:
+                    await page.reload(timeout=30000)
+                except PlaywrightTimeoutError:
+                    return f"Network timeout while trying to search Google for '{query}'"
             
             try:
                 # Defocus the URL bar by physically clicking the page's search box
@@ -617,6 +626,37 @@ class BrowserEngine:
             return f"Searched Google for '{query}'"
         return await _run_in_playwright(_do())
 
+    async def click_search_result(self, index: int = 0) -> str:
+        async def _do():
+            page = await self.ensure_browser()
+            url = page.url
+            
+            if "google.com/search" in url:
+                # Target the h3 headings which contain the links
+                elements = await page.locator("div#search h3").all()
+                if not elements:
+                    # Fallback to general links in results
+                    elements = await page.locator("div.g a").all()
+                    
+                if 0 <= index < len(elements):
+                    text = await elements[index].inner_text()
+                    await elements[index].click()
+                    return f"Clicked Google result: {text}"
+                return f"Could not find result at index {index+1} (Found {len(elements)})"
+                
+            elif "youtube.com/results" in url:
+                elements = await page.locator("ytd-video-renderer a#video-title").all()
+                if 0 <= index < len(elements):
+                    text = await elements[index].inner_text()
+                    await elements[index].click()
+                    return f"Clicked YouTube result: {text}"
+                return f"Could not find video at index {index+1} (Found {len(elements)})"
+                
+            else:
+                return "Not on a recognized search results page."
+                
+        return await _run_in_playwright(_do())
+
     async def search_youtube(self, query: str) -> str:
         async def _do():
             page = await self.ensure_browser()
@@ -624,7 +664,16 @@ class BrowserEngine:
             import urllib.parse
             encoded_query = urllib.parse.quote_plus(query)
             search_url = f"https://www.youtube.com/results?search_query={encoded_query}"
-            await page.goto(search_url, wait_until="domcontentloaded", timeout=15000)
+            
+            from playwright.async_api import TimeoutError as PlaywrightTimeoutError
+            try:
+                await page.goto(search_url, wait_until="domcontentloaded", timeout=30000)
+            except PlaywrightTimeoutError:
+                logger.warning(f"Timeout navigating to YouTube search, retrying...")
+                try:
+                    await page.reload(timeout=30000)
+                except PlaywrightTimeoutError:
+                    return f"Network timeout while trying to search YouTube for '{query}'"
             
             try:
                 # Defocus the URL bar by physically clicking the page's search box

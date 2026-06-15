@@ -1,0 +1,1 @@
+2026-06-15 12:19:32.562 | INFO     | automation.browser.browser_engine:_do_ensure:72 - Launching Browser (chromium) in isolated profile: C:\Users\Nivin\AppData\Local\ACE\BrowserProfile

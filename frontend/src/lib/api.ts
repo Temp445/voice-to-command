@@ -96,6 +96,8 @@ export const api = {
   listWorkflows:   () => request("/workflows"),
   createWorkflow:  (body: unknown) =>
     request("/workflows", { method: "POST", body: JSON.stringify(body) }),
+  updateWorkflow:  (id: string, body: unknown) =>
+    request(`/workflows/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
   runWorkflow:     (id: string) =>
     request(`/workflows/${id}/run`, { method: "POST" }),
   deleteWorkflow:  (id: string) =>

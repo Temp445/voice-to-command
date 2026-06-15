@@ -4,8 +4,6 @@ import os
 import subprocess
 import datetime
 from pathlib import Path
-import send2trash
-
 
 class FileOperations:
     def _launch_and_focus_folder(self, path: str, title: str) -> None:
@@ -269,8 +267,12 @@ class FileOperations:
             
             # If absolute path and exists, just delete it
             if target_path.is_absolute() and target_path.exists():
-                send2trash.send2trash(str(target_path))
-                return f"Moved '{target_path.name}' to the Recycle Bin."
+                try:
+                    import send2trash
+                    send2trash.send2trash(str(target_path))
+                    return f"Moved '{target_path.name}' to the Recycle Bin."
+                except ImportError:
+                    return f"Failed to delete '{target_path.name}' because the send2trash module is not installed."
                 
             # Otherwise, use the FileIndexer to find it
             from automation.desktop.file_indexer import get_indexer
@@ -290,8 +292,12 @@ class FileOperations:
                 
             if len(results) == 1:
                 path_to_delete = results[0]["path"]
-                send2trash.send2trash(path_to_delete)
-                return f"Moved '{results[0]['name']}' to the Recycle Bin."
+                try:
+                    import send2trash
+                    send2trash.send2trash(path_to_delete)
+                    return f"Moved '{results[0]['name']}' to the Recycle Bin."
+                except ImportError:
+                    return f"Failed to delete '{results[0]['name']}' because the send2trash module is not installed."
                 
             names = [r["name"] for r in results[:3]]
             return f"MULTIPLE_MATCHES: Found multiple items matching '{target_name}': {', '.join(names)}. Be more specific."

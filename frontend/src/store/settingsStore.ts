@@ -31,6 +31,7 @@ interface SettingsStore {
   llmApiKey: string;
   llmMode: "fallback" | "always_on";
   llmTemperature: number;
+  llmSystemError: string | null;
 
   setTtsProvider: (p: "piper" | "gtts") => void;
   update: (patch: Partial<SettingsStore>) => void;
@@ -78,6 +79,7 @@ export const useSettingsStore = create<SettingsStore>()(
       llmApiKey:      "",
       llmMode:        "fallback",
       llmTemperature: 0.7,
+      llmSystemError: null,
 
       setTtsProvider: (p) => set({ ttsProvider: p }),
       update: (patch) => {

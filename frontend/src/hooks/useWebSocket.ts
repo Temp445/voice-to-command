@@ -79,6 +79,9 @@ export function WebSocketManager() {
               useSettingsStore.getState().update(updatePayload);
             }
             break;
+          case "system_error":
+            useSettingsStore.getState().update({ llmSystemError: data.error });
+            break;
         }
       } catch {}
     };

@@ -102,13 +102,21 @@ async def handle_close_heavy_apps(**_) -> str:
     return await AppController().close_heavy_applications(threshold_mb=500)
 
 
-async def handle_search_google(query: str = "", browser: str | None = None, **_) -> str:
+async def handle_search_google(query: str = "", browser: str | None = None, text: str = "", **_) -> str:
     from automation.browser.browser_controller import BrowserController
     from automation.browser.browser_engine import BrowserEngine
     import re
     
     ctrl = BrowserController()
     query = query.strip()
+    
+    tab_match = re.search(r'(?:\s+)?in\s+(?:a\s+|the\s+)?new\s+tab$', query, re.IGNORECASE)
+    text_tab_match = re.search(r'in\s+(?:a\s+|the\s+)?new\s+tab', text, re.IGNORECASE)
+    
+    if tab_match or text_tab_match:
+        if tab_match:
+            query = query[:tab_match.start()].strip()
+        await ctrl.new_tab()
     
     # If the user says "search [URL]", just navigate to it directly
     if re.match(r"^(?:https?://)?[\w\-\.]+\.\w{2,}(?:/\S*)?$", query):
@@ -120,11 +128,22 @@ async def handle_search_google(query: str = "", browser: str | None = None, **_)
     return await ctrl.search_google(query)
 
 
-async def handle_search_youtube(query: str = "", **_) -> str:
+async def handle_search_youtube(query: str = "", text: str = "", **_) -> str:
     from automation.browser.browser_controller import BrowserController
+    import re
     ctrl = BrowserController()
+    query = query.strip()
+    
+    tab_match = re.search(r'(?:\s+)?in\s+(?:a\s+|the\s+)?new\s+tab$', query, re.IGNORECASE)
+    text_tab_match = re.search(r'in\s+(?:a\s+|the\s+)?new\s+tab', text, re.IGNORECASE)
+    
+    if tab_match or text_tab_match:
+        if tab_match:
+            query = query[:tab_match.start()].strip()
+        await ctrl.new_tab()
+        
     logger.info(f"Searching YouTube for: '{query}'")
-    return await ctrl.search_youtube(query.strip())
+    return await ctrl.search_youtube(query)
 
 
 async def handle_open_website(url: str = "", **_) -> str:
@@ -166,9 +185,38 @@ async def handle_browser_new_tab(**_) -> str:
     from automation.browser.browser_controller import BrowserController
     return await BrowserController().new_tab()
 
-async def handle_browser_switch_last_tab(**_) -> str:
+async def handle_browser_switch_tab(tab_identifier: str = "last", **_) -> str:
     from automation.browser.browser_controller import BrowserController
-    return await BrowserController().switch_to_last_tab()
+    import re
+    ctrl = BrowserController()
+    
+    tid = tab_identifier.lower().strip()
+    if tid == "last":
+        return await ctrl.switch_to_last_tab()
+        
+    mapping = {
+        "first": 0, "1st": 0, "1": 0,
+        "second": 1, "2nd": 1, "2": 1,
+        "third": 2, "3rd": 2, "3": 2,
+        "fourth": 3, "4th": 3, "4": 3,
+        "fifth": 4, "5th": 4, "5": 4,
+        "sixth": 5, "6th": 5, "6": 5,
+        "seventh": 6, "7th": 6, "7": 6,
+        "eighth": 7, "8th": 7, "8": 7,
+        "ninth": 8, "9th": 8, "9": 8,
+        "tenth": 9, "10th": 9, "10": 9
+    }
+    
+    m = re.match(r'^(\d+)', tid)
+    if m:
+        idx = int(m.group(1)) - 1
+    else:
+        idx = mapping.get(tid)
+        
+    if idx is not None:
+        return await ctrl.engine.switch_tab(idx)
+        
+    return f"Could not determine which tab to switch to from '{tab_identifier}'"
 
 async def handle_browser_close_all_tabs(**_) -> str:
     from automation.browser.browser_controller import BrowserController
@@ -534,9 +582,65 @@ async def handle_open_dev_server(**_) -> str:
     return f"Opened application in browser at {url}"
 
 
-async def handle_search_file(file_name: str = "", **_) -> str:
+async def handle_search_file(file_name: str = "", explicit_type: str = None, **_) -> str:
     from automation.desktop.file_operations import FileOperations
-    return FileOperations().search_file(file_name.strip())
+    from app.services.intent_registry import handle_open_app
+    query = file_name.strip()
+    
+    if explicit_type:
+        explicit_type = explicit_type.lower()
+        if explicit_type in ("folder", "directory"):
+            return FileOperations().open_folder(query)
+        elif explicit_type in ("app", "application", "program"):
+            return await handle_open_app(query)
+        else:
+            return FileOperations().search_file(query)
+            
+    # Omni Search
+    from automation.desktop.file_indexer import get_indexer
+    from automation.desktop.app_scanner import get_scanner
+    from rapidfuzz import process, fuzz
+    
+    indexer = get_indexer()
+    scanner = get_scanner()
+    
+    found_files = indexer.search(query, is_folder=False, limit=3)
+    found_folders = indexer.search(query, is_folder=True, limit=3)
+    
+    found_apps = []
+    if scanner.apps:
+        choices = list(scanner.apps.keys())
+        matches = process.extract(query.lower(), choices, scorer=fuzz.WRatio, limit=3)
+        for m in matches:
+            if m[1] > 75:
+                found_apps.append(scanner.apps[m[0]].name)
+                
+    if not found_files and not found_folders and not found_apps:
+        raise FileNotFoundError(f"Could not find any file, folder, or application named '{query}'")
+        
+    options = []
+    if found_files: options.append("files")
+    if found_folders: options.append("folders")
+    if found_apps: options.append("applications")
+    
+    opts_str = ", ".join(options)
+    
+    # Replace last comma with 'and' if multiple
+    if len(options) > 1:
+        opts_str = " and ".join(opts_str.rsplit(", ", 1))
+    
+    from app.services.command_service import command_service
+    command_service._pending_action = {
+        "intent": "omni_search_disambiguate",
+        "params": {
+            "query": query,
+            "files": [f['path'] for f in found_files],
+            "folders": [f['path'] for f in found_folders],
+            "apps": [a for a in found_apps]
+        }
+    }
+    
+    return f"I found matching {opts_str}. Would you like to open a file, folder, application, or search Google?"
 
 
 async def handle_create_folder(folder_name: str = "", drive: str | None = None, **_) -> str:
@@ -1282,13 +1386,13 @@ def register_all_intents() -> None:
             domain="desktop",
             is_fallback=True,
             patterns=[
-                r"^(?:search|find|locate|open)\s+(?:for\s+)?(?:the\s+)?(?:file|pdf|document|doc|image|video|spreadsheet|notepad|excel|word|powerpoint|text)\s+(?P<file_name>.+)$",
+                r"^(?:search|find|locate|open)\s+(?:for\s+)?(?:the\s+)?(?P<explicit_type>file|folder|app|application|program|pdf|document|doc|image|video|spreadsheet|notepad|excel|word|powerpoint|text)\s+(?P<file_name>.+)$",
                 r"^(?:search|find|locate)\s+(?:for\s+)?(?:the\s+)?(?P<file_name>.+)$",
             ],
             handler=handle_search_file,
-            description="Search for or open a file on the computer",
-            examples=["search for invoice pdf", "find the file report.docx", "open the pdf budget spreadsheet"],
-            param_names=["file_name"],
+            description="Search for a file, folder, or application",
+            examples=["search for invoice pdf", "find the file report.docx", "search payroll"],
+            param_names=["file_name", "explicit_type"],
         ),
         Intent(
             name="open_project",
@@ -1326,26 +1430,29 @@ def register_all_intents() -> None:
             name="browser_new_tab",
             domain="browser",
             patterns=[
-                r"(?:open|create|make)\s+(?:a\s+)?(?:new|another)\s+tab",
-                r"new\s+tab",
-                r"another\s+tab"
+                r"^(?:(?:open|create|make)\s+(?:a\s+)?)?(?:new|another)\s+tab$"
             ],
             handler=handle_browser_new_tab,
             description="Open a new browser tab",
             examples=["open a new tab", "create a new tab", "new tab", "create another tab"]
         ),
         Intent(
-            name="browser_switch_last_tab",
+            name="browser_switch_tab",
             domain="browser",
-            patterns=[r"(?:switch|go)\s+to\s+(?:the\s+)?last\s+tab"],
-            handler=handle_browser_switch_last_tab,
-            description="Switch to the last opened browser tab",
-            examples=["switch to last tab"]
+            patterns=[
+                r"^(?:switch|go)\s+to\s+(?:the\s+)?(?P<tab_identifier>first|second|third|fourth|fifth|last|next|previous|\d+(?:st|nd|rd|th)?)\s+tab$",
+                r"^(?:switch|go)\s+to\s+tab\s+(?P<tab_identifier>\d+)$",
+                r"^switch\s+(?P<tab_identifier>.+)\s+tab$"
+            ],
+            handler=handle_browser_switch_tab,
+            description="Switch to a specific browser tab by number or position",
+            examples=["switch to the first tab", "switch to tab 2", "switch last tab", "switch next tab"],
+            param_names=["tab_identifier"]
         ),
         Intent(
             name="browser_close_all_tabs",
             domain="browser",
-            patterns=[r"close\s+all\s+tabs"],
+            patterns=[r"^close\s+all\s+tabs$"],
             handler=handle_browser_close_all_tabs,
             description="Close all browser tabs",
             examples=["close all tabs"]

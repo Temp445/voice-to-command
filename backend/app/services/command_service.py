@@ -139,6 +139,76 @@ class CommandService:
                     
                 # Skip normal classification and go straight to execution
                 return await self._execute_intent(intent_name, params, text, start)
+                
+            elif pending.get("intent") == "omni_search_disambiguate":
+                params = pending["params"]
+                t_lower = text.lower()
+                
+                if ("file" in t_lower or "first" in t_lower) and params.get("files"):
+                    if len(params["files"]) == 1:
+                        from automation.desktop.file_operations import FileOperations
+                        FileOperations()._launch_and_focus(params["files"][0], params["query"])
+                        return {"intent": "omni_search_disambiguate", "status": "success", "result": f"Opened file {params['files'][0]}", "duration_ms": int((time.perf_counter() - start) * 1000)}
+                    else:
+                        from pathlib import Path
+                        opts = " or ".join(f"{i+1} for {Path(f).name}" for i, f in enumerate(params["files"]))
+                        self._pending_action = {
+                            "intent": "omni_search_file_select",
+                            "params": params
+                        }
+                        return {"intent": "omni_search_disambiguate", "status": "success", "result": f"I found multiple files. Say {opts}.", "duration_ms": int((time.perf_counter() - start) * 1000)}
+                elif ("folder" in t_lower or "directory" in t_lower) and params.get("folders"):
+                    if len(params["folders"]) == 1:
+                        from automation.desktop.file_operations import FileOperations
+                        FileOperations()._launch_and_focus_folder(params["folders"][0], params["query"])
+                        return {"intent": "omni_search_disambiguate", "status": "success", "result": f"Opened folder {params['folders'][0]}", "duration_ms": int((time.perf_counter() - start) * 1000)}
+                    else:
+                        from pathlib import Path
+                        opts = " or ".join(f"{i+1} for {Path(f).parent.name}" for i, f in enumerate(params["folders"]))
+                        self._pending_action = {
+                            "intent": "omni_search_folder_select",
+                            "params": params
+                        }
+                        return {"intent": "omni_search_disambiguate", "status": "success", "result": f"I found multiple folders. Say {opts}.", "duration_ms": int((time.perf_counter() - start) * 1000)}
+                elif ("app" in t_lower or "application" in t_lower) and params.get("apps"):
+                    from automation.desktop.app_controller import AppController
+                    res = await AppController().open_application(params["apps"][0])
+                    return {"intent": "omni_search_disambiguate", "status": "success", "result": res, "duration_ms": int((time.perf_counter() - start) * 1000)}
+                elif "google" in t_lower or "web" in t_lower or "browser" in t_lower or "online" in t_lower:
+                    from automation.browser.browser_controller import BrowserController
+                    res = await BrowserController().search_google(params["query"])
+                    return {"intent": "omni_search_disambiguate", "status": "success", "result": res, "duration_ms": int((time.perf_counter() - start) * 1000)}
+                else:
+                    return {"intent": "omni_search_disambiguate", "status": "failed", "result": "I didn't understand your choice. Search cancelled.", "duration_ms": int((time.perf_counter() - start) * 1000)}
+                    
+            elif pending.get("intent") in ("omni_search_file_select", "omni_search_folder_select"):
+                params = pending["params"]
+                is_file = pending["intent"] == "omni_search_file_select"
+                items = params["files"] if is_file else params["folders"]
+                
+                t_lower = text.lower()
+                m = re.search(r'\b(1|2|3|one|two|three|first|second|third)\b', t_lower)
+                
+                if m:
+                    choice = m.group(1)
+                    idx = {"1":0, "one":0, "first":0, "2":1, "two":1, "second":1, "3":2, "three":2, "third":2}.get(choice, 0)
+                    if idx < len(items):
+                        from automation.desktop.file_operations import FileOperations
+                        if is_file:
+                            FileOperations()._launch_and_focus(items[idx], params["query"])
+                        else:
+                            FileOperations()._launch_and_focus_folder(items[idx], params["query"])
+                        return {"intent": pending["intent"], "status": "success", "result": f"Opened {items[idx]}", "duration_ms": int((time.perf_counter() - start) * 1000)}
+                
+                # Escape hatches if the user changes their mind
+                elif "cancel" in t_lower or "stop" in t_lower or "nevermind" in t_lower:
+                    return {"intent": pending["intent"], "status": "failed", "result": "Search cancelled.", "duration_ms": int((time.perf_counter() - start) * 1000)}
+                elif "google" in t_lower or "web" in t_lower or "browser" in t_lower or "online" in t_lower:
+                    from automation.browser.browser_controller import BrowserController
+                    res = await BrowserController().search_google(params["query"])
+                    return {"intent": "omni_search_disambiguate", "status": "success", "result": res, "duration_ms": int((time.perf_counter() - start) * 1000)}
+                
+                return {"intent": pending["intent"], "status": "failed", "result": "Invalid selection. Search cancelled.", "duration_ms": int((time.perf_counter() - start) * 1000)}
 
         # 0.5. Check if the full text perfectly matches a known compound-aware intent FIRST
         initial_intent, initial_params = self._regex_match(text)
@@ -201,26 +271,40 @@ class CommandService:
             params: dict[str, Any] = {}
             self._pending_action = None
         else:
-            # 3. Native regex matching
+            # 3. Always-On mode: Route through LLM FIRST for context-aware classification
             llm_routed = False
-            intent_name, params = self._regex_match(text)
-
-            # 4. Pronoun detection: If any extracted parameter is exactly a pronoun, force LLM context resolution.
+            intent_name = None
+            params = {}
             from app.services.llm.llm_service import llm_service
-            has_pronouns = False
-            if intent_name:
-                for val in params.values():
-                    if isinstance(val, str) and re.fullmatch(r'(?i)(it|this|that|them|here)', val.strip()):
-                        has_pronouns = True
-                        break
-            else:
-                # If no regex matched, we might still want LLM to catch "close it" if it didn't even match regex
-                has_pronouns = bool(re.search(r'\b(it|this|that|them|here)\b', text, re.IGNORECASE))
             
-            if has_pronouns and llm_service.is_ready:
-                intent_name = None
-                params = {}
-                logger.info("Pronouns detected needing resolution. Bypassing native regex to allow LLM context resolution.")
+            if llm_service.is_ready and llm_service._mode == "always_on":
+                llm_result = await llm_service.classify_intent(text, self.list_intents())
+                if llm_result and llm_result.get("intent"):
+                    intent_name = llm_result["intent"]
+                    params = llm_result.get("params", {})
+                    llm_routed = True
+
+            # 4. Fallback to Native regex matching if Always-On failed or is disabled
+            if not intent_name:
+                intent_name, params = self._regex_match(text)
+
+            # 5. Pronoun detection: If any extracted parameter is exactly a pronoun, force LLM context resolution.
+            # Only do this if it wasn't ALREADY routed by the LLM.
+            if not llm_routed:
+                has_pronouns = False
+                if intent_name:
+                    for val in params.values():
+                        if isinstance(val, str) and re.fullmatch(r'(?i)(it|this|that|them|here)', val.strip()):
+                            has_pronouns = True
+                            break
+                else:
+                    # If no regex matched, we might still want LLM to catch "close it" if it didn't even match regex
+                    has_pronouns = bool(re.search(r'\b(it|this|that|them|here)\b', text, re.IGNORECASE))
+                
+                if has_pronouns and llm_service.is_ready:
+                    intent_name = None
+                    params = {}
+                    logger.info("Pronouns detected needing resolution. Bypassing native regex to allow LLM context resolution.")
 
             # 4. Handle pending disambiguation if no new regex matched
             if not intent_name and getattr(self, "_pending_action", None):
@@ -349,6 +433,10 @@ class CommandService:
         if intent_name in ("dont_save", "save_file", "cancel_dialog", "submit", "type_text", "set_filename") and not params.get("app_name"):
             if getattr(self, "last_target_app", ""):
                 params["app_name"] = self.last_target_app
+
+        # Inject raw text so handlers can access the original utterance (e.g., to catch "in new tab" if LLM stripped it)
+        if "text" not in params:
+            params["text"] = text
 
         try:
             result = await intent.handler(**params)

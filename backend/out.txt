@@ -1,0 +1,2 @@
+2026-06-15 12:18:29.638 | INFO     | automation.desktop.file_indexer:search:224 - Windows Search API returned 5 results for 'payroll'
+MULTIPLE_MATCHES: I found multiple files matching 'payroll': PayrollPrompt_20260202.txt, attendance_payroll(Sheet1) (1).csv, PayrollPrompt_20260202 [1].txt, payroll_2026-03-02.csv. Which one do you want to open?

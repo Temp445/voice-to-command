@@ -5,6 +5,9 @@ Entry point: mounts all routers, middleware, WebSocket endpoint, and lifecycle e
 
 import asyncio
 import sys
+import warnings
+
+warnings.filterwarnings("ignore", category=UserWarning, message="Apply externally defined coinit_flags: 0")
 
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())

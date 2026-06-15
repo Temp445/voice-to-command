@@ -34,6 +34,13 @@ async def execute_command(
         await ws_manager.broadcast("transcript", {"text": body.text, "is_final": True})
 
     result = await command_service.parse_and_execute(body.text)
+    
+    # Intercept and rewrite using LLM for natural language (if enabled)
+    from app.services.llm.llm_service import llm_service
+    if llm_service.is_ready and result.get("status") == "success" and result.get("result"):
+        raw_res = result.get("result")
+        natural_res = await llm_service.rewrite_for_speech(raw_res, body.text)
+        result["result"] = natural_res
 
     now = datetime.now(timezone.utc)
     entry_id = body.id or str(uuid.uuid4())
