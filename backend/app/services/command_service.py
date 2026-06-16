@@ -91,6 +91,17 @@ class CommandService:
         Returns a dict with: intent, parameters, result, status, duration_ms.
         """
         text = text.strip()
+        
+        # Apply spelling correction on the input text before routing
+        try:
+            from app.services.spelling_service import spelling_corrector
+            corrected_text = spelling_corrector.correct(text)
+            if corrected_text != text.lower():
+                logger.info(f"Spellcheck: corrected '{text}' -> '{corrected_text}'")
+                text = corrected_text
+        except Exception as e:
+            logger.warning(f"Failed to run spellcheck: {e}")
+
         start = time.perf_counter()
 
         # 0. Check for user-defined Macros/Workflows — read from in-memory cache (no DB hit)
@@ -271,22 +282,20 @@ class CommandService:
             params: dict[str, Any] = {}
             self._pending_action = None
         else:
-            # 3. Always-On mode: Route through LLM FIRST for context-aware classification
-            llm_routed = False
             intent_name = None
             params = {}
-            from app.services.llm.llm_service import llm_service
-            
-            if llm_service.is_ready and llm_service._mode == "always_on":
-                llm_result = await llm_service.classify_intent(text, self.list_intents())
-                if llm_result and llm_result.get("intent"):
-                    intent_name = llm_result["intent"]
-                    params = llm_result.get("params", {})
-                    llm_routed = True
+            llm_routed = False
 
-            # 4. Fallback to Native regex matching if Always-On failed or is disabled
+            # Layer 1: Native regex matching
+            intent_name, params = self._regex_match(text)
+
+            # Layer 1.5: Fuzzy fallback
             if not intent_name:
-                intent_name, params = self._regex_match(text)
+                intent_name, params = self._fuzzy_match(text)
+                
+            # Layer 2: Semantic fallback (FastEmbed)
+            if not intent_name:
+                intent_name, params = await self._semantic_match(text)
 
             # 5. Pronoun detection: If any extracted parameter is exactly a pronoun, force LLM context resolution.
             # Only do this if it wasn't ALREADY routed by the LLM.
@@ -301,6 +310,7 @@ class CommandService:
                     # If no regex matched, we might still want LLM to catch "close it" if it didn't even match regex
                     has_pronouns = bool(re.search(r'\b(it|this|that|them|here)\b', text, re.IGNORECASE))
                 
+                from app.services.llm.llm_service import llm_service
                 if has_pronouns and llm_service.is_ready:
                     intent_name = None
                     params = {}
@@ -316,42 +326,17 @@ class CommandService:
             else:
                 # Clear pending action since we either got a new command or no pending action exists
                 self._pending_action = None
-                
-                # 5. Check if browser is active, prioritize browser NLP mapper to prevent fuzzy matching desktop commands
-                if not intent_name:
-                    try:
-                        from automation.desktop.window_manager import WindowManager
-                        import psutil
-                        active_win = WindowManager()._get_active_window()
-                        active_title = active_win.window_text().lower()
-                        try:
-                            proc = psutil.Process(active_win.process_id())
-                            active_proc_name = proc.name().lower()
-                        except Exception:
-                            active_proc_name = ""
-                            
-                        if any(b in active_title for b in ["chrome", "edge", "brave", "firefox"]) or active_proc_name in ["chrome.exe", "msedge.exe", "brave.exe", "firefox.exe"]:
-                            from automation.browser.browser_controller import VoiceBrowserCommands
-                            browser_cmd = VoiceBrowserCommands()
-                            browser_res = await browser_cmd.execute(text)
-                            if browser_res and not browser_res.startswith("Command not recognized"):
-                                return {
-                                    "intent": "dynamic_browser_command",
-                                    "parameters": {"text": text},
-                                    "status": "success" if "Failed" not in browser_res else "failed",
-                                    "result": browser_res,
-                                    "duration_ms": int((time.perf_counter() - start) * 1000),
-                                }
-                    except Exception as e:
-                        logger.debug(f"Could not check active window for browser prioritization: {e}")
-
-                # 6. Fuzzy fallback if no regex match and browser agent didn't handle it
+                # 6. Fuzzy fallback (Layer 1.5) if no regex match
                 if not intent_name:
                     intent_name, params = self._fuzzy_match(text)
+                    
+                # 7. Semantic fallback (Layer 2) if fuzzy match also failed
+                if not intent_name:
+                    intent_name, params = await self._semantic_match(text)
 
-            # 6. LLM fallback — classify intent via AI ONLY when regex + fuzzy both failed
+            # 6. LLM fallback (Layer 3) — classify intent via AI ONLY when local layers failed
             from app.services.llm.llm_service import llm_service
-            if not intent_name and llm_service.is_ready and llm_service._mode == "fallback":
+            if not intent_name and llm_service.is_ready:
                 llm_result = await llm_service.classify_intent(text, self.list_intents())
                 if llm_result:
                     intent_name = llm_result.get("intent")
@@ -359,42 +344,9 @@ class CommandService:
                         llm_routed = True
                     # Merge any parameters the LLM contextually extracted
                     params.update(llm_result.get("params", {}))
-                
-                if not intent_name:
-                    # Try the dynamic Browser NLP mapper before conversational LLM
-                    from automation.browser.browser_controller import VoiceBrowserCommands
-                    browser_cmd = VoiceBrowserCommands()
-                    browser_res = await browser_cmd.execute(text)
-                    if browser_res and not browser_res.startswith("Command not recognized"):
-                        return {
-                            "intent": "dynamic_browser_command",
-                            "parameters": {"text": text},
-                            "status": "success" if "Failed" not in browser_res else "failed",
-                            "result": browser_res,
-                            "duration_ms": int((time.perf_counter() - start) * 1000),
-                        }
-                    
-                    # Still no match — route to ask_llm for a conversational response
-                    intent_name = "ask_llm"
-                    params = {"question": text}
-
 
         if not intent_name:
-            # Try the dynamic Browser NLP mapper before giving up
-            from automation.browser.browser_controller import VoiceBrowserCommands
-            browser_cmd = VoiceBrowserCommands()
-            browser_res = await browser_cmd.execute(text)
-            if browser_res and not browser_res.startswith("Command not recognized"):
-                return {
-                    "intent": "dynamic_browser_command",
-                    "parameters": {"text": text},
-                    "status": "success" if "Failed" not in browser_res else "failed",
-                    "result": browser_res,
-                    "duration_ms": int((time.perf_counter() - start) * 1000),
-                }
-
-            logger.warning(f"No intent matched for: '{text}'")
-            # If LLM is in always_on mode but couldn't classify, still try ask_llm
+            # If still no match after all layers, route to conversational AI in always_on mode
             from app.services.llm.llm_service import llm_service
             if llm_service.is_ready and llm_service._mode == "always_on":
                 intent_name = "ask_llm"
@@ -579,6 +531,19 @@ class CommandService:
             logger.debug(f"Fuzzy matched '{text}' → '{intent_name}' (score={result[1]})")
             return intent_name, {}
 
+        return None, {}
+
+    async def _semantic_match(self, text: str) -> tuple[str | None, dict[str, Any]]:
+        """Layer 2: FastEmbed Semantic Routing"""
+        from app.services.semantic_router import semantic_router
+        import asyncio
+        if not semantic_router._is_ready:
+            await asyncio.to_thread(semantic_router.initialize, self._intents)
+            
+        intent_name, score = await asyncio.to_thread(semantic_router.semantic_match, text, 0.82)
+        if intent_name:
+            # Semantic matching doesn't extract regex groups, so we return empty params
+            return intent_name, {}
         return None, {}
 
     def _get_intent(self, name: str) -> Intent | None:

@@ -2548,5 +2548,11 @@
     "exe_name": "findstr.exe",
     "path": "C:\\Windows\\System32\\findstr.exe",
     "source": "process"
+  },
+  "pip": {
+    "name": "pip",
+    "exe_name": "pip.exe",
+    "path": "C:\\Users\\Nivin\\AppData\\Local\\Programs\\Python\\Python311\\Scripts\\pip.exe",
+    "source": "process"
   }
 }

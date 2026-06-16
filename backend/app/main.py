@@ -221,6 +221,15 @@ async def lifespan(app: FastAPI):
             except Exception as warm_err:
                 logger.warning(f"⚠️ Could not pre-warm Whisper: {warm_err}")
 
+            # 6. Pre-warm Semantic Router (FastEmbed)
+            try:
+                from app.services.semantic_router import semantic_router
+                from app.services.command_service import command_service
+                await asyncio.to_thread(semantic_router.initialize, command_service._intents)
+                logger.info("🧠 Semantic Router pre-warmed and ready")
+            except Exception as warm_err:
+                logger.warning(f"⚠️ Could not pre-warm Semantic Router: {warm_err}")
+
         except Exception as e:
             logger.warning(f"⚠️  Voice pipeline failed to start (API will still work): {e}")
             app_state.pipeline = None

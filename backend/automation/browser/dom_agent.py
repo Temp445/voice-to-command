@@ -103,7 +103,25 @@ class DOMAgent:
             return elements;
         }
         """
-        return await self.page.evaluate(script)
+        raw_elements = await self.page.evaluate(script)
+        if not raw_elements:
+            return []
+            
+        cleaned_elements = []
+        for el in raw_elements:
+            if not isinstance(el, dict):
+                continue
+            for field in ['text', 'type', 'aria', 'context', 'tag']:
+                val = el.get(field)
+                if val is None:
+                    el[field] = ''
+                elif isinstance(val, dict):
+                    el[field] = str(val.get('baseVal', val.get('animVal', str(val))))
+                elif not isinstance(val, str):
+                    el[field] = str(val)
+            cleaned_elements.append(el)
+            
+        return cleaned_elements
 
     async def fast_path_resolve(self, intent_lower: str, action_type: str) -> tuple[list[int], str, str]:
         """
@@ -156,30 +174,49 @@ class DOMAgent:
                         logger.info(f"Fast path match: mapped verb '{first_word}' to single element")
                         return [verb_matches[0]['id']], None, action_type
                         
-                # Heuristic 2: Substring inclusion
-                # Rank matches by how closely they match the length of clean_intent
+                # Heuristic 2: Substring inclusion & Fuzzy Matching
+                # Rank matches by how closely they match the intent
+                import rapidfuzz
+                from rapidfuzz import process, fuzz
+                
                 substr_matches = []
                 for el in elements:
                     text_val = el.get('text', '').lower().strip()
                     aria_val = el.get('aria', '').lower().strip()
-                    # Check if element text is inside intent, OR if clean intent is inside element text
+                    
+                    # 1. Exact substring check (very fast)
                     if (len(text_val) >= 4 and (text_val in intent_lower or clean_intent in text_val)) or \
                        (len(aria_val) >= 4 and (aria_val in intent_lower or clean_intent in aria_val)):
-                        # Calculate length difference
                         len_diff = min(
                             abs(len(text_val) - len(clean_intent)) if text_val else 999,
                             abs(len(aria_val) - len(clean_intent)) if aria_val else 999
                         )
                         substr_matches.append((len_diff, el))
+                        continue
+                        
+                    # 2. Fuzzy match against the clean intent
+                    # Handle typos like "free trail" vs "Start Free Trial"
+                    if len(clean_intent) > 3:
+                        for val in [text_val, aria_val]:
+                            if val and len(val) > 3:
+                                # We use both WRatio and partial_ratio to handle partial matches and typos
+                                w_score = fuzz.WRatio(clean_intent, val)
+                                p_score = fuzz.partial_ratio(clean_intent, val)
+                                score = max(w_score, p_score)
+                                
+                                if score > 70:  # Lowered to 70 to catch "trail" vs "trial" (73.68 score) without LLM fallback
+                                    # We use 100 - score as the "difference" so it sorts correctly alongside len_diff
+                                    substr_matches.append(((100 - score) + 5, el))
+                                    break
                         
                 if substr_matches:
-                    # Sort by length difference (closest match first)
+                    # Sort by difference (closest match first)
                     substr_matches.sort(key=lambda x: x[0])
                     best_diff, best_el = substr_matches[0]
                     
-                    # If the best match is reasonably close in length (e.g. within 10 chars), trust it
-                    if best_diff <= 15 or len(substr_matches) == 1:
-                        logger.info(f"Fast path match: ranked substring match for '{best_el.get('text') or best_el.get('aria')}' (diff: {best_diff})")
+                    # If the best match is reasonably close, trust it (diff <= 35 corresponds to score >= 70)
+                    if best_diff <= 35 or len(substr_matches) == 1:
+                        logger.info(f"Fast path match: ranked match for '{best_el.get('text') or best_el.get('aria')}' (score diff: {best_diff})")
                         return [best_el['id']], None, action_type
 
         # If it wasn't an exact click match, or if action_type was already "type", let's try the "type" heuristic.
@@ -301,13 +338,13 @@ Reply ONLY with a comma-separated list of integer IDs (e.g., '45' or '26, 27'). 
         action_type = "click"
         
         # Explicit type keywords
-        if re.search(r'\b(type|fill|enter|write|put|set|input|search)\b', intent_lower):
+        if re.search(r'\b(type|fill|enter|write|put|set|input|search|change|update|edit|modify|revise|correct|alter|fix|replace)\b', intent_lower) and not re.search(r'\b(status|dropdown|option)\b', intent_lower):
             action_type = "type"
-        elif re.search(r'\b(select|choose|pick)\b', intent_lower) or (re.search(r'\b(change|update)\b', intent_lower) and re.search(r'\b(status|dropdown|option)\b', intent_lower)):
+        elif re.search(r'\b(select|choose|pick|grab)\b', intent_lower) or (re.search(r'\b(change|update|edit|modify)\b', intent_lower) and re.search(r'\b(status|dropdown|option)\b', intent_lower)):
             action_type = "select"
-        elif re.search(r'\b(check|uncheck|tick)\b', intent_lower):
+        elif re.search(r'\b(check|uncheck|tick|untick|mark|unmark|deselect|clear)\b', intent_lower):
             action_type = "check"
-        elif re.search(r'\b(upload|attach)\b', intent_lower):
+        elif re.search(r'\b(upload|attach|insert|provide)\b', intent_lower):
             action_type = "upload"
         else:
             # Smart detection: "field_name value" pattern (e.g. "company name demo45")
@@ -329,9 +366,30 @@ Reply ONLY with a comma-separated list of integer IDs (e.g., '45' or '26, 27'). 
 
         field_keywords = ['email', 'password', 'username', 'name', 'phone', 'address', 'city', 'zip', 'code', 'date']
         num_keywords = sum(1 for k in field_keywords if re.search(r'\b' + k + r'\b', intent_lower))
-        if action_type == "type" and (re.search(r'\b(and|with)\b', intent_lower) or ',' in intent_lower or num_keywords >= 2):
-            logger.info("Intent looks like a multi-field fill (detected separators or multiple keywords), delegating to fill_form.")
-            return await self.fill_form(intent)
+
+        # Detect bare credential pairs: e.g. "user@site.com reSet@123" or "user@site.com , pass123"
+        # If the intent has an email-like token AND another non-trivial token, treat as multi-field.
+        intent_tokens = intent.split()
+        email_tokens = [t for t in intent_tokens if '@' in t and '.' in t]
+        non_email_tokens = [t for t in intent_tokens if t not in email_tokens and len(t) > 2]
+        has_email_pair = len(email_tokens) >= 1 and len(non_email_tokens) >= 1
+
+        is_multi_field = (
+            re.search(r'\b(and|with)\b', intent_lower)
+            or ',' in intent
+            or num_keywords >= 2
+            or has_email_pair
+        )
+        if action_type == "type" and is_multi_field:
+            logger.info("Intent looks like a multi-field fill (detected separators, multiple keywords, or email+credential pair), delegating to fill_form.")
+            fill_result = await self.fill_form(intent)
+            # Route through the friendly rewriter so the user gets a natural spoken confirmation
+            try:
+                rewrite_prompt = f"User command: '{intent}'. System result: '{fill_result}'. Rewrite this into a very short, conversational confirmation as a helpful voice assistant (e.g. 'Filled in your email and password', 'Entered your details'). Do NOT reveal any credential values. Do NOT use the phrase 'for you'. Keep it under 1 short sentence."
+                friendly = await llm_service.chat(rewrite_prompt)
+                return friendly.strip()
+            except Exception:
+                return fill_result
 
         fast_element_ids, fast_text, resolved_action_type = await self.fast_path_resolve(intent_lower, action_type)
         fast_path_used = False
@@ -630,18 +688,100 @@ Reply ONLY with a comma-separated list of integer IDs (e.g., '45' or '26, 27'). 
         if len(inputs) > 100:
             logger.warning(f"Truncating {len(inputs)} form fields to 100 to prevent TPM errors.")
             inputs = inputs[:100]
-            
-        desc = "\n".join([f"[{el['id']}] {el['tag']} '{el['text']}'" for el in inputs])
-        prompt = f"""
-You are a form filling agent. The user provided this context: "{context}"
 
-Note: The user may be interacting with the Acesoftcloud CRM. Map values logically for CRM fields (e.g. Lead details, Opportunity stages, etc).
+        # ── Deterministic Credential Pre-fill ────────────────────────────────
+        # Detect a bare "email + password" pair in the context (e.g. "user@site.com , Pass@123")
+        # Fill directly using the HTML type attribute — zero LLM tokens, zero mis-mapping.
+        import re as _re
+        context_tokens = context.split()
+        # A real email must have @ AND a dot after the @ (e.g. user@gmail.com)
+        email_cands = [t.strip(',.') for t in context_tokens if '@' in t and '.' in t.split('@')[-1]]
+        stop_words = {'type', 'enter', 'write', 'fill', 'and', 'with', 'the', 'into', 'in', 'to'}
+        pass_cands = [
+            t.strip(',.')
+            for t in context_tokens
+            if t.strip(',.') not in email_cands
+            and t.strip(',.').lower() not in stop_words
+            and len(t.strip(',.')) > 3
+        ]
+
+        if email_cands and pass_cands:
+            email_val = email_cands[0]
+            pass_val  = pass_cands[-1]   # last non-email token is the password
+
+            # Find email field: prefer type=email, fall back to text field labelled email/username
+            email_field = next(
+                (el for el in inputs if el.get('type') == 'email'),
+                None
+            ) or next(
+                (el for el in inputs
+                 if el.get('type') in ('text', '')
+                 and any(k in (el.get('text','') + el.get('aria','') + el.get('context','')).lower()
+                         for k in ('email', 'username', 'user name', 'mail', 'login'))),
+                None
+            )
+            # Find password field: type=password is definitive
+            pass_field = next(
+                (el for el in inputs if el.get('type') == 'password'),
+                None
+            )
+
+            if email_field and pass_field:
+                logger.info(
+                    f"Deterministic credential fill: email→field {email_field['id']} "
+                    f"('{email_val}'), password→field {pass_field['id']}"
+                )
+                filled = []
+                for field_el, value in ((email_field, email_val), (pass_field, pass_val)):
+                    selector = f"[data-ace-id='{field_el['id']}']"
+                    await self.animate_action(selector, "type")
+                    try:
+                        await self.page.fill(selector, value, timeout=3000)
+                    except Exception:
+                        # JS fallback for React-controlled inputs
+                        safe_val = value.replace('`', r'\`').replace('\\', '\\\\')
+                        await self.page.evaluate(f"""
+                            (() => {{
+                                const el = document.querySelector("{selector}");
+                                if (!el) return;
+                                const setter = Object.getOwnPropertyDescriptor(
+                                    window.HTMLInputElement.prototype, 'value')?.set;
+                                if (setter) setter.call(el, `{safe_val}`);
+                                else el.value = `{safe_val}`;
+                                el.dispatchEvent(new Event('input', {{ bubbles: true }}));
+                                el.dispatchEvent(new Event('change', {{ bubbles: true }}));
+                            }})()
+                        """)
+                    field_label = (field_el.get('type') or 'field').strip()
+                    filled.append(field_label)
+
+                return f"Filled in {' and '.join(filled)}."
+        # ── End Deterministic Credential Pre-fill ─────────────────────────────
+
+        # Build a richer description that includes field type/placeholder so LLM can route correctly
+        desc_parts = []
+        for el in inputs:
+            el_type = el.get('type', '') or el.get('tag', '')
+            placeholder = el.get('text', '') or el.get('aria', '') or ''
+            desc_parts.append(f"[{el['id']}] type={el_type} label/placeholder='{placeholder}'")
+        desc = "\n".join(desc_parts)
+
+        prompt = f"""You are a form filling agent. The user provided this instruction: "{context}"
 
 Here are the available form fields on the page:
 {desc}
-Based on the context, map the form fields to the appropriate values.
-Reply strictly in JSON format where keys are the integer IDs and values are the text to type or select. Example: {{"1": "John", "3": "USA"}}
-"""
+
+CRITICAL RULES — you MUST follow these exactly:
+1. Map EACH value to EXACTLY ONE field. NEVER put two values in the same field.
+2. A real email address has BOTH @ AND a domain with a dot (e.g. user@gmail.com). It goes into the field with type='email' or label containing 'email'/'username'.
+3. A password goes into the field with type='password'. A string like "Pass@123" or "Nivin@0089" is a PASSWORD — NOT an email — because it has no proper domain after the @.
+4. Preserve the EXACT casing of passwords and email addresses — do NOT lowercase them.
+5. When in doubt: the value containing @gmail.com / @yahoo.com / @domain.com is the EMAIL. Everything else is the PASSWORD.
+
+Reply strictly in JSON format where keys are the integer field IDs and values are the text to fill.
+Example: {{"5": "user@example.com", "6": "MyPass@123"}}
+Reply ONLY with the JSON object, nothing else."""
+
         import json
         tokens = len(prompt) // 4
         logger.info(f"DOM Agent queried LLM for form fill mapping. Approx Payload: {tokens} tokens ({len(prompt)} chars)")
@@ -719,8 +859,25 @@ Reply strictly in JSON format where keys are the integer IDs and values are the 
                                 """)
                     except Exception as e:
                         logger.warning(f"Failed to fill field {eid_str}: {e}")
-                return "Filled the form."
-            return "Failed to generate form mapping."
+
+                # Build a human-readable summary of what was filled (without exposing credential values)
+                filled_labels = []
+                for eid_str in mapping.keys():
+                    el = next((e for e in inputs if str(e['id']) == eid_str), None)
+                    if not el:
+                        continue
+                    el_input_type = el.get('type', '')
+                    label = el.get('text', '') or el.get('aria', '') or el_input_type or 'field'
+                    label = label.strip().lower()
+                    if not label or label.startswith('enter') or label.startswith('type'):
+                        label = el_input_type or 'field'
+                    filled_labels.append(label)
+
+                if filled_labels:
+                    fields_str = ' and '.join(filled_labels)
+                    return f"Filled in {fields_str}."
+                return "Form fields filled successfully."
+            return "Could not determine which fields to fill. Please try rephrasing."
         except Exception as e:
             logger.error(f"Form fill error: {e}")
             return "Form fill failed."

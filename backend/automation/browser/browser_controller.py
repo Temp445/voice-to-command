@@ -243,17 +243,46 @@ class VoiceBrowserCommands:
             self.crm = None
 
     async def execute(self, transcript: str) -> str:
-        transcript = transcript.lower().strip()
-        
+        transcript_lower = transcript.lower().strip()
+        transcript = transcript.strip()   # preserve original casing for credentials
+
+        # ── Credential-pair shortcut ─────────────────────────────────────────
+        # If the transcript is JUST "email , password" (no login/CRM keywords),
+        # go directly to DOMAgent.fill_form — skip the LLM router entirely.
+        import re as _re
+        _raw_tokens = transcript.split()
+        _email_cands = [t.strip(',.') for t in _raw_tokens if '@' in t and '.' in t.split('@')[-1]]
+        _stop = {'type','enter','write','fill','and','with','the','into','in','to'}
+        _pass_cands = [
+            t.strip(',.')
+            for t in _raw_tokens
+            if t.strip(',.') not in _email_cands
+            and t.strip(',.').lower() not in _stop
+            and len(t.strip(',.')) > 3
+        ]
+        # Only activate when: there is an email-like token AND a password-like token
+        # AND no login/CRM navigation verbs (those have their own handlers below)
+        _cred_action_verbs = _re.search(r'\b(login|log in|log into|sign in|sign into|authenticate)\b', transcript_lower)
+        if _email_cands and _pass_cands and not _cred_action_verbs:
+            try:
+                from automation.browser.dom_agent import DOMAgent
+                page = await self.ctrl._ensure_page()
+                agent = DOMAgent(page)
+                result = await agent.fill_form(transcript)
+                return result
+            except Exception as _e:
+                logger.debug(f"Credential shortcut failed, continuing: {_e}")
+        # ── End credential-pair shortcut ─────────────────────────────────────
+
         # --- Deterministic Fallbacks (Zero LLM Tokens) ---
         try:
             page = await self.ctrl._ensure_page()
             import re
             
             # 1. Exact "click <text>" or matching a short phrase directly to a button
-            target_text = transcript
-            if transcript.startswith("click ") and len(transcript) > 6:
-                target_text = transcript[6:].strip()
+            target_text = transcript_lower
+            if transcript_lower.startswith("click ") and len(transcript_lower) > 6:
+                target_text = transcript_lower[6:].strip()
                 
             if len(target_text) > 0 and len(target_text.split()) <= 4:
                 locators = [
@@ -270,7 +299,7 @@ class VoiceBrowserCommands:
                         pass
 
             # 2. Exact "type <text> into <field>"
-            type_match = re.match(r"(?:type|enter|write)\s+(.+?)\s+(?:in|into|to|on)\s+(?:the\s+)?(.+)", transcript)
+            type_match = re.match(r"(?:type|enter|write)\s+(.+?)\s+(?:in|into|to|on)\s+(?:the\s+)?(.+)", transcript_lower)
             if type_match:
                 value = type_match.group(1).strip()
                 field = type_match.group(2).strip()
@@ -291,11 +320,18 @@ class VoiceBrowserCommands:
         # --- CRM Workflows ---
         if self.crm:
             from app.config import settings
-            crm_keys = [k.strip().lower() for k in settings.crm_keywords.split(",")]
-            if not any(crm_keys):
-                crm_keys = ["open my crm", "open crm", "open ace crm"]
+            crm_keys = [k.strip().lower() for k in settings.crm_keywords.split(",") if k.strip()]
+            # Built-in synonym set — catches 'launch crm', 'start crm', 'go to crm', 'open crm', etc.
+            _builtin_crm_pattern = re.compile(
+                r'\b(launch|start|run|go\s+to|open|load|boot|bring\s+up)\s+(my\s+)?(ace\s+)?crm\b'
+                r'|\bopen\s+my\s+crm\b'
+                r'|\bcrm\b',
+                re.IGNORECASE
+            )
 
-            if any(key in transcript for key in crm_keys if key):
+            # Check user-defined keys first, then fall back to built-in pattern
+            crm_match = any(key in transcript for key in crm_keys if key) or bool(_builtin_crm_pattern.search(transcript))
+            if crm_match:
                 return await self.crm.open_crm(transcript)
                 
             # Direct Login Credential Extraction
@@ -303,10 +339,75 @@ class VoiceBrowserCommands:
             if cred_match:
                 return await self.crm.login(username=cred_match.group(1), password=cred_match.group(2))
                 
-            if "log in" in transcript or "login" in transcript:
-                return await self.crm.login()
+            _login_signup_keywords = ["log in", "login", "sign in", "sign up", "signup", "register", "create account"]
+            if any(w in transcript for w in _login_signup_keywords):
+                page = await self.ctrl._ensure_page()
+                url = await self.ctrl.engine.get_url()
+                from app.config import settings
+                crm_host = settings.crm_url.replace("https://", "").replace("http://", "").split("/")[0]
+                is_on_crm = url and crm_host in url
+                wants_crm = "crm" in transcript_lower
+                
+                if (wants_crm or is_on_crm) and not any(w in transcript for w in ["sign up", "signup", "register"]):
+                    return await self.crm.login()
+                else:
+                    # Generic login/signup: click button on the current page.
+                    # Build ordered list: prioritize spoken keywords first.
+                    search_words = []
+                    for w in _login_signup_keywords:
+                        if w in transcript:
+                            search_words.append(w)
+                    for w in _login_signup_keywords + ["submit"]:
+                        if w not in search_words:
+                            search_words.append(w)
+
+                    for btn_text in search_words:
+                        locators = [
+                            page.get_by_role("button", name=re.compile(f"^{re.escape(btn_text)}$", re.IGNORECASE)),
+                            page.get_by_role("link", name=re.compile(f"^{re.escape(btn_text)}$", re.IGNORECASE)),
+                            page.locator(f"text=\"{btn_text}\"").filter(has_not=page.locator("body, html, main"))
+                        ]
+                        for loc in locators:
+                            try:
+                                if await loc.count() > 0:
+                                    await loc.first.click(timeout=1000)
+                                    return f"Clicked '{btn_text}'"
+                            except Exception:
+                                pass
+                    # If not found, fall back to DOMAgent clicking the element on this page
+                    from automation.browser.dom_agent import DOMAgent
+                    agent = DOMAgent(page)
+                    return await agent.execute_intent(transcript)
+
+
             if "log out" in transcript or "logout" in transcript or "sign out" in transcript:
-                return await self.crm.logout()
+                page = await self.ctrl._ensure_page()
+                url = await self.ctrl.engine.get_url()
+                from app.config import settings
+                crm_host = settings.crm_url.replace("https://", "").replace("http://", "").split("/")[0]
+                is_on_crm = url and crm_host in url
+                wants_crm = "crm" in transcript_lower
+                
+                if wants_crm or is_on_crm:
+                    return await self.crm.logout()
+                else:
+                    # Generic logout: click log out/sign out button on the current page
+                    for btn_text in ["log out", "logout", "sign out"]:
+                        locators = [
+                            page.get_by_role("button", name=re.compile(f"^{re.escape(btn_text)}$", re.IGNORECASE)),
+                            page.get_by_role("link", name=re.compile(f"^{re.escape(btn_text)}$", re.IGNORECASE)),
+                            page.locator(f"text=\"{btn_text}\"").filter(has_not=page.locator("body, html, main"))
+                        ]
+                        for loc in locators:
+                            try:
+                                if await loc.count() > 0:
+                                    await loc.first.click(timeout=1000)
+                                    return f"Clicked '{btn_text}'"
+                            except Exception:
+                                pass
+                    from automation.browser.dom_agent import DOMAgent
+                    agent = DOMAgent(page)
+                    return await agent.execute_intent(transcript)
             
             # Dynamic creation handling
             if "new " in transcript or "create " in transcript or "add " in transcript or "make " in transcript or "generate " in transcript:
@@ -353,6 +454,11 @@ class VoiceBrowserCommands:
                             return await self.ctrl.new_tab()
                         await self.ctrl.new_tab()
                         
+                    # If query looks like a URL, navigate directly
+                    if re.match(r"^(?:https?://)?[\w\-\.]+\.\w{2,}(?:/\S*)?$", query):
+                        url_to_open = query if query.startswith("http") else f"https://{query}"
+                        return await self.ctrl.engine.navigate(url_to_open)
+
                     url = await self.ctrl.engine.get_url()
                     if url and "youtube.com" in url:
                         return await self.ctrl.engine.search_youtube(query)
@@ -365,8 +471,9 @@ class VoiceBrowserCommands:
                 if m:
                     return await self.crm.open_first_record()
                     
-            # Edit / Update / Assign Handling via DOMAgent fallback
-            if "edit " in transcript or "assign " in transcript or "update " in transcript:
+            # DOMAgent Interaction Fallback (Edit, Change, Modify, Type, Fill, Select, Check, Upload, etc.)
+            import re
+            if re.search(r'\b(edit|assign|update|change|modify|revise|correct|alter|fix|replace|type|fill|enter|write|put|set|input|select|choose|pick|grab|check|uncheck|tick|untick|mark|unmark|deselect|clear|upload|attach)\b', transcript, re.IGNORECASE):
                 from automation.browser.dom_agent import DOMAgent
                 page = await self.ctrl._ensure_page()
                 agent = DOMAgent(page)

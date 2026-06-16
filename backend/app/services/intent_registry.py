@@ -59,20 +59,20 @@ async def handle_open_app(app: str = "", text: str = "", **_) -> str:
             nav_result = await bc.navigate(url)
             return f"'{app_name}' is not installed. Opened {url} in browser instead."
             
-        # Fallback to DOMAgent if a browser is active
+        # Fallback to DOMAgent (user might be trying to click a 'start X' button on a webpage)
         try:
             from automation.browser.browser_controller import BrowserController
             bc = BrowserController()
-            if bc.engine._playwright is not None:
-                logger.info(f"App '{app_name}' not found, but browser is active. Falling back to DOMAgent for 'click {app_name}'")
-                from automation.browser.dom_agent import DOMAgent
-                page = await bc.ctrl._ensure_page() if hasattr(bc, 'ctrl') else await bc._ensure_page()
-                agent = DOMAgent(page)
-                dom_res = await agent.execute_intent(text or f"click {app_name}")
-                if "couldn't find" not in dom_res.lower() and "failed" not in dom_res.lower():
-                    return dom_res
+            logger.info(f"App '{app_name}' not found. Falling back to DOMAgent for 'click {app_name}'")
+            from automation.browser.dom_agent import DOMAgent
+            page = await bc.engine.ensure_browser()
+            agent = DOMAgent(page)
+            # Use 'click' to force a button check for the app name
+            dom_res = await agent.execute_intent(f"click {app_name}")
+            if "couldn't find" not in dom_res.lower() and "failed" not in dom_res.lower():
+                return dom_res
         except Exception as e:
-            logger.debug(f"Failed to fallback to DOMAgent in open_app: {e}")
+            logger.error(f"Failed to fallback to DOMAgent in open_app: {e}")
 
     return res
 
@@ -422,10 +422,42 @@ async def handle_browser_upload(**_) -> str:
     except Exception as e:
         return f"Failed to open upload dialog: {e}"
 
-async def handle_crm_action(action: str = "", **_) -> str:
+async def handle_crm_action(text: str = "", **_) -> str:
     from automation.browser.browser_controller import VoiceBrowserCommands
     cmd = VoiceBrowserCommands()
-    return await cmd.execute(action)
+    return await cmd.execute(text)
+
+async def handle_browser_autonomous_action(text: str = "", task: str = "", **_) -> str:
+    from automation.browser.browser_controller import BrowserController
+    from automation.browser.dom_agent import DOMAgent
+    from automation.browser.browser_agent import AutonomousBrowserAgent
+    from loguru import logger
+    
+    action_text = task if task else text
+    if not action_text:
+        return "No task specified."
+        
+    ctrl = BrowserController()
+    engine = ctrl.engine
+    
+    # Fast Path: Try DOMAgent (single-step interaction on current page)
+    try:
+        if engine._playwright is not None:
+            page = await ctrl._ensure_page()
+            agent = DOMAgent(page)
+            logger.info(f"Attempting fast-path DOMAgent for task: '{action_text}'")
+            res = await agent.execute_intent(action_text)
+            
+            # If it succeeded (didn't return 'couldn't find' or 'Failed'), we're done!
+            if res and "couldn't find" not in res.lower() and "failed" not in res.lower():
+                return res
+            logger.info(f"DOMAgent skipped or failed: {res}. Falling back to full autonomous agent.")
+    except Exception as e:
+        logger.warning(f"DOMAgent threw an error: {e}")
+        
+    # Slow Path: Full Autonomous Agent (browser-use)
+    logger.info(f"Escalating '{action_text}' to AutonomousBrowserAgent...")
+    return await AutonomousBrowserAgent.run_task(action_text, engine)
 
 async def handle_read_page_title(**_) -> str:
     from automation.browser.browser_engine import BrowserEngine
@@ -786,21 +818,27 @@ async def handle_system_restart(**_) -> str:
     return "System restarting"
 
 
-async def handle_type_text(text: str = "", app_name: str = "", **_) -> str:
-    if not app_name:
-        from automation.browser.browser_controller import VoiceBrowserCommands
-        cmd = VoiceBrowserCommands()
-        res = await cmd.execute(f"type {text}")
-        if "couldn't find" not in res and "Command not recognized" not in res and "Failed to" not in res:
-            return res
-            
+async def handle_type_text(text: str = "", **_) -> str:
+    try:
+        from automation.browser.browser_controller import BrowserController
+        bc = BrowserController()
+        if bc.engine._playwright is not None:
+            # Try to type via DOMAgent first
+            from automation.browser.dom_agent import DOMAgent
+            page = await bc.engine.ensure_browser()
+            agent = DOMAgent(page)
+            dom_res = await agent.execute_intent(f"type {text}")
+            if "couldn't find" not in dom_res.lower() and "failed" not in dom_res.lower():
+                return dom_res
+    except Exception:
+        pass
+        
     from automation.input.keyboard_controller import KeyboardController
-    if app_name:
-        from automation.desktop.window_manager import WindowManager
-        WindowManager().focus_by_title(app_name)
-    import asyncio; await asyncio.sleep(0.5)
-    KeyboardController().type_text(text.strip())
-    return f"Typed: {text}{f' in {app_name}' if app_name else ''}"
+    ctrl = KeyboardController()
+    res = ctrl.type_text(text)
+    if res:
+        return f"Typed '{text}'."
+    return f"Failed to type '{text}'."
 
 
 async def handle_lock_screen(**_) -> str:
@@ -821,16 +859,38 @@ async def handle_double_click(**_) -> str:
     return "Double clicked"
 
 async def handle_click_text(text: str = "", **_) -> str:
-    from automation.browser.browser_controller import VoiceBrowserCommands
-    cmd = VoiceBrowserCommands()
-    res = await cmd.execute(f"click {text}")
+    """
+    Priority order for clicking text:
+    1. DOMAgent (browser-based) — precise, targets only the browser page, not the whole screen.
+    2. VoiceBrowserCommands — legacy browser commands.
+    3. OCR (last resort) — scans the entire screen. Only used when no browser session is active.
+    """
+    clean_text = text.strip()
     
-    if "couldn't find" in res or "Command not recognized" in res or "Failed to" in res:
-        # Fallback to Desktop OCR if DOM Agent fails
-        from automation.desktop.ocr_controller import OCRController
-        return await OCRController().find_and_click_text(text.strip())
-        
-    return res
+    # ── Priority 1: DOMAgent (Browser-First) ────────────────────────────────
+    # If the browser engine is running (even via CDP reconnect), always try this first.
+    # This guarantees we click the website, not any screen overlay like the command console.
+    try:
+        from automation.browser.browser_controller import BrowserController
+        from automation.browser.dom_agent import DOMAgent
+        bc = BrowserController()
+        # Attempt to get/reconnect to browser. This also tries CDP reconnect.
+        page = await bc.engine.ensure_browser()
+        if page is not None:
+            agent = DOMAgent(page)
+            dom_res = await agent.execute_intent(f"click {clean_text}")
+            if "couldn't find" not in dom_res.lower() and "failed" not in dom_res.lower():
+                return dom_res
+            # If DOMAgent couldn't find the element, fall through to OCR
+            logger.warning(f"DOMAgent could not find '{clean_text}' on page. Falling back to OCR.")
+    except Exception as e:
+        logger.warning(f"DOMAgent click failed for '{clean_text}': {e}. Falling back to OCR.")
+
+    # ── Last Resort: Desktop OCR ─────────────────────────────────────────────
+    # Only reaches here if no browser session is active OR the element was not found in DOM.
+    # This scans the full screen — avoid when browser is visible to prevent clicking console UI.
+    from automation.desktop.ocr_controller import OCRController
+    return await OCRController().find_and_click_text(clean_text)
 
 
 async def handle_right_click(**_) -> str:
@@ -1169,6 +1229,52 @@ def register_all_intents() -> None:
     command_service._intents.clear()
     
     intents = [
+        # Browser Autonomous Action (Fallback to LLM agent)
+        Intent(
+            name="browser_autonomous_action",
+            domain="browser",
+            patterns=[r"^(?:autonomous\s+)?(?:run|do|execute)\s+(?P<task>.+)$"], # Handled mostly by LLM fallback
+            handler=handle_browser_autonomous_action,
+            description="Use an autonomous AI agent to interact with a complex webpage",
+            examples=["go to amazon and add a red umbrella to my cart", "find the cheapest flight to tokyo on google flights", "scrape the table on this page"],
+            param_names=["task"],
+            is_fallback=True
+        ),
+        # CRM Actions
+        Intent(
+            name="crm_login",
+            domain="browser",
+            patterns=[r"^(?:log\s*in|login|sign\s*in)(?:\s+to\s+(?:the\s+)?crm)?$"],
+            handler=handle_crm_action,
+            description="Log into the ACE CRM system",
+            examples=["log in", "login", "sign in", "login to crm", "authenticate me into the system"],
+        ),
+        Intent(
+            name="crm_logout",
+            domain="browser",
+            patterns=[r"^(?:log\s*out|logout|sign\s*out)(?:\s+of\s+(?:the\s+)?crm)?$"],
+            handler=handle_crm_action,
+            description="Log out of the ACE CRM system",
+            examples=["log out", "logout", "sign out"],
+        ),
+        Intent(
+            name="crm_navigate",
+            domain="browser",
+            patterns=[r"^(?:go\s+to|open|show)\s+(?P<module>leads|contacts|opportunities|accounts|customers|quotes|quotations|orders|products|dashboard|tasks|reports|home)$"],
+            handler=handle_crm_action,
+            description="Navigate to a specific module in the CRM",
+            examples=["go to leads", "open contacts", "show dashboard"],
+            param_names=["module"],
+        ),
+        Intent(
+            name="crm_create_entity",
+            domain="browser",
+            patterns=[r"^(?:create|add|make|generate|new)\s+(?:a\s+)?(?:new\s+)?(?P<entity>lead|quote|quotation|contact|customer|account|opportunity|order|product|task)$"],
+            handler=handle_crm_action,
+            description="Create a new entity/record in the CRM",
+            examples=["create a new lead", "new quote", "add contact"],
+            param_names=["entity"],
+        ),
         # Audio Control
         Intent(
             name="set_volume",
@@ -1267,6 +1373,7 @@ def register_all_intents() -> None:
                 r"^find\s+(?!.*\byoutube\b)(?P<query>.+)\s+on\s+google$",
                 r"^open\s+(?:the\s+)?(?:chrome|browser|edge|google\s+chrome)\s+(?:and\s+)?search\s+(?:for\s+)?(?P<query>.+)$",
                 r"^search\s+(?:for\s+)?(?P<query>.+?)\s+(?:in|on)\s+(?:the\s+)?(?:chrome|browser|edge|google\s+chrome)$",
+                r"^search\s+(?:for\s+)?(?P<query>(?!lead\b|leads\b|opportunity\b|opportunities\b|customer\b|customers\b|order\b|orders\b|quote\b|quotes\b|quotation\b|quotations\b|task\b|tasks\b|account\b|accounts\b|contact\b|contacts\b|product\b|products\b).+)$",
             ],
             handler=handle_search_google,
             description="Search Google in the browser",
@@ -1638,15 +1745,7 @@ def register_all_intents() -> None:
             description="Open the currently running dev server in the web browser",
             examples=["open it in browser", "open the dev server in the browser"],
         ),
-        Intent(
-            name="dynamic_dom_action",
-            is_fallback=True,
-            patterns=[],
-            handler=handle_dynamic_dom_action,
-            description="Dynamically interact with the current webpage (click buttons, fill forms, sign in, start trial, etc) using the DOM agent.",
-            examples=["sign in", "start free trial", "click the login button", "submit the form"],
-            param_names=["action"]
-        ),
+
         Intent(
             name="open_app",
             domain="desktop",
@@ -1873,21 +1972,21 @@ def register_all_intents() -> None:
         ),
         Intent(
             name="click",
-            patterns=[r"click", r"left\s+click", r"tap"],
+            patterns=[r"^click$", r"^left\s+click$", r"^tap$"],
             handler=handle_click,
             description="Left click the mouse",
             examples=["click", "left click"],
         ),
         Intent(
             name="double_click",
-            patterns=[r"double\s+click"],
+            patterns=[r"^double\s+click$"],
             handler=handle_double_click,
             description="Double click the mouse",
             examples=["double click"],
         ),
         Intent(
             name="right_click",
-            patterns=[r"right\s+click"],
+            patterns=[r"^right\s+click$"],
             handler=handle_right_click,
             description="Right click the mouse",
             examples=["right click"],

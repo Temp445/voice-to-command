@@ -39,7 +39,9 @@ aiofiles
 loguru
 rich
 pyautogui
-
+fastembed
+browser-use
+symspellpy
 # ============================================================
 # Voice Stack — install separately after core is working:
 #   pip install --trusted-host pypi.org ... -r requirements-voice.txt
@@ -51,7 +53,6 @@ pyaudio
 numpy
 webrtcvad
 pygame
-# google-cloud-texttospeech
 gTTS
 pyrnnoise
 psutil

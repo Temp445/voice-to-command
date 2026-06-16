@@ -70,6 +70,7 @@ class BrowserEngine:
                 os.makedirs(profile_path, exist_ok=True)
 
                 logger.info(f"Launching Browser ({settings.browser_type}) in isolated profile: {profile_path}")
+                is_cdp_reconnect = False
                 try:
                     b_type = settings.browser_type.lower()
                     
@@ -87,20 +88,29 @@ class BrowserEngine:
                                 no_viewport=True,
                             )
                         else:
-                            self._context = await self._playwright.chromium.launch_persistent_context(
-                                user_data_dir=profile_path,
-                                channel="chrome",  # Use system Chrome to avoid Chromium fingerprint
-                                headless=False,
-                                no_viewport=True,
-                                args=[
-                                    "--start-maximized",
-                                    "--disable-blink-features=AutomationControlled",
-                                    "--no-first-run",
-                                    "--no-default-browser-check",
-                                    "--test-type"
-                                ],
-                                ignore_default_args=["--enable-automation"]
-                            )
+                            # Attempt to reconnect via CDP first
+                            try:
+                                browser = await self._playwright.chromium.connect_over_cdp("http://localhost:9222")
+                                self._context = browser.contexts[0] if browser.contexts else await browser.new_context()
+                                is_cdp_reconnect = True
+                                logger.info("Successfully reconnected to existing Chrome instance via CDP.")
+                            except Exception:
+                                logger.info("No active CDP session found. Launching new persistent context.")
+                                self._context = await self._playwright.chromium.launch_persistent_context(
+                                    user_data_dir=profile_path,
+                                    channel="chrome",  # Use system Chrome to avoid Chromium fingerprint
+                                    headless=False,
+                                    no_viewport=True,
+                                    args=[
+                                        "--start-maximized",
+                                        "--disable-blink-features=AutomationControlled",
+                                        "--no-first-run",
+                                        "--no-default-browser-check",
+                                        "--test-type",
+                                        "--remote-debugging-port=9222"
+                                    ],
+                                    ignore_default_args=["--enable-automation"]
+                                )
                     except Exception as launch_err:
                         logger.warning(f"Browser launch failed, attempting to kill locked processes: {launch_err}")
                         import psutil
@@ -109,11 +119,12 @@ class BrowserEngine:
                                 if proc.info['name'] and proc.info['name'].lower() in ['chrome.exe', 'msedge.exe', 'firefox.exe']:
                                     cmdline = proc.info.get('cmdline')
                                     if cmdline and any('ACE\\BrowserProfile' in str(arg) for arg in cmdline):
+                                        logger.info(f"Killing orphaned browser process: {proc.info['name']} (PID: {proc.pid})")
                                         proc.kill()
                             except (psutil.NoSuchProcess, psutil.AccessDenied):
                                 pass
                         
-                        await asyncio.sleep(1.5)
+                        await asyncio.sleep(2.0)
                         # Retry once after cleanup
                         if b_type == "firefox":
                             self._context = await self._playwright.firefox.launch_persistent_context(user_data_dir=profile_path, headless=False, no_viewport=True)
@@ -122,34 +133,45 @@ class BrowserEngine:
                         else:
                             self._context = await self._playwright.chromium.launch_persistent_context(
                                 user_data_dir=profile_path, channel="chrome", headless=False, no_viewport=True,
-                                args=["--start-maximized", "--disable-blink-features=AutomationControlled", "--no-first-run", "--no-default-browser-check", "--test-type"],
+                                args=["--start-maximized", "--disable-blink-features=AutomationControlled", "--no-first-run", "--no-default-browser-check", "--test-type", "--remote-debugging-port=9222"],
                                 ignore_default_args=["--enable-automation"]
                             )
                     
-                    try:
-                        if b_type not in ["firefox", "webkit"]:
-                            try:
-                                from playwright_stealth import stealth_async
-                                await stealth_async(self._context)
-                            except ImportError:
-                                from playwright_stealth import Stealth
-                                await Stealth().apply_stealth_async(self._context)
-                    except Exception as e:
-                        logger.warning(f"Stealth could not be applied: {e}")
+                    if not is_cdp_reconnect:
+                        try:
+                            if b_type not in ["firefox", "webkit"]:
+                                try:
+                                    from playwright_stealth import stealth_async
+                                    await stealth_async(self._context)
+                                except ImportError:
+                                    from playwright_stealth import Stealth
+                                    await Stealth().apply_stealth_async(self._context)
+                        except Exception as e:
+                            logger.warning(f"Stealth could not be applied: {e}")
 
                     pages = self._context.pages
-                    self._page = pages[0] if pages else await self._context.new_page()
                     
-                    try:
-                        client = await self._context.new_cdp_session(self._page)
-                        window = await client.send('Browser.getWindowForTarget')
-                        await client.send('Browser.setWindowBounds', {
-                            'windowId': window['windowId'], 
-                            'bounds': {'windowState': 'maximized'}
-                        })
-                        await client.detach()
-                    except Exception as e:
-                        logger.warning(f"Could not auto-maximize window via CDP: {e}")
+                    # Intelligently find the active/relevant page, filtering out extensions, blanks, and the command console itself
+                    active_page = None
+                    for p in reversed(pages): # Iterate backwards to get the most recently opened tab
+                        url = p.url.lower()
+                        if not url.startswith('chrome-extension://') and url != 'about:blank' and 'localhost:3000' not in url and '127.0.0.1:3000' not in url:
+                            active_page = p
+                            break
+                            
+                    self._page = active_page if active_page else (pages[-1] if pages else await self._context.new_page())
+                    
+                    if not is_cdp_reconnect:
+                        try:
+                            client = await self._context.new_cdp_session(self._page)
+                            window = await client.send('Browser.getWindowForTarget')
+                            await client.send('Browser.setWindowBounds', {
+                                'windowId': window['windowId'], 
+                                'bounds': {'windowState': 'maximized'}
+                            })
+                            await client.detach()
+                        except Exception as e:
+                            logger.warning(f"Could not auto-maximize window via CDP: {e}")
 
                     return self._page
 
