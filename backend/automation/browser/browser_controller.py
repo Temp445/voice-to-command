@@ -340,7 +340,8 @@ class VoiceBrowserCommands:
                 return await self.crm.login(username=cred_match.group(1), password=cred_match.group(2))
                 
             _login_signup_keywords = ["log in", "login", "sign in", "sign up", "signup", "register", "create account"]
-            if any(w in transcript for w in _login_signup_keywords):
+            is_search_or_url = transcript.startswith("search ") or re.search(r"https?://", transcript)
+            if any(w in transcript for w in _login_signup_keywords) and not is_search_or_url:
                 page = await self.ctrl._ensure_page()
                 url = await self.ctrl.engine.get_url()
                 from app.config import settings
