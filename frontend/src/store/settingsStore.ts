@@ -39,7 +39,7 @@ interface SettingsStore {
 
 /** Push the persisted minimizeToTray value to the Rust backend on startup */
 export function syncTrayStateOnBoot(minimizeToTray: boolean) {
-  if (typeof window !== "undefined" && window.__TAURI_INTERNALS__) {
+  if (typeof window !== "undefined" && (window as any).__TAURI_INTERNALS__) {
     import("@tauri-apps/api/core").then((tauriCore) => {
       if (tauriCore && typeof tauriCore.invoke === "function") {
         tauriCore.invoke("sync_minimize_to_tray", { value: minimizeToTray }).catch(console.error);
@@ -86,7 +86,7 @@ export const useSettingsStore = create<SettingsStore>()(
         set(patch);
         // Sync tray state to Rust backend whenever it changes
         if (patch.minimizeToTray !== undefined) {
-          if (typeof window !== "undefined" && window.__TAURI_INTERNALS__) {
+          if (typeof window !== "undefined" && (window as any).__TAURI_INTERNALS__) {
             import("@tauri-apps/api/core").then((tauriCore) => {
               if (tauriCore && typeof tauriCore.invoke === "function") {
                 tauriCore.invoke("sync_minimize_to_tray", { value: patch.minimizeToTray }).catch(console.error);

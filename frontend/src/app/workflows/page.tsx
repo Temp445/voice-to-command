@@ -20,7 +20,7 @@ export default function WorkflowsPage() {
   const fetchWorkflows = async () => {
     try {
       const data = await api.listWorkflows();
-      setWorkflows(data);
+      setWorkflows(data as any[]);
     } catch (error) {
       console.error("Failed to fetch workflows:", error);
     } finally {
