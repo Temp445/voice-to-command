@@ -21,6 +21,5 @@ if __name__ == "__main__":
         reload=False,           # Cannot be used inside PyInstaller binary
         log_level="warning",    # Loguru middleware handles request logging — suppress uvicorn noise
         access_log=False,       # Disable uvicorn's own access log (our middleware logs with timing)
-        timeout_notify=10,      # Faster shutdown signals to process manager
         timeout_graceful_shutdown=5,
     )
