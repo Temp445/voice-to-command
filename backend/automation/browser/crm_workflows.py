@@ -74,52 +74,13 @@ class CRMMacros:
         return "Executed login flow."
         
     async def logout(self):
-        """Automates the CRM logout flow."""
+        """Automates the CRM logout flow using the smart multi-layer LogoutHandler."""
         logger.info("Logging out of CRM...")
         page = await self.engine.ensure_browser()
-        
-        try:
-            # Look for typical logout buttons or profile menus
-            loc = page.locator("text='Logout', text='Sign Out', text='Log Out', [aria-label*='logout' i], [title*='logout' i], a[href*='logout'], a[href*='signout']")
-            if await loc.count() > 0:
-                await loc.first.click(timeout=3000)
-                return "Successfully logged out of the CRM."
-                
-            # If not immediately visible, it might be behind a profile dropdown
-            profile_btn = page.locator(".profile-menu, .user-menu, [aria-label*='profile' i], [aria-label*='user account' i], [aria-label*='account' i], img.avatar, [class*='avatar'], .user-profile, .profile, img[src*='avatar'], img[alt*='profile'], img[alt*='user'], button:has(img), .dropdown-toggle:has(img), [data-toggle='dropdown']:has(img)")
-            if await profile_btn.count() > 0:
-                await profile_btn.first.click(timeout=3000)
-                import asyncio
-                await asyncio.sleep(0.5) # Wait for dropdown animation
-                
-                loc = page.locator("text='Logout', text='Sign Out', text='Log Out', a[href*='logout'], a[href*='signout']")
-                if await loc.count() > 0:
-                    await loc.first.click(timeout=3000)
-                    return "Successfully logged out of the CRM."
-                    
-            # Fallback: Use DOMAgent to open the profile menu first
-            logger.warning("Hardcoded logout selectors failed. Using DOMAgent to find profile menu.")
-            from automation.browser.dom_agent import DOMAgent
-            agent = DOMAgent(page)
-            
-            # 1. Click the profile/user menu
-            await agent.execute_intent("click the user profile or account menu icon in the top right")
-            import asyncio
-            await asyncio.sleep(1) # wait for dropdown
-            
-            # 2. Try hardcoded logout button again now that dropdown might be open
-            loc = page.locator("text='Logout', text='Sign Out', text='Log Out', a[href*='logout'], a[href*='signout']")
-            if await loc.count() > 0:
-                await loc.first.click(timeout=3000)
-                return "Successfully logged out of the CRM."
-                
-            # 3. Final fallback: ask DOMAgent to click the logout button
-            res = await agent.execute_intent("click the logout or sign out button")
-            if "Action completed" in res or "Clicked" in res or "Successfully" in res:
-                return "Successfully logged out of the CRM."
-            return "Could not find a logout button on the page."
-        except Exception as e:
-            return f"Failed to execute logout flow: {e}"
+        from automation.browser.logout_handler import LogoutHandler
+        handler = LogoutHandler(page)
+        return await handler.smart_logout()
+
 
     async def navigate_to_module(self, module_name: str):
         """Navigates to a specific module with fallback handling for collapsed sidebars."""

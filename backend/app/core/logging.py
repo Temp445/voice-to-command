@@ -35,15 +35,37 @@ def setup_logging() -> None:
         colorize=True,
     )
 
-    # File — JSON-structured for parsing
+    # File — JSON-structured for parsing.
+    #
+    # WHY {time} IN FILENAME:
+    # ─────────────────────────────────────────────────────────────────────
+    # When the path contains {time}, loguru creates a NEW dated file on
+    # rotation (e.g. ace_2026-06-17.log → ace_2026-06-18.log) and simply
+    # closes the old handle — no os.rename() call is made.
+    #
+    # Without {time}, loguru renames ace.log → ace.<timestamp>.log.
+    # On Windows, if Tauri/uvicorn still holds a handle to ace.log, that
+    # rename raises PermissionError: [WinError 32].
+    # ─────────────────────────────────────────────────────────────────────
+    dated_log_path = log_path.parent / "ace_{time:YYYY-MM-DD}.log"
+
+    # Remove any stale unlocked ace.log left from a crashed previous session
+    # so it doesn't keep blocking new workers via WinError 32.
+    try:
+        if log_path.exists():
+            log_path.unlink(missing_ok=True)
+    except PermissionError:
+        pass  # Still locked by another process — leave it, dated file is used instead
+
     logger.add(
-        log_path,
+        str(dated_log_path),   # e.g.  ace_2026-06-17.log  — no rename on rotation
         level=settings.log_level,
-        rotation="10 MB",
+        rotation="00:00",      # New file each day; old handle just closed, never renamed
         retention="30 days",
-        compression="zip",
-        serialize=True,  # JSON format
-        enqueue=True,    # Non-blocking
+        serialize=True,        # JSON format
+        enqueue=True,          # Non-blocking background writer
+        catch=True,            # Belt-and-suspenders: swallow any residual OS errors
     )
 
     logger.info("ACE Voice Controller — logging initialised")
+

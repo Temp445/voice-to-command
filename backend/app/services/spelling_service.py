@@ -184,6 +184,11 @@ class CommandSpellingCorrector:
 
         corrected_words = []
         for word in words:
+            # If this token consists entirely of punctuation/non-alphanumeric characters, preserve it as-is
+            if not re.search(r'[a-zA-Z0-9]', word):
+                corrected_words.append(word)
+                continue
+
             # If this token looks like a credential, emit it unchanged (preserving case)
             if _is_credential_like(word):
                 corrected_words.append(word)

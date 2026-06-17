@@ -38,8 +38,8 @@ class DOMAgent:
             
             allElements.forEach((el, index) => {
                 const rect = el.getBoundingClientRect();
-                // Filter out hidden elements AND elements outside the active viewport
-                const inViewport = rect.top >= 0 && rect.bottom <= (window.innerHeight || document.documentElement.clientHeight);
+                // Filter out hidden elements AND elements outside the active viewport (allowing partially visible elements)
+                const inViewport = rect.bottom >= 0 && rect.top <= (window.innerHeight || document.documentElement.clientHeight);
                 const isFileInput = el.tagName.toLowerCase() === 'input' && el.type === 'file';
                 if ((rect.width > 0 && rect.height > 0 && inViewport) || isFileInput) {
                     let text = el.innerText ? el.innerText.trim() : (el.value || el.placeholder || el.name || '');
@@ -141,6 +141,39 @@ class DOMAgent:
         if not clean_intent:
             return None, None, action_type
 
+        def _norm(s: str) -> str:
+            s = s.lower().strip()
+            s = re.sub(r'[*:\-\s\(\)]+', ' ', s)
+            return " ".join(s.split())
+
+        # Heuristic 1: "field_name value" type heuristic.
+        # Run it early if the user did NOT specify an explicit click/select verb (e.g. "product name temp")
+        has_explicit_click = bool(re.search(r'\b(click|press|hit|open|select|choose|pick|check|uncheck|tick)\b', intent_lower))
+        if not has_explicit_click:
+            words = clean_intent.split()
+            if len(words) >= 2:
+                for split_idx in range(len(words)-1, 0, -1):
+                    label_candidate = " ".join(words[:split_idx]).strip()
+                    value_candidate = " ".join(words[split_idx:]).strip()
+                    norm_cand = _norm(label_candidate)
+                    
+                    matches = [
+                        el for el in elements 
+                        if (el.get('tag') in ['input', 'textarea'] or el.get('type') in ['text', 'number', 'email', 'tel'])
+                        and el.get('type') not in ['radio', 'checkbox', 'submit', 'button', 'file', 'image', 'hidden']
+                        and (norm_cand == _norm(el.get('context', '')) or norm_cand == _norm(el.get('aria', '')) or norm_cand == _norm(el.get('text', '')))
+                    ]
+                    
+                    if len(matches) == 1:
+                        logger.info(f"Fast path early type match: label '{label_candidate}' (normalized: '{norm_cand}'), value '{value_candidate}'")
+                        number_words = {'zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'hundred', 'thousand','lakh', 'crore', 'million', 'billion'}
+                        has_spelled_number = any(w in number_words for w in value_candidate.split())
+                        
+                        if has_spelled_number and matches[0].get('type') == 'number':
+                            return [matches[0]['id']], None, "type"
+                        return [matches[0]['id']], value_candidate, "type"
+
+        # Proceed to click/check logic
         if action_type == "click" or action_type == "check":
             # Exact match on text or aria (strip punctuation like > or -)
             import re
@@ -219,30 +252,25 @@ class DOMAgent:
                         logger.info(f"Fast path match: ranked match for '{best_el.get('text') or best_el.get('aria')}' (score diff: {best_diff})")
                         return [best_el['id']], None, action_type
 
-        # If it wasn't an exact click match, or if action_type was already "type", let's try the "type" heuristic.
-        # This handles STT typos like "price twenty two thround" where action_type defaulted to 'click'.
-            # Assume intent format is "<label> <value>". We split the intent to find a matching label.
-            # E.g. "price 8000" -> label "price", value "8000"
-            words = clean_intent.split()
-            if len(words) < 2:
-                return None, None, action_type
-                
-            # Try to match the first N-1 words as the label, and the last word as the value.
-            # Then try N-2 words as label, etc.
+        # Fallback Type Heuristic: If it wasn't matched above, or if action_type was already "type", let's try the "type" heuristic.
+        # This handles STT typos like "price twenty two thround" or direct type actions.
+        words = clean_intent.split()
+        if len(words) >= 2:
             for split_idx in range(len(words)-1, 0, -1):
                 label_candidate = " ".join(words[:split_idx]).strip()
                 value_candidate = " ".join(words[split_idx:]).strip()
+                norm_cand = _norm(label_candidate)
                 
                 # Check if label_candidate matches any input field's context, aria, or placeholder
                 matches = [
                     el for el in elements 
                     if (el.get('tag') in ['input', 'textarea'] or el.get('type') in ['text', 'number', 'email', 'tel'])
                     and el.get('type') not in ['radio', 'checkbox', 'submit', 'button', 'file', 'image', 'hidden']
-                    and (label_candidate == el.get('context', '').lower() or label_candidate == el.get('aria', '').lower() or label_candidate == el.get('text', '').lower())
+                    and (norm_cand == _norm(el.get('context', '')) or norm_cand == _norm(el.get('aria', '')) or norm_cand == _norm(el.get('text', '')))
                 ]
                 
                 if len(matches) == 1:
-                    logger.info(f"Fast path type match: label '{label_candidate}', value '{value_candidate}'")
+                    logger.info(f"Fast path fallback type match: label '{label_candidate}' (normalized: '{norm_cand}'), value '{value_candidate}'")
                     number_words = {'zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'hundred', 'thousand','lakh', 'crore', 'million', 'billion'}
                     has_spelled_number = any(w in number_words for w in value_candidate.split())
                     
@@ -364,7 +392,7 @@ Reply ONLY with a comma-separated list of integer IDs (e.g., '45' or '26, 27'). 
                 if re.search(r'\d', last_word) or re.match(r'^[a-z]{2,10}\d+$', last_word) or last_word in number_words:
                     action_type = "type"
 
-        field_keywords = ['email', 'password', 'username', 'name', 'phone', 'address', 'city', 'zip', 'code', 'date']
+        field_keywords = ['email', 'password', 'username', 'name', 'phone', 'address', 'city', 'zip', 'code', 'date', 'description', 'price', 'sku', 'cost', 'subject', 'comment', 'note', 'details', 'title', 'company', 'first', 'last']
         num_keywords = sum(1 for k in field_keywords if re.search(r'\b' + k + r'\b', intent_lower))
 
         # Detect bare credential pairs: e.g. "user@site.com reSet@123" or "user@site.com , pass123"
@@ -454,7 +482,24 @@ Reply ONLY with a comma-separated list of integer IDs (e.g., '45' or '26, 27'). 
                 
                 if current_action == "click":
                     try:
-                        await self.page.click(selector, timeout=3000)
+                        # Find if there is a more appropriate parent button/link/combobox/dropdown trigger to click.
+                        # This ensures the click event targets the container holding the event listener, preventing 
+                        # inner spans/divs/icons from swallowing the click or failing custom React reference checks.
+                        resolved_selector = await self.page.evaluate(f"""
+                            (() => {{
+                                const el = document.querySelector("{selector}");
+                                if (!el) return "{selector}";
+                                const parent = el.closest('button, a, [role="button"], [role="combobox"], [role="select"], [aria-haspopup="true"], [class*="select-trigger"], [class*="dropdown-trigger"], .dropdown-toggle');
+                                if (parent && parent !== el) {{
+                                    if (!parent.hasAttribute('data-ace-id')) {{
+                                        parent.setAttribute('data-ace-id', 'parent-' + Date.now());
+                                    }}
+                                    return '[data-ace-id="' + parent.getAttribute('data-ace-id') + '"]';
+                                }}
+                                return "{selector}";
+                            }})()
+                        """)
+                        await self.page.click(resolved_selector, timeout=3000)
                     except Exception as native_err:
                         logger.warning(f"Native click failed ({native_err}), falling back to robust JS pointer events.")
                         # Fallback to native DOM click if Playwright click fails
@@ -462,9 +507,7 @@ Reply ONLY with a comma-separated list of integer IDs (e.g., '45' or '26, 27'). 
                             (() => {{
                                 let el = document.querySelector("{selector}");
                                 if (el) {{
-                                    // Always route click events to the true interactive parent container if one exists.
-                                    // This prevents clicks on inner divs/spans from being swallowed by strict React listeners.
-                                    const parentBtn = el.closest('button, a, [role="button"], .dropdown-toggle');
+                                    const parentBtn = el.closest('button, a, [role="button"], [role="combobox"], [role="select"], [aria-haspopup="true"], [class*="select-trigger"], [class*="dropdown-trigger"], .dropdown-toggle');
                                     if (parentBtn) el = parentBtn;
                                     
                                     // Many modern UI libraries (HeadlessUI, Radix, MUI) listen for pointerdown/mousedown 
@@ -758,12 +801,13 @@ Reply ONLY with a comma-separated list of integer IDs (e.g., '45' or '26, 27'). 
                 return f"Filled in {' and '.join(filled)}."
         # ── End Deterministic Credential Pre-fill ─────────────────────────────
 
-        # Build a richer description that includes field type/placeholder so LLM can route correctly
+        # Build a richer description that includes field type/placeholder/context so LLM can route correctly
         desc_parts = []
         for el in inputs:
             el_type = el.get('type', '') or el.get('tag', '')
             placeholder = el.get('text', '') or el.get('aria', '') or ''
-            desc_parts.append(f"[{el['id']}] type={el_type} label/placeholder='{placeholder}'")
+            context_text = el.get('context', '')
+            desc_parts.append(f"[{el['id']}] type={el_type} label/placeholder='{placeholder}' context/label='{context_text}'")
         desc = "\n".join(desc_parts)
 
         prompt = f"""You are a form filling agent. The user provided this instruction: "{context}"

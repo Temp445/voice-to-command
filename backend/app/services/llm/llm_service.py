@@ -10,6 +10,7 @@ Central service that manages:
 from __future__ import annotations
 
 import json
+import asyncio
 from collections import deque
 from typing import AsyncGenerator
 
@@ -221,7 +222,11 @@ class LLMService:
             msgs.extend(self._history)
             msgs.append({"role": "user", "content": prompt})
             
-            raw = await self._provider.chat(msgs, temperature=0.0, max_tokens=150)
+            # Timeout set to 3.0 seconds to keep interaction responsive
+            raw = await asyncio.wait_for(
+                self._provider.chat(msgs, temperature=0.0, max_tokens=150),
+                timeout=3.0
+            )
             
             # Strip markdown code blocks if the LLM hallucinated them despite instructions
             if raw.startswith("```"):
@@ -234,6 +239,8 @@ class LLMService:
             if intent and confidence >= 0.6:
                 logger.info(f"LLM contextually classified '{text}' → '{intent}' (params: {parsed.get('params', {})}, confidence={confidence})")
                 return parsed
+        except asyncio.TimeoutError:
+            logger.warning(f"LLM intent classification timed out after 3.0s")
         except Exception as e:
             logger.warning(f"LLM intent classification failed: {e}")
             self._handle_llm_error(e)
@@ -247,11 +254,18 @@ class LLMService:
             raise RuntimeError("LLM provider not configured. Go to Settings → AI Assistant.")
         try:
             msgs = self._build_messages(_CHAT_SYSTEM, prompt)
-            reply = await self._provider.chat(msgs, temperature=self._temperature)
+            # Timeout set to 8.0 seconds for general chat
+            reply = await asyncio.wait_for(
+                self._provider.chat(msgs, temperature=self._temperature),
+                timeout=8.0
+            )
             # Save both sides to memory
             self.add_to_history("user", prompt)
             self.add_to_history("assistant", reply)
             return reply
+        except asyncio.TimeoutError:
+            logger.error("LLM chat timed out after 8.0s")
+            raise RuntimeError("Request to AI Assistant timed out. Please try again.")
         except Exception as e:
             logger.error(f"LLM chat failed: {e}")
             self._handle_llm_error(e)
@@ -276,9 +290,15 @@ class LLMService:
         
         try:
             msgs = self._build_messages(sys_prompt, user_prompt)
-            # Use the user's configured temperature to inject natural variation
-            reply = await self._provider.chat(msgs, temperature=self._temperature)
+            # Strict timeout of 2.0 seconds. Speech synthesis must be fast.
+            reply = await asyncio.wait_for(
+                self._provider.chat(msgs, temperature=self._temperature),
+                timeout=2.0
+            )
             return reply.strip()
+        except asyncio.TimeoutError:
+            logger.warning("LLM rewrite timed out after 2.0s, falling back to raw result")
+            return raw_result
         except Exception as e:
             logger.warning(f"LLM rewrite failed, falling back to raw result: {e}")
             self._handle_llm_error(e)

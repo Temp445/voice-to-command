@@ -2572,5 +2572,11 @@
     "exe_name": "LiveUpdateChecker.exe",
     "path": "C:\\Program Files (x86)\\Acer\\Care Center\\LiveUpdateChecker.exe",
     "source": "process"
+  },
+  "ruximics": {
+    "name": "RUXIMICS",
+    "exe_name": "RUXIMICS.exe",
+    "path": "C:\\Program Files\\RUXIM\\RUXIMICS.exe",
+    "source": "process"
   }
 }

@@ -49,8 +49,37 @@ class WindowManager:
         title_substring = self._resolve_title_alias(title_substring).lower()
         filler_words = {"the", "a", "an", "my", "this", "file", "folder", "app", "application", "document"}
         search_words = [w for w in title_substring.split() if w not in filler_words]
-        # Use win32 backend for lightning fast top-level window enumeration
+        
+        # 1. Try to match by automated browser Process PIDs first
+        import psutil
+        ace_pids = set()
+        for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+            try:
+                name = proc.info['name']
+                if name and name.lower() in ['chrome.exe', 'msedge.exe', 'firefox.exe', 'chrome', 'firefox']:
+                    cmdline = proc.info.get('cmdline')
+                    if cmdline:
+                        cmd_str = " ".join(cmdline)
+                        if 'ACE' in cmd_str and ('BrowserProfile' in cmd_str or '9222' in cmd_str):
+                            ace_pids.add(proc.info['pid'])
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                pass
+                
+        # 2. Enumerate visible windows
         try:
+            # First pass: try to find a visible window belonging to one of the ACE PIDs
+            if ace_pids:
+                for win in Desktop(backend="win32").windows():
+                    try:
+                        if not win.is_visible() or not win.window_text():
+                            continue
+                        if win.process_id() in ace_pids:
+                            logger.info(f"Found automated browser window matching PID {win.process_id()}: '{win.window_text()}'")
+                            return win
+                    except Exception:
+                        continue
+            
+            # Second pass: fallback to title substring matching
             for win in Desktop(backend="win32").windows():
                 try:
                     if not win.is_visible() or not win.window_text():
@@ -84,7 +113,10 @@ class WindowManager:
             
         win = self._find_window_by_title(title_substring)
         if win:
-            win.maximize()
+            import ctypes
+            hwnd = win.handle
+            ctypes.windll.user32.ShowWindow(hwnd, 3)
+            ctypes.windll.user32.PostMessageW(hwnd, 0x0112, 0xF030, 0)
             logger.info(f"Maximized window matching: {title_substring}")
             return True
         return False
@@ -102,16 +134,35 @@ class WindowManager:
             try:
                 user32 = ctypes.windll.user32
                 hwnd = win.handle
-                if user32.IsIconic(hwnd):
-                    user32.ShowWindow(hwnd, 9) # SW_RESTORE
                 
-                # Use AttachThreadInput trick to force foreground
+                # 1. Temporarily disable foreground lock timeout
+                timeout = ctypes.c_uint()
+                user32.SystemParametersInfoW(0x2000, 0, ctypes.byref(timeout), 0)
+                user32.SystemParametersInfoW(0x2001, 0, ctypes.c_void_p(0), 0x02)
+                
+                # 2. Minimize and then maximize (this forces the OS to rebuild the Z-order and focus)
+                user32.ShowWindow(hwnd, 6) # SW_MINIMIZE
+                user32.ShowWindow(hwnd, 3) # SW_SHOWMAXIMIZED
+                user32.PostMessageW(hwnd, 0x0112, 0xF030, 0) # WM_SYSCOMMAND, SC_MAXIMIZE
+                
+                # 3. Use undocumented SwitchToThisWindow to force activation
+                user32.SwitchToThisWindow(hwnd, True)
+                
+                # 4. Try BringWindowToTop and SetForegroundWindow
+                user32.BringWindowToTop(hwnd)
+                user32.SetForegroundWindow(hwnd)
+                
+                # 5. Use AttachThreadInput and Alt-key hijacking
                 foreground_hwnd = user32.GetForegroundWindow()
                 if hwnd != foreground_hwnd:
                     foreground_thread = user32.GetWindowThreadProcessId(foreground_hwnd, None)
                     current_thread = ctypes.windll.kernel32.GetCurrentThreadId()
                     
                     if foreground_thread != current_thread:
+                        # Press/release Alt key to grab foreground permission
+                        user32.keybd_event(0x12, 0, 0, 0)
+                        user32.keybd_event(0x12, 0, 2, 0)
+                        
                         user32.AttachThreadInput(current_thread, foreground_thread, True)
                         user32.SetForegroundWindow(hwnd)
                         user32.SetFocus(hwnd)
@@ -121,7 +172,10 @@ class WindowManager:
                 else:
                     user32.SetForegroundWindow(hwnd)
                     
-                logger.info(f"Focused window matching: {title_substring}")
+                # Restore original foreground lock timeout
+                user32.SystemParametersInfoW(0x2001, 0, ctypes.c_void_p(timeout.value), 0x02)
+                
+                logger.info(f"Focused and maximized window matching: {title_substring}")
                 return True
             except Exception as e:
                 logger.warning(f"Could not focus {title_substring}: {e}")
@@ -227,16 +281,15 @@ class WindowManager:
         def _focus():
             time.sleep(1.0)
             try:
-                lower_title = self._resolve_title_alias(title_substring)
-                for win in Desktop(backend="uia").windows():
-                    title = win.window_text()
-                    if title and lower_title in title.lower():
-                        win.set_focus()
-                        try:
-                            win.maximize()
-                        except Exception:
-                            pass
-                        break
+                self.focus_by_title(title_substring)
+                win = self._find_window_by_title(title_substring)
+                if win:
+                    try:
+                        import ctypes
+                        ctypes.windll.user32.ShowWindow(win.handle, 3)
+                        ctypes.windll.user32.PostMessageW(win.handle, 0x0112, 0xF030, 0)
+                    except Exception:
+                        pass
             except Exception:
                 pass
         threading.Thread(target=_focus, daemon=True).start()

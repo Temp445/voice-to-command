@@ -212,6 +212,25 @@ class BrowserEngine:
                     await page.reload(timeout=30000)
                 except PlaywrightTimeoutError:
                     return f"Failed to fully load {target} due to network timeout."
+            
+            # Restore and focus the browser window
+            try:
+                from automation.desktop.window_manager import WindowManager
+                from app.config import settings
+                wm = WindowManager()
+                
+                # Fetch active page title for precise window matching
+                page_title = await page.title()
+                target_title = page_title if page_title and page_title.lower() != "about:blank" else ""
+                
+                if not target_title:
+                    b_type = settings.browser_type.lower()
+                    target_title = "chrome" if b_type == "chromium" else b_type
+                
+                wm.force_focus_by_title(target_title)
+            except Exception as e:
+                logger.warning(f"Failed to focus browser window after navigation: {e}")
+                
             return f"Navigated to {target}"
         return await _run_in_playwright(_do_nav())
 

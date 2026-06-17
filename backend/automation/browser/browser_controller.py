@@ -381,34 +381,25 @@ class VoiceBrowserCommands:
                     return await agent.execute_intent(transcript)
 
 
-            if "log out" in transcript or "logout" in transcript or "sign out" in transcript:
+            _logout_triggers = [
+                    "log out", "logout", "sign out", "signout",
+                    "sign off", "log off",
+                ]
+            if any(t in transcript_lower for t in _logout_triggers):
                 page = await self.ctrl._ensure_page()
                 url = await self.ctrl.engine.get_url()
                 from app.config import settings
                 crm_host = settings.crm_url.replace("https://", "").replace("http://", "").split("/")[0]
                 is_on_crm = url and crm_host in url
                 wants_crm = "crm" in transcript_lower
-                
+
                 if wants_crm or is_on_crm:
                     return await self.crm.logout()
                 else:
-                    # Generic logout: click log out/sign out button on the current page
-                    for btn_text in ["log out", "logout", "sign out"]:
-                        locators = [
-                            page.get_by_role("button", name=re.compile(f"^{re.escape(btn_text)}$", re.IGNORECASE)),
-                            page.get_by_role("link", name=re.compile(f"^{re.escape(btn_text)}$", re.IGNORECASE)),
-                            page.locator(f"text=\"{btn_text}\"").filter(has_not=page.locator("body, html, main"))
-                        ]
-                        for loc in locators:
-                            try:
-                                if await loc.count() > 0:
-                                    await loc.first.click(timeout=1000)
-                                    return f"Clicked '{btn_text}'"
-                            except Exception:
-                                pass
-                    from automation.browser.dom_agent import DOMAgent
-                    agent = DOMAgent(page)
-                    return await agent.execute_intent(transcript)
+                    # Smart multi-layer logout: profile menu detection, DOM scan, DOMAgent fallback
+                    from automation.browser.logout_handler import LogoutHandler
+                    handler = LogoutHandler(page)
+                    return await handler.smart_logout()
             
             # Dynamic creation handling
             if "new " in transcript or "create " in transcript or "add " in transcript or "make " in transcript or "generate " in transcript:

@@ -346,6 +346,26 @@ class CommandService:
                     params.update(llm_result.get("params", {}))
 
         if not intent_name:
+            # If still no match after all layers, check if there is an active browser session
+            # to run the dynamic browser automation fallback.
+            try:
+                from automation.browser.browser_controller import BrowserController
+                bc = BrowserController()
+                if bc.engine._context is not None:
+                    from automation.browser.browser_controller import VoiceBrowserCommands
+                    browser_cmd = VoiceBrowserCommands()
+                    browser_res = await browser_cmd.execute(text)
+                    if browser_res and not browser_res.startswith("Command not recognized"):
+                        return {
+                            "intent": "dynamic_browser_command_fallback",
+                            "parameters": {"text": text},
+                            "status": "success" if "Failed" not in browser_res else "failed",
+                            "result": browser_res,
+                            "duration_ms": int((time.perf_counter() - start) * 1000),
+                        }
+            except Exception as browser_e:
+                logger.debug(f"Dynamic browser fallback failed: {browser_e}")
+
             # If still no match after all layers, route to conversational AI in always_on mode
             from app.services.llm.llm_service import llm_service
             if llm_service.is_ready and llm_service._mode == "always_on":
