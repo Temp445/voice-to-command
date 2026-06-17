@@ -230,6 +230,23 @@ async def lifespan(app: FastAPI):
             except Exception as warm_err:
                 logger.warning(f"⚠️ Could not pre-warm Semantic Router: {warm_err}")
 
+            # 7. Start Desktop Overlay if enabled
+            from app.config import settings as global_settings
+            if getattr(global_settings, "enable_desktop_overlay", False):
+                import subprocess, os, sys
+                from pathlib import Path
+                _BACKEND = Path(__file__).resolve().parent.parent
+                python_exe = os.path.join(str(_BACKEND), ".venv", "Scripts", "python.exe")
+                if not os.path.exists(python_exe):
+                    python_exe = sys.executable
+                overlay_path = os.path.join(str(_BACKEND), "automation", "desktop", "overlay.py")
+                if os.path.exists(overlay_path):
+                    app_state.overlay_process = subprocess.Popen(
+                        [python_exe, overlay_path],
+                        creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+                    )
+                    logger.info("🖥️ Desktop Overlay started automatically on startup")
+
         except Exception as e:
             logger.warning(f"⚠️  Voice pipeline failed to start (API will still work): {e}")
             app_state.pipeline = None

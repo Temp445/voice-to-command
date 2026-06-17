@@ -69,7 +69,7 @@ class AudioCapture:
         logger.info("🎤 Audio capture stopped")
 
     def _capture_loop(self) -> None:
-        from voice.remote_mic import subscribe
+        from voice.remote_mic import subscribe, unsubscribe
         remote_q = subscribe()
         import queue
         import time
@@ -83,11 +83,24 @@ class AudioCapture:
 
         try:
             while self._running:
+                # Drain the queue to get all available chunks
+                raw_bytes = bytearray()
                 try:
-                    raw = remote_q.get(timeout=0.1)
+                    # Block for at least one chunk to avoid busy looping
+                    first_chunk = remote_q.get(timeout=0.1)
+                    if first_chunk:
+                        raw_bytes.extend(first_chunk)
+                    
+                    # Drain all remaining chunks in the queue
+                    while not remote_q.empty():
+                        nxt = remote_q.get_nowait()
+                        if nxt:
+                            raw_bytes.extend(nxt)
                 except queue.Empty:
-                    continue
-
+                    if not raw_bytes:
+                        continue
+                        
+                raw = bytes(raw_bytes)
                 if not raw:
                     continue
 
@@ -138,6 +151,8 @@ class AudioCapture:
                     
         except Exception as e:
             logger.error(f"Audio capture loop error: {e}")
+        finally:
+            unsubscribe(remote_q)
 
     def stop_recording_early(self) -> None:
         self._force_stop_recording = True

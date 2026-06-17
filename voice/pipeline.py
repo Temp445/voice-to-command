@@ -161,6 +161,32 @@ class VoicePipeline:
         if self._state != PipelineState.IDLE:
             return  # Already processing
 
+        # Auto-enable desktop overlay if it was disabled
+        try:
+            from app.config import settings
+            if not getattr(settings, "enable_desktop_overlay", False):
+                settings.enable_desktop_overlay = True
+                
+                # Start overlay process
+                from fastapi import FastAPI
+                # Since we don't have direct access to app, we can use the global module
+                # Alternatively, we can use the API endpoint to update settings
+                import urllib.request
+                import json
+                import os
+                
+                port = os.environ.get("BACKEND_PORT", "8000")
+                req = urllib.request.Request(
+                    f"http://127.0.0.1:{port}/api/settings",
+                    data=json.dumps({"enable_desktop_overlay": True}).encode(),
+                    headers={"Content-Type": "application/json"},
+                    method="PATCH"
+                )
+                urllib.request.urlopen(req, timeout=1)
+                logger.info("🖥️ Auto-enabled Desktop Overlay upon wake word detection.")
+        except Exception as e:
+            logger.warning(f"Could not auto-enable overlay: {e}")
+
         if self._loop:
             asyncio.run_coroutine_threadsafe(self._listen_and_process(), self._loop)
         else:
@@ -178,9 +204,20 @@ class VoicePipeline:
 
     def deactivate(self) -> None:
         """Force the pipeline back to IDLE state."""
+        self._manually_stopped = True
+        self._audio_capture.stop_recording_early()
         self._audio_capture.stop()
-        self._set_state(PipelineState.IDLE)
-        self._wake_word.start()
+        
+        try:
+            import pygame
+            pygame.mixer.stop()  # Instantly stop any TTS playback
+        except Exception:
+            pass
+        
+        # If we are not in IDLE, the _listen_and_process loop is running.
+        # It will catch _manually_stopped and naturally clean up via its finally block.
+        if self._state == PipelineState.IDLE:
+            self._wake_word.start()
 
     # ─── Processing Pipeline ─────────────────────────────────────────────────
 

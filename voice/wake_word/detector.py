@@ -39,6 +39,7 @@ class WakeWordDetector:
         self._thread: threading.Thread | None = None
         self._model: "OWWModel | None" = None
         self._audio = pyaudio.PyAudio()
+        self._audio_buffer = np.array([], dtype=np.int16)
 
     def _load_model(self) -> "OWWModel":
         if not OWW_AVAILABLE:
@@ -101,7 +102,7 @@ class WakeWordDetector:
         if not self._running:
             return
 
-        from voice.remote_mic import subscribe
+        from voice.remote_mic import subscribe, unsubscribe
         remote_q = subscribe()
         import queue
 
@@ -109,11 +110,24 @@ class WakeWordDetector:
 
         try:
             while self._running:
+                # Drain the queue to get all available chunks
+                raw_bytes = bytearray()
                 try:
-                    raw = remote_q.get(timeout=0.1)
+                    # Block for at least one chunk to avoid busy looping
+                    first_chunk = remote_q.get(timeout=0.1)
+                    if first_chunk:
+                        raw_bytes.extend(first_chunk)
+                    
+                    # Drain all remaining chunks in the queue
+                    while not remote_q.empty():
+                        nxt = remote_q.get_nowait()
+                        if nxt:
+                            raw_bytes.extend(nxt)
                 except queue.Empty:
-                    continue
-
+                    if not raw_bytes:
+                        continue
+                        
+                raw = bytes(raw_bytes)
                 if not raw:
                     continue
 
@@ -121,18 +135,30 @@ class WakeWordDetector:
                     raw = raw[:-(len(raw) % 2)]
 
                 audio_np = np.frombuffer(raw, dtype=np.int16)
-                predictions = self._model.predict(audio_np)
+                self._audio_buffer = np.concatenate((self._audio_buffer, audio_np))
 
-                for model_name, score in predictions.items():
-                    if score > 0.1:
-                        logger.debug(f"Wake word '{model_name}' score: {score:.3f}")
-                    if score >= DETECTION_THRESHOLD:
-                        logger.info(f"🔔 Wake word detected! ('{self.wake_word}', score={score:.2f})")
-                        self._model.reset()   # Reset prediction buffer
-                        # NOTE: We DO NOT clear queues anymore! 
-                        # Doing so destroys the command audio that immediately follows the wake word.
-                        if self.on_detected:
-                            self.on_detected()
-                        break
+                while len(self._audio_buffer) >= CHUNK_SIZE:
+                    chunk = self._audio_buffer[:CHUNK_SIZE]
+                    self._audio_buffer = self._audio_buffer[CHUNK_SIZE:]
+                    
+                    predictions = self._model.predict(chunk)
+
+                    for model_name, score in predictions.items():
+                        if score > 0.1:
+                            logger.debug(f"Wake word '{model_name}' score: {score:.3f}")
+                        if score >= DETECTION_THRESHOLD:
+                            logger.info(f"🔔 Wake word detected! ('{self.wake_word}', score={score:.2f})")
+                            self._model.reset()   # Reset prediction buffer
+                            self._audio_buffer = np.array([], dtype=np.int16) # Clear our buffer
+                            # NOTE: We DO NOT clear queues anymore! 
+                            # Doing so destroys the command audio that immediately follows the wake word.
+                            if self.on_detected:
+                                self.on_detected()
+                            break
+                    else:
+                        continue
+                    break # Break out of inner loop if wake word detected
         except Exception as e:
             logger.error(f"Detector loop error: {e}")
+        finally:
+            unsubscribe(remote_q)

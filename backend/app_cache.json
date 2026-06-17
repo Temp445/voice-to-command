@@ -2554,5 +2554,23 @@
     "exe_name": "pip.exe",
     "path": "C:\\Users\\Nivin\\AppData\\Local\\Programs\\Python\\Python311\\Scripts\\pip.exe",
     "source": "process"
+  },
+  "windowsterminal": {
+    "name": "WindowsTerminal",
+    "exe_name": "WindowsTerminal.exe",
+    "path": "C:\\Program Files\\WindowsApps\\Microsoft.WindowsTerminal_1.24.11321.0_x64__8wekyb3d8bbwe\\WindowsTerminal.exe",
+    "source": "process"
+  },
+  "codesetup-stable-6928394f91b684055b873eecb8bc281365131f1c": {
+    "name": "CodeSetup-stable-6928394f91b684055b873eecb8bc281365131f1c",
+    "exe_name": "CodeSetup-stable-6928394f91b684055b873eecb8bc281365131f1c.exe",
+    "path": "C:\\Users\\nithi\\AppData\\Local\\Temp\\vscode-stable-user-x64\\CodeSetup-stable-6928394f91b684055b873eecb8bc281365131f1c.exe",
+    "source": "process"
+  },
+  "liveupdatechecker": {
+    "name": "LiveUpdateChecker",
+    "exe_name": "LiveUpdateChecker.exe",
+    "path": "C:\\Program Files (x86)\\Acer\\Care Center\\LiveUpdateChecker.exe",
+    "source": "process"
   }
 }

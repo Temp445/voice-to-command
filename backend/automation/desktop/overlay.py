@@ -372,6 +372,10 @@ class OverlayApp(QWidget):
         self._transcript_clear_timer = QTimer(self)
         self._transcript_clear_timer.setSingleShot(True)
         self._transcript_clear_timer.timeout.connect(self._clear_transcript)
+
+        self._auto_hide_timer = QTimer(self)
+        self._auto_hide_timer.setSingleShot(True)
+        self._auto_hide_timer.timeout.connect(self._do_auto_hide)
         
         self.drop_zone = DropZoneWindow()
         screen = QApplication.primaryScreen().geometry()
@@ -388,6 +392,9 @@ class OverlayApp(QWidget):
         self.anim_timer = QTimer(self)
         self.anim_timer.timeout.connect(self._tick)
         self.anim_timer.start(80)
+
+        # Initial show before auto-hiding
+        self._auto_hide_timer.start(5000)
 
     # ── UI Construction ───────────────────────────────────────────────────────
 
@@ -544,6 +551,10 @@ class OverlayApp(QWidget):
         if self.current_state in ("idle", "error"):
             self._on_state(self.current_state)
 
+    def _do_auto_hide(self):
+        if self.current_state in ("idle", "error") and not self._last_transcript and not self._card_mode:
+            self.hide()
+
     def _on_state(self, state: str):
         self.current_state = state
         self.mic_btn.set_state(state)
@@ -553,6 +564,9 @@ class OverlayApp(QWidget):
         self.replay_btn.set_enabled_state(is_idle)
 
         if state == "listening":
+            self._auto_hide_timer.stop()
+            self.show()
+            self.raise_()
             self._last_transcript = ""
             self.status_label.setText("Listening...")
             self.sub_label.setText("Click mic to stop  ·  Speak now")
@@ -560,18 +574,26 @@ class OverlayApp(QWidget):
             self._set_pill_accent("#ef4444")
             self._hide_card()  # Auto-hide card when a new command starts
         elif state == "processing":
+            self._auto_hide_timer.stop()
+            self.show()
+            self.raise_()
             self.status_label.setText(self._last_transcript if self._last_transcript else "Processing...")
             self.sub_label.setText("Executing your command")
             self.status_label.setStyleSheet("color: #fbbf24;")
             self._set_pill_accent("#eab308")
             self._hide_card()  # Auto-hide card when a new command starts
         elif state == "speaking":
+            self._auto_hide_timer.stop()
+            self.show()
+            self.raise_()
             self.status_label.setText(self._last_transcript if self._last_transcript else "Speaking...")
             self.sub_label.setText("ACE is responding")
             self.status_label.setStyleSheet("color: #60a5fa;")
             self._set_pill_accent("#3b82f6")
         else:
             if self._last_transcript:
+                self.show()
+                self.raise_()
                 self.status_label.setText(self._last_transcript)
                 if self._last_transcript.startswith('✓'):
                     self.status_label.setStyleSheet("color: #10b981;")
@@ -583,9 +605,13 @@ class OverlayApp(QWidget):
             else:
                 self.status_label.setText("ACE is ready")
                 self.status_label.setStyleSheet("color: #e5e7eb;")
+                self.sub_label.setText(f"Wake word: {self._wake_word}")
+                self._set_pill_accent(None)
                 
-            self.sub_label.setText(f"Wake word: {self._wake_word}")
-            self._set_pill_accent(None)
+                # Make sure it's visible, then auto-hide after 3s
+                self.show()
+                if not self._auto_hide_timer.isActive():
+                    self._auto_hide_timer.start(3000)
 
     def _on_settings_update(self, settings_data: dict):
         if "wake_word" in settings_data:
@@ -643,6 +669,10 @@ class OverlayApp(QWidget):
 
     def _show_card(self, title: str, body: str):
         """Display a floating card below the pill and activate the triggering button."""
+        self._auto_hide_timer.stop()
+        self.show()
+        self.raise_()
+        
         self._card_mode = "replay"
         self.replay_btn.set_active(True)
 
@@ -664,6 +694,9 @@ class OverlayApp(QWidget):
         self.card.hide()
         self._card_mode = None
         self.replay_btn.set_active(False)
+        if self.current_state in ("idle", "error") and not self._last_transcript:
+            if not self._auto_hide_timer.isActive():
+                self._auto_hide_timer.start(3000)
 
     # ── Button handlers ───────────────────────────────────────────────────────
 

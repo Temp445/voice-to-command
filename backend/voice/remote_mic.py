@@ -17,6 +17,11 @@ def subscribe() -> queue.Queue:
     _queues.append(q)
     return q
 
+def unsubscribe(q: queue.Queue) -> None:
+    """Remove a queue to prevent memory leaks."""
+    if q in _queues:
+        _queues.remove(q)
+
 def put_chunk(chunk: bytes) -> None:
     """Broadcast an audio chunk to all subscribed queues."""
     for q in _queues:
@@ -46,14 +51,11 @@ def _local_mic_loop():
         return
         
     try:
-        stream = p.open(format=pyaudio.paInt16, channels=1, rate=16000, input=True, frames_per_buffer=1440)
+        stream = p.open(format=pyaudio.paInt16, channels=1, rate=16000, input=True, frames_per_buffer=1280)
         logger.info("🎤 Local microphone broadcast started.")
         while _local_mic_running:
-            if stream.get_read_available() >= 1440:
-                raw = stream.read(1440, exception_on_overflow=False)
-                put_chunk(raw)
-            else:
-                time.sleep(0.01)
+            raw = stream.read(1280, exception_on_overflow=False)
+            put_chunk(raw)
     except Exception as e:
         logger.error(f"Local mic broadcast error: {e}")
     finally:
