@@ -1,0 +1,15 @@
+{
+  "engine": "openwakeword",
+  "model": "hey_ace.onnx",
+  "timestamp": "2026-06-18T11:51:59",
+  "recall": null,
+  "detected": 0,
+  "total_recall_attempts": 0,
+  "avg_latency_ms": null,
+  "false_positives": 0,
+  "fp_test_duration_s": 20,
+  "false_positives_per_hour": 0.0,
+  "avg_cpu_percent": 12.27,
+  "avg_ram_mb": 201.87,
+  "chunks_processed": 250
+}

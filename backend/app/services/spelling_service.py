@@ -214,6 +214,11 @@ class CommandSpellingCorrector:
                 corrected_words.append(word)
                 continue
 
+            # If this token contains any digits, preserve it as-is (e.g. "4", "10", "2026", "L-2025-0026")
+            if re.search(r'\d', word):
+                corrected_words.append(word)
+                continue
+
             # If this token looks like a credential, emit it unchanged (preserving case)
             if _is_credential_like(word):
                 corrected_words.append(word)

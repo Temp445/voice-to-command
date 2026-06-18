@@ -177,6 +177,8 @@ async def lifespan(app: FastAPI):
                 if res.data:
                     s = res.data[0]
                     from app.config import settings as global_settings
+                    if s.get("user_id"):
+                        global_settings.owner_user_id = s["user_id"]
                     for field in ("wake_word", "whisper_model", "tts_provider", "piper_voice",
                                   "active_mode_timeout", "browser_type", "enable_desktop_overlay",
                                   "crm_url", "crm_keywords", "crm_sites",
@@ -186,7 +188,7 @@ async def lifespan(app: FastAPI):
                             setattr(global_settings, field, s[field])
                     if s.get("llm_api_key_encrypted"):
                         _apply_llm_settings(s)
-                    logger.info("✅ All settings restored from Supabase")
+                    logger.info(f"✅ All settings restored from Supabase (user={global_settings.owner_user_id})")
             except Exception as e:
                 logger.warning(f"⚠️  Could not restore settings from Supabase: {e}")
 

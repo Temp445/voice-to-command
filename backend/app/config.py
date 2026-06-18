@@ -59,6 +59,7 @@ class Settings(BaseSettings):
     debug: bool = False
     backend_host: str = "127.0.0.1"
     backend_port: int = 8000
+    owner_user_id: str | None = None
 
     # --- Security ---
     secret_key: str = Field(default="ace-voice-controller-default-dev-secret-key-32x")

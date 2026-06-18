@@ -484,7 +484,14 @@ class VoiceBrowserCommands:
                     
             # DOMAgent Interaction Fallback (Edit, Change, Modify, Type, Fill, Select, Check, Upload, etc.)
             import re
-            if re.search(r'\b(edit|assign|update|change|modify|revise|correct|alter|fix|replace|type|fill|enter|write|put|set|input|select|choose|pick|grab|check|uncheck|tick|untick|mark|unmark|deselect|clear|upload|attach)\b', transcript, re.IGNORECASE):
+            # Guard: skip DOMAgent for date-range commands like "set date 4 may 2026 to 10 jun 2026"
+            # or "filter date 1-4-2026 to 20-5-2026" — these are handled by the browser_date_filter
+            # intent and DOMAgent would get confused by the date syntax.
+            _is_date_filter_cmd = bool(re.search(
+                r'\b(?:filter|set|change|update|from|between)\b.{1,30}\b\d{1,2}\b.{1,20}\bto\b.{1,20}\b\d{4}\b',
+                transcript, re.IGNORECASE
+            ))
+            if not _is_date_filter_cmd and re.search(r'\b(edit|assign|update|change|modify|revise|correct|alter|fix|replace|type|fill|enter|write|put|set|input|select|choose|pick|grab|check|uncheck|tick|untick|mark|unmark|deselect|clear|upload|attach)\b', transcript, re.IGNORECASE):
                 from automation.browser.dom_agent import DOMAgent
                 page = await self.ctrl._ensure_page()
                 agent = DOMAgent(page)

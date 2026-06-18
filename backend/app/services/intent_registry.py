@@ -163,6 +163,16 @@ async def handle_browser_go_back(**_) -> str:
     from automation.browser.browser_engine import BrowserEngine
     return await BrowserEngine().go_back()
 
+async def handle_browser_refresh(**_) -> str:
+    from automation.browser.browser_controller import BrowserController
+    try:
+        ctrl = BrowserController()
+        page = await ctrl._ensure_page()
+        await page.reload()
+        return "Page refreshed."
+    except Exception as e:
+        return f"Failed to refresh the page: {e}"
+
 async def handle_browser_click_result(index: str = "first", **_) -> str:
     from automation.browser.browser_controller import BrowserController
     
@@ -386,6 +396,99 @@ async def handle_browser_clear_marks(**_) -> str:
     from automation.browser.browser_controller import BrowserController
     return await BrowserController().clear_marks()
 
+async def handle_crm_clear_search(text: str = "", **_) -> str:
+    """
+    Clears the active search / filter input or date filter on the current CRM page.
+    Prioritizes 'Clear dates' if the user specifically asked to clear dates.
+    """
+    import asyncio
+    from automation.browser.browser_controller import BrowserController
+    from loguru import logger
+
+    ctrl = BrowserController()
+    page = await ctrl._ensure_page()
+
+    text_lower = text.lower()
+    is_date_clear = "date" in text_lower
+
+    # ── Layer 1: Date Filter Priority ─────────────────────────────────────────
+    if is_date_clear:
+        date_clear_candidates = [
+            "text='Clear dates'",
+            "text='Clear Dates'",
+            "button:has-text('Clear dates')",
+            "[aria-label*='clear date' i]"
+        ]
+        for sel in date_clear_candidates:
+            try:
+                loc = page.locator(sel).first
+                if await loc.is_visible():
+                    await loc.click(timeout=2000)
+                    await asyncio.sleep(0.4)
+                    logger.info("[ClearSearch] Cleared dates via button: %s", sel)
+                    return "Date filter cleared."
+            except Exception:
+                pass
+
+    # ── Layer 2: Direct clear of the text search input ────────────────────────
+    # Only run this if we aren't specifically targeting dates, or if the date clear failed
+    if not is_date_clear or "search" in text_lower:
+        selectors = [
+            "input[type='search']",
+            "input[placeholder*='Search' i]",
+            "input[placeholder*='search' i]",
+            "input[class*='search' i]",
+            "input[id*='search' i]",
+            "input[name*='search' i]",
+        ]
+        for sel in selectors:
+            try:
+                loc = page.locator(sel).first
+                if await loc.is_visible():
+                    await loc.click(click_count=3, timeout=2000)
+                    await loc.fill("", timeout=2000)
+                    await page.keyboard.press("Enter")
+                    await asyncio.sleep(0.4)
+                    logger.info("[ClearSearch] Cleared search input via selector: %s", sel)
+                    return "Search cleared."
+            except Exception:
+                pass
+
+    # ── Layer 3: Look for a general close / clear / reset button ──────────────
+    clear_candidates = [
+        "button:has-text('Clear')",
+        "button:has-text('Reset')",
+        "[aria-label*='clear' i]",
+        "[aria-label*='reset' i]",
+        "[title*='clear' i]",
+        ".clear-btn", ".reset-btn",
+        "button >> text=×",
+        "button >> text=✕",
+    ]
+    for sel in clear_candidates:
+        try:
+            loc = page.locator(sel).first
+            if await loc.is_visible():
+                await loc.click(timeout=2000)
+                await asyncio.sleep(0.4)
+                logger.info("[ClearSearch] Cleared via button: %s", sel)
+                return "Filter cleared."
+        except Exception:
+            pass
+
+    # ── Layer 4: DOMAgent fallback ────────────────────────────────────────────
+    try:
+        from automation.browser.dom_agent import DOMAgent
+        agent = DOMAgent(page)
+        fallback_prompt = "click the clear dates text button" if is_date_clear else "clear the search input or click the clear search button"
+        res = await agent.execute_intent(fallback_prompt)
+        if res and not any(x in res.lower() for x in ["couldn't", "failed", "could not"]):
+            return "Filter cleared via agent."
+    except Exception as e:
+        logger.warning("[ClearSearch] DOMAgent fallback failed: %s", e)
+
+    return "Could not find a search input or filter to clear on this page."
+
 async def handle_browser_double_click(**_) -> str:
     from automation.browser.browser_controller import BrowserController
     return await BrowserController().double_click()
@@ -422,31 +525,109 @@ async def handle_browser_upload(**_) -> str:
     except Exception as e:
         return f"Failed to open upload dialog: {e}"
 
+# ---> ADD THE NEW FUNCTION HERE <---
+async def handle_browser_paginate(direction: str = "", page_num: str = "", **_) -> str:
+    from automation.browser.browser_controller import BrowserController
+    from loguru import logger
+    import asyncio
+
+    ctrl = BrowserController()
+    page = await ctrl._ensure_page()
+
+    direction = direction.lower().strip()
+    page_num = page_num.strip()
+
+    target_selectors = []
+    action_desc = ""
+
+    if page_num:
+        target_selectors = [
+            f"button:has-text('{page_num}')",
+            f"a:has-text('{page_num}')",
+            f"[aria-label*='page {page_num}' i]",
+            f"[title*='page {page_num}' i]"
+        ]
+        action_desc = f"page {page_num}"
+    elif direction in ["next", "forward"]:
+        target_selectors = [
+            "[aria-label*='next page' i]",
+            "[title*='next page' i]",
+            "button:has-text('>')",
+            "button:has-text('Next')",
+            ".next-page"
+        ]
+        action_desc = "next page"
+    elif direction in ["prev", "previous", "back"]:
+        target_selectors = [
+            "[aria-label*='previous page' i]",
+            "[title*='previous page' i]",
+            "button:has-text('<')",
+            "button:has-text('Prev')",
+            ".prev-page"
+        ]
+        action_desc = "previous page"
+    elif direction == "first":
+        target_selectors = [
+            "[aria-label*='first page' i]",
+            "[title*='first page' i]",
+            "button:has-text('<<')",
+            "button:has-text('First')"
+        ]
+        action_desc = "first page"
+    elif direction == "last":
+        target_selectors = [
+            "[aria-label*='last page' i]",
+            "[title*='last page' i]",
+            "button:has-text('>>')",
+            "button:has-text('Last')"
+        ]
+        action_desc = "last page"
+
+    # Layer 1: Try native selectors
+    for sel in target_selectors:
+        try:
+            loc = page.locator(sel)
+            count = await loc.count()
+            for i in range(count):
+                el = loc.nth(i)
+                if await el.is_visible() and not await el.is_disabled():
+                    await el.click(timeout=1500)
+                    await asyncio.sleep(0.5)
+                    logger.info(f"[Paginate] Clicked {action_desc} via {sel}")
+                    return f"Navigated to {action_desc}."
+        except Exception:
+            continue
+
+    # Layer 2: DOMAgent Fallback
+    try:
+        from automation.browser.dom_agent import DOMAgent
+        agent = DOMAgent(page)
+        res = await agent.execute_intent(f"click the {action_desc} button in the pagination area")
+        if "couldn't find" not in res.lower() and "failed" not in res.lower():
+            return f"Navigated to {action_desc}."
+    except Exception as e:
+        logger.warning(f"[Paginate] DOMAgent fallback failed: {e}")
+
+    return f"Could not find or click the {action_desc} button. It might be disabled or hidden."        
+
 async def handle_crm_action(text: str = "", **_) -> str:
     from automation.browser.browser_controller import VoiceBrowserCommands
     cmd = VoiceBrowserCommands()
     return await cmd.execute(text)
-
-async def handle_browser_date_filter(start_date: str = "", end_date: str = "", text: str = "", **_) -> str:
+async def handle_browser_date_filter(start_date: str = "", end_date: str = "", text: str = "", **kwargs) -> str:
     """
     Set a date range filter on ANY website (CRM, analytics, booking, reporting).
     Fast 3-layer strategy:
       1. Native HTML date/text inputs (direct fill)
       2. JS scan → find date display elements → click → navigate calendar → click day
       3. DOMAgent targeted prompt as last resort
-
-    FIX (vs original): Layer 1 previously filled input[type='date'] elements using
-    Playwright's `nth(i)` DOM order and assumed index 0 == visually-left ("start")
-    and index 1 == visually-right ("end"). On pages where the DOM order of the two
-    date inputs doesn't match their visual left-to-right order (as seen on the
-    ACE CRM dashboard), this swapped start/end values. We now sort the date inputs
-    by their on-screen x-coordinate before assigning index 0/1, so "start" always
-    maps to whichever input is physically leftmost and "end" to whichever is
-    rightmost — independent of markup order.
     """
     import re
     import asyncio
     from automation.browser.browser_controller import BrowserController
+    import logging
+
+    logger = logging.getLogger(__name__)
 
     # ── Date Parsing ──────────────────────────────────────────────────────────
     MONTHS_MAP = {"jan":1,"feb":2,"mar":3,"apr":4,"may":5,"jun":6,
@@ -454,81 +635,336 @@ async def handle_browser_date_filter(start_date: str = "", end_date: str = "", t
     MONTH_NAMES = ["","January","February","March","April","May","June",
                    "July","August","September","October","November","December"]
 
-    def _parse_date(raw: str) -> dict:
+    def _parse_date(raw: str):
+        """
+        Returns {dmy, iso, d, m, y} on success, or None on failure.
+        """
         raw = raw.strip()
-        m = re.match(r"(\d{1,2})[\-/](\d{1,2})[\-/](\d{4})", raw)
+        # Strip ordinal suffixes: "4th" -> "4", "21st" -> "21"
+        raw = re.sub(r"\b(\d{1,2})(st|nd|rd|th)\b", r"\1", raw, flags=re.IGNORECASE)
+        # Normalize commas/extra whitespace: "May 4, 2026" -> "May 4 2026"
+        raw = re.sub(r"\s*,\s*", " ", raw)
+        raw = re.sub(r"\s+", " ", raw).strip()
+
+        d = mo = y = None
+
+        # 1. ISO: YYYY-MM-DD / YYYY/MM/DD
+        m = re.match(r"^(\d{4})[\-/](\d{1,2})[\-/](\d{1,2})$", raw)
         if m:
-            d, mo, y = int(m.group(1)), int(m.group(2)), int(m.group(3))
-        else:
-            m2 = re.match(r"(\d{1,2})\s+(\w+)\s+(\d{4})", raw, re.IGNORECASE)
-            if m2:
-                d, mo, y = int(m2.group(1)), MONTHS_MAP.get(m2.group(2)[:3].lower(), 1), int(m2.group(3))
-            else:
-                return {"dmy": raw, "iso": raw, "d": 1, "m": 1, "y": 2026}
+            y, mo, d = int(m.group(1)), int(m.group(2)), int(m.group(3))
+
+        # 2. DD-MM-YYYY / DD/MM/YYYY
+        if d is None:
+            m = re.match(r"^(\d{1,2})[\-/](\d{1,2})[\-/](\d{4})$", raw)
+            if m:
+                d, mo, y = int(m.group(1)), int(m.group(2)), int(m.group(3))
+
+        # 3. "DD MonthName YYYY"  e.g. "4 may 2026"
+        if d is None:
+            m = re.match(r"^(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})$", raw, re.IGNORECASE)
+            if m and m.group(2)[:3].lower() in MONTHS_MAP:
+                d, mo, y = int(m.group(1)), MONTHS_MAP[m.group(2)[:3].lower()], int(m.group(3))
+
+        # 4. "MonthName DD YYYY"  e.g. "May 4 2026"
+        if d is None:
+            m = re.match(r"^([A-Za-z]+)\s+(\d{1,2})\s+(\d{4})$", raw, re.IGNORECASE)
+            if m and m.group(1)[:3].lower() in MONTHS_MAP:
+                mo, d, y = MONTHS_MAP[m.group(1)[:3].lower()], int(m.group(2)), int(m.group(3))
+
+        if d is None or mo is None or y is None or not (1 <= mo <= 12) or not (1 <= d <= 31):
+            return None
+
         return {"dmy": f"{d:02d}-{mo:02d}-{y}", "iso": f"{y}-{mo:02d}-{d:02d}",
                 "d": d, "m": mo, "y": y}
 
-    # Extract dates from raw text if named params not captured
-    if not start_date and text:
-        m = re.search(
-            r"(?:from\s+|date\s+)?([\d\-/]+(?:\s+\w+\s+\d{4})?)\s+to\s+([\d\-/]+(?:\s+\w+\s+\d{4})?)",
-            text, re.IGNORECASE
-        )
+    # ── Spelled-out date words ───────────────────────────────────────────────
+    _NUM_ONES = {"zero":0,"one":1,"two":2,"three":3,"four":4,"five":5,"six":6,"seven":7,
+                 "eight":8,"nine":9,"ten":10,"eleven":11,"twelve":12,"thirteen":13,
+                 "fourteen":14,"fifteen":15,"sixteen":16,"seventeen":17,"eighteen":18,
+                 "nineteen":19}
+    _NUM_TENS = {"twenty":20,"thirty":30,"forty":40,"fifty":50,"sixty":60,"seventy":70,
+                 "eighty":80,"ninety":90}
+    _ORD_ONES = {"first":1,"second":2,"third":3,"fourth":4,"fifth":5,"sixth":6,"seventh":7,
+                 "eighth":8,"ninth":9,"tenth":10,"eleventh":11,"twelfth":12,"thirteenth":13,
+                 "fourteenth":14,"fifteenth":15,"sixteenth":16,"seventeenth":17,
+                 "eighteenth":18,"nineteenth":19}
+    _ORD_TENS = {"twentieth":20,"thirtieth":30}
+    _ORD_SUFFIX = {1:"first",2:"second",3:"third",4:"fourth",5:"fifth",6:"sixth",
+                   7:"seventh",8:"eighth",9:"ninth"}
+    _MONTH_NAME_SET = {"january","february","march","april","may","june","july",
+                        "august","september","october","november","december"}
+    _NUMBER_WORD_SET = set(_NUM_ONES) | set(_NUM_TENS) | {"hundred", "thousand", "and"}
+
+    _DAY_WORDS = {}
+    for _w, _v in _NUM_ONES.items():
+        if 1 <= _v <= 19:
+            _DAY_WORDS[_w] = _v
+    for _w, _v in _NUM_TENS.items():
+        _DAY_WORDS[_w] = _v
+    for _w, _v in _ORD_ONES.items():
+        _DAY_WORDS[_w] = _v
+    for _w, _v in _ORD_TENS.items():
+        _DAY_WORDS[_w] = _v
+    for _tw, _tv in _NUM_TENS.items():
+        for _ow, _ov in _NUM_ONES.items():
+            if 1 <= _ov <= 9:
+                _DAY_WORDS[f"{_tw} {_ow}"] = _tv + _ov
+                _DAY_WORDS[f"{_tw} {_ORD_SUFFIX[_ov]}"] = _tv + _ov
+
+    def _year_from_words(words):
+        def parse_chunk(toks):
+            if not toks:
+                return None
+            w0 = toks[0]
+            if w0 in _NUM_TENS:
+                v = _NUM_TENS[w0]
+                if len(toks) > 1 and toks[1] in _NUM_ONES and 1 <= _NUM_ONES[toks[1]] <= 9:
+                    return v + _NUM_ONES[toks[1]], 2
+                return v, 1
+            if w0 in _NUM_ONES:
+                return _NUM_ONES[w0], 1
+            return None
+
+        c1 = parse_chunk(words)
+        if c1:
+            v1, n1 = c1
+            rest = words[n1:]
+            c2 = parse_chunk(rest)
+            if c2 and n1 + c2[1] == len(words):
+                v2, _ = c2
+                year = v1 * 100 + v2
+                if 1000 <= year <= 2200:
+                    return year
+
+        if "thousand" in words:
+            ti = words.index("thousand")
+            left = [w for w in words[:ti] if w != "and"]
+            right = [w for w in words[ti + 1:] if w != "and"]
+            left_val = sum(_NUM_ONES.get(w, 0) for w in left) or 1
+            rc = parse_chunk(right) if right else None
+            right_val = rc[0] if rc else 0
+            year = left_val * 1000 + right_val
+            if 1000 <= year <= 2200:
+                return year
+        return None
+
+    def _normalize_spelled_dates(s_text: str) -> str:
+        if not s_text:
+            return s_text
+        word_tokens = re.findall(r"[A-Za-z]+|\d+", s_text)
+        spans = [m.span() for m in re.finditer(r"[A-Za-z]+|\d+", s_text)]
+        lower_tokens = [t.lower() for t in word_tokens]
+
+        replacements = []
+        i = 0
+        while i < len(lower_tokens):
+            if lower_tokens[i] in _MONTH_NAME_SET:
+                month_word = word_tokens[i]
+                day_val, day_start = None, i
+
+                # Pass 1: look BACKWARDS
+                for back in (2, 1):
+                    if i - back >= 0:
+                        cand = " ".join(lower_tokens[i - back:i])
+                        if cand in _DAY_WORDS:
+                            day_val = _DAY_WORDS[cand]
+                            day_start = i - back
+                            break
+
+                if day_val is not None:
+                    j = i + 1
+                    year_word_tokens = []
+                    while j < len(lower_tokens) and j < i + 6 and lower_tokens[j] in _NUMBER_WORD_SET:
+                        year_word_tokens.append(lower_tokens[j])
+                        j += 1
+                    year_val = _year_from_words(year_word_tokens) if year_word_tokens else None
+                    if year_val:
+                        replacements.append((day_start, j, f"{day_val} {month_word} {year_val}"))
+                        i = j
+                        continue
+                    day_val = None
+
+                # Pass 2: look FORWARDS
+                if day_val is None:
+                    matched_fwd = False
+                    for fwd in (2, 1):
+                        if i + fwd < len(lower_tokens):
+                            cand = " ".join(lower_tokens[i + 1: i + 1 + fwd])
+                            if cand in _DAY_WORDS:
+                                day_val = _DAY_WORDS[cand]
+                                day_start = i            
+                                i_after_day = i + 1 + fwd
+                                j = i_after_day
+                                year_word_tokens = []
+                                while (j < len(lower_tokens) and
+                                       j < i_after_day + 6 and
+                                       lower_tokens[j] in _NUMBER_WORD_SET):
+                                    year_word_tokens.append(lower_tokens[j])
+                                    j += 1
+                                year_val = _year_from_words(year_word_tokens) if year_word_tokens else None
+                                if year_val:
+                                    replacements.append(
+                                        (day_start, j, f"{day_val} {month_word} {year_val}")
+                                    )
+                                    i = j
+                                    matched_fwd = True
+                                break   
+                    if matched_fwd:
+                        continue
+            i += 1
+
+        if not replacements:
+            return s_text
+
+        pieces, last_end, idx, ri = [], 0, 0, 0
+        while idx < len(word_tokens):
+            if ri < len(replacements) and idx == replacements[ri][0]:
+                start_c, end_c_idx, repl_str = replacements[ri]
+                start_char = spans[start_c][0]
+                end_char = spans[end_c_idx - 1][1]
+                pieces.append(s_text[last_end:start_char])
+                pieces.append(repl_str)
+                last_end = end_char
+                idx = end_c_idx
+                ri += 1
+            else:
+                idx += 1
+        pieces.append(s_text[last_end:])
+        return "".join(pieces)
+
+    text = _normalize_spelled_dates(text)
+    if start_date:
+        start_date = _normalize_spelled_dates(start_date)
+    if end_date:
+        end_date = _normalize_spelled_dates(end_date)
+
+    if not text:
+        for alt_key in ("message", "query", "utterance", "raw_text", "user_text",
+                         "user_input", "input", "prompt", "command", "raw_query", "msg"):
+            val = kwargs.get(alt_key)
+            if isinstance(val, str) and val.strip():
+                text = val
+                logger.info(f"[DateFilter] Recovered text from kwarg '{alt_key}': {text!r}")
+                break
+        else:
+            for k, v in kwargs.items():
+                if isinstance(v, str) and re.search(r"\bto\b|\bthru\b|\btill\b", v, re.IGNORECASE) and re.search(r"\d{4}", v):
+                    text = v
+                    logger.info(f"[DateFilter] Recovered text from unrecognized kwarg '{k}': {text!r}")
+                    break
+
+    logger.info(f"[DateFilter] RAW INPUT start_date={start_date!r} end_date={end_date!r} text={text!r}")
+
+    _DATE_TOKEN = (
+        r"(?:\d{4}[-/]\d{1,2}[-/]\d{1,2}"
+        r"|\d{1,2}[-/]\d{1,2}[-/]\d{4}"
+        r"|\d{1,2}(?:st|nd|rd|th)?\s+[A-Za-z]+\s+\d{4}"
+        r"|[A-Za-z]+\s+\d{1,2}(?:st|nd|rd|th)?,?\s+\d{4})"
+    )
+    _RANGE_RE = re.compile(
+        rf"({_DATE_TOKEN})\s*(?:to|thru|through|till|until|[-–—])\s*({_DATE_TOKEN})",
+        re.IGNORECASE
+    )
+
+    def _try_text_extraction():
+        if not text:
+            return None, None
+        m = _RANGE_RE.search(text)
         if m:
-            start_date, end_date = m.group(1), m.group(2)
+            return m.group(1), m.group(2)
+        return None, None
 
-    if not start_date or not end_date:
-        return "Please specify a date range, e.g. 'set date 1-4-2026 to 20-5-2026'."
+    s = _parse_date(start_date) if start_date else None
+    e = _parse_date(end_date) if end_date else None
 
-    s = _parse_date(start_date)
-    e = _parse_date(end_date)
-    logger.info(f"[DateFilter] {s['dmy']} → {e['dmy']}")
+    if s is None or e is None:
+        ext_start, ext_end = _try_text_extraction()
+        if s is None and ext_start:
+            s = _parse_date(ext_start)
+            if s:
+                start_date = ext_start
+        if e is None and ext_end:
+            e = _parse_date(ext_end)
+            if e:
+                end_date = ext_end
+
+    if s is None or e is None:
+        logger.warning(f"[DateFilter] Extraction/parse failed.")
+        bad = start_date if s is None else end_date
+        return (f"Couldn't understand the date '{bad}'. Try formats like "
+                f"'4-5-2026', '4 May 2026', or '2026-05-04'.")
 
     ctrl = BrowserController()
     page = await ctrl._ensure_page()
 
+    # ── Popup Closer Helper ──────────────────────────────────────────────────
+    async def _close_calendar_popup():
+        """Force close lingering calendars via Escape and an 'outside click' blur."""
+        try:
+            await page.keyboard.press("Escape")
+            await asyncio.sleep(0.1)
+            # Click empty space (top left) to trigger blur on date pickers that ignore Escape
+            await page.mouse.click(10, 10)
+            await asyncio.sleep(0.2)
+        except Exception as err:
+            logger.debug(f"[DateFilter] Close popup error: {err}")
+
     # ── Layer 1: Native HTML date / labelled text inputs ─────────────────────
     async def _get_visible_date_inputs_sorted_by_x():
-        """
-        Return all visible input[type='date'] elements sorted left→right by their
-        on-screen x position. This is the key fix: visual order, not DOM order,
-        determines which input is "start" (leftmost) vs "end" (rightmost).
-        """
-        handles = await page.query_selector_all("input[type='date']")
+        combined = (
+            "input[type='date'],"
+            "input[placeholder*='yyyy' i],"
+            "input[placeholder*='dd-mm' i],"
+            "input[placeholder*='mm/dd' i],"
+            "input[placeholder*='mm-dd' i],"
+            "input[placeholder*='dd/mm' i],"
+            "input[placeholder*='date' i]"
+        )
         items = []
-        for h in handles:
-            try:
-                if not await h.is_visible():
-                    continue
-                box = await h.bounding_box()
-                if box and box["width"] > 0:
-                    items.append((box["x"], h))
-            except Exception:
-                pass
+        try:
+            handles = await page.query_selector_all(combined)
+            for h in handles:
+                try:
+                    if not await h.is_visible():
+                        continue
+                    box = await h.bounding_box()
+                    if box and box["width"] > 0:
+                        itype = await h.get_attribute("type") or "text"
+                        items.append((box["x"], h, itype))
+                except Exception:
+                    pass
+        except Exception:
+            pass
         items.sort(key=lambda t: t[0])
-        return [h for _, h in items]
+        return [(h, itype) for _, h, itype in items]
 
     async def _fill_native(value_dmy: str, value_iso: str, index: int = 0) -> bool:
-        # 1a. Native input[type='date'] — pick by VISUAL position, not DOM order.
         try:
             sorted_inputs = await _get_visible_date_inputs_sorted_by_x()
             if len(sorted_inputs) >= 2 and index < len(sorted_inputs):
-                el = sorted_inputs[index]
+                el, itype = sorted_inputs[index]
+                val = value_iso if itype == "date" else value_dmy
                 await el.click(click_count=3, timeout=1500)
-                await el.fill(value_iso, timeout=1500)
+                await el.fill(val, timeout=1500)
                 await page.keyboard.press("Tab")
+                logger.info(f"[DateFilter] Layer 1a filled index={index} type={itype} val={val}")
                 return True
-        except Exception:
-            pass
+        except Exception as _err:
+            logger.debug(f"[DateFilter] Layer 1a failed: {_err}")
 
-        # 1b. Fallback heuristics (placeholder/class/id matches). Offset is now
-        # index-based for ALL groups (previously only for the date-type group),
-        # so the start call and end call don't both grab the same first match.
         sel_groups = [
-            ["input[placeholder*='date' i]", "input[class*='date' i]"],
-            [f"input[id*='{'start' if index==0 else 'end'}' i]",
-             f"input[id*='{'from' if index==0 else 'to'}' i]",
-             f"input[name*='{'start' if index==0 else 'end'}' i]"],
+            [
+                "input[placeholder*='yyyy' i]",
+                "input[placeholder*='dd-mm' i]",
+                "input[placeholder*='mm/dd' i]",
+                "input[placeholder*='date' i]",
+                "input[class*='date' i]",
+            ],
+            [
+                f"input[id*='{'start' if index==0 else 'end'}' i]",
+                f"input[id*='{'from' if index==0 else 'to'}' i]",
+                f"input[name*='{'start' if index==0 else 'end'}' i]",
+            ],
         ]
         for grp in sel_groups:
             for sel in grp:
@@ -543,6 +979,7 @@ async def handle_browser_date_filter(start_date: str = "", end_date: str = "", t
                             await el.triple_click(timeout=1500)
                             await el.fill(val, timeout=1500)
                             await page.keyboard.press("Tab")
+                            logger.info(f"[DateFilter] Layer 1b filled sel={sel} i={i} val={val}")
                             return True
                 except Exception:
                     pass
@@ -552,6 +989,7 @@ async def handle_browser_date_filter(start_date: str = "", end_date: str = "", t
     await asyncio.sleep(0.2)
     e_ok = await _fill_native(e["dmy"], e["iso"], 1)
     if s_ok and e_ok:
+        await _close_calendar_popup()
         await page.keyboard.press("Enter")
         logger.info("[DateFilter] Layer 1 success")
         return f"Date filter set: {s['dmy']} to {e['dmy']}."
@@ -563,7 +1001,6 @@ async def handle_browser_date_filter(start_date: str = "", end_date: str = "", t
         const dateRe = /\\d{1,2}[-\\/]\\d{1,2}[-\\/]\\d{4}/;
         const results = [];
 
-        // Method 1: TreeWalker over all TEXT NODES (works in any element type)
         try {
             const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
             let node;
@@ -581,7 +1018,6 @@ async def handle_browser_date_filter(start_date: str = "", end_date: str = "", t
             }
         } catch(e) {}
 
-        // Method 2: Input values (innerText is empty for inputs)
         document.querySelectorAll('input').forEach(el => {
             const val = (el.value || el.getAttribute('data-value') || '').trim();
             if (!dateRe.test(val)) return;
@@ -591,7 +1027,6 @@ async def handle_browser_date_filter(start_date: str = "", end_date: str = "", t
                               tag: 'INPUT', cls: el.className.substring(0,60), text: val, id: el.id});
         });
 
-        // Method 3: aria-label attributes
         document.querySelectorAll('[aria-label]').forEach(el => {
             const label = el.getAttribute('aria-label') || '';
             if (!dateRe.test(label)) return;
@@ -601,7 +1036,6 @@ async def handle_browser_date_filter(start_date: str = "", end_date: str = "", t
                               tag: el.tagName, cls: el.className.substring(0,60), text: label.substring(0,20)});
         });
 
-        // Deduplicate by proximity
         const out = [];
         for (const item of results) {
             if (!out.some(d => Math.abs(d.x - item.x) < 10 && Math.abs(d.y - item.y) < 10))
@@ -610,10 +1044,7 @@ async def handle_browser_date_filter(start_date: str = "", end_date: str = "", t
         return out.slice(0, 10);
     }""")
 
-    logger.info(f"[DateFilter] JS scan found {len(date_els_info)} elements: {date_els_info}")
-
     async def _js_find_calendar_header() -> dict | None:
-        """Use JS to find any visible month+year header (library-agnostic)."""
         return await page.evaluate("""() => {
             const months = ['january','february','march','april','may','june',
                             'july','august','september','october','november','december'];
@@ -634,7 +1065,6 @@ async def handle_browser_date_filter(start_date: str = "", end_date: str = "", t
         }""")
 
     async def _js_click_nav(direction: str) -> bool:
-        """Click prev/next calendar nav button via JS (no CSS class assumptions)."""
         return bool(await page.evaluate(f"""(dir) => {{
             const isNext = dir === 'next';
             const ariaRe = isNext ? /next|forward|right/i : /prev|back|left/i;
@@ -655,7 +1085,6 @@ async def handle_browser_date_filter(start_date: str = "", end_date: str = "", t
         }}""", direction))
 
     async def _js_click_day(target_day: int, target_month: int) -> bool:
-        """Click the target day cell via JS."""
         month_name = MONTH_NAMES[target_month]
         return bool(await page.evaluate(f"""(day, monthName) => {{
             const dayRe = new RegExp('^' + day + '$');
@@ -665,7 +1094,6 @@ async def handle_browser_date_filter(start_date: str = "", end_date: str = "", t
             for (const el of cells) {{
                 const r = el.getBoundingClientRect();
                 if (r.width === 0 || r.height === 0) return false;
-                // Skip disabled / outside-month cells
                 if (el.getAttribute('aria-disabled') === 'true') continue;
                 if (el.className && el.className.match(/outside|disabled|other.month/i)) continue;
                 const txt = (el.innerText || el.textContent || '').trim();
@@ -680,16 +1108,10 @@ async def handle_browser_date_filter(start_date: str = "", end_date: str = "", t
         }}""", target_day, month_name))
 
     async def _navigate_to_and_pick(target: dict) -> bool:
-        """Click open calendar, navigate to target month/year, click target day."""
-        # Read current calendar header
         header = await _js_find_calendar_header()
         if not header:
-            logger.debug("[DateFilter] No calendar header found after click")
             return False
 
-        logger.info(f"[DateFilter] Calendar header: '{header['text']}'")
-
-        # Parse current month/year from header
         hm = re.search(r'(\w+)\s+(\d{4})', header["text"])
         hm2 = re.search(r'(\d{4})[^\d]+(\d{1,2})', header["text"])
         current_m, current_y = None, None
@@ -704,27 +1126,19 @@ async def handle_browser_date_filter(start_date: str = "", end_date: str = "", t
 
         delta = (target["y"] - current_y) * 12 + (target["m"] - current_m)
         direction = "next" if delta >= 0 else "prev"
-        logger.info(f"[DateFilter] Need {delta} months ({direction})")
 
         for _ in range(min(abs(delta), 24)):
             if not await _js_click_nav(direction):
-                logger.debug("[DateFilter] Nav button not found")
                 break
             await asyncio.sleep(0.15)
 
-        clicked = await _js_click_day(target["d"], target["m"])
-        logger.info(f"[DateFilter] Day click result: {clicked}")
-        return clicked
+        return await _js_click_day(target["d"], target["m"])
 
-    # Sort left→right by X coordinate: leftmost field = start date, rightmost = end date
     date_els_info = sorted(date_els_info, key=lambda el: el["x"])
-    logger.info(f"[DateFilter] Sorted elements (L→R): {[(el['text'], round(el['x'])) for el in date_els_info]}")
 
-    # Try each found element as a date picker trigger
     start_done, end_done = False, False
     used = set()
     for info in date_els_info:
-
         key = (round(info["x"]/10), round(info["y"]/10))
         if key in used:
             continue
@@ -735,8 +1149,7 @@ async def handle_browser_date_filter(start_date: str = "", end_date: str = "", t
             await asyncio.sleep(0.5)
             start_done = await _navigate_to_and_pick(s)
             if start_done:
-                await page.keyboard.press("Escape")
-                await asyncio.sleep(0.3)
+                await _close_calendar_popup()
             continue
 
         if start_done and not end_done:
@@ -744,12 +1157,10 @@ async def handle_browser_date_filter(start_date: str = "", end_date: str = "", t
             await asyncio.sleep(0.5)
             end_done = await _navigate_to_and_pick(e)
             if end_done:
-                await page.keyboard.press("Escape")
-                await asyncio.sleep(0.3)
+                await _close_calendar_popup()
             break
 
     if start_done and end_done:
-        logger.info("[DateFilter] Layer 2 success")
         return f"Date filter set: {s['dmy']} to {e['dmy']}."
 
     # ── Layer 3: DOMAgent targeted prompts ────────────────────────────────────
@@ -765,8 +1176,10 @@ async def handle_browser_date_filter(start_date: str = "", end_date: str = "", t
         f"Click the end date field (shows a later date near a calendar icon). "
         f"After the calendar opens, navigate to {MONTH_NAMES[e['m']]} {e['y']} and click day {e['d']}."
     )
+    
     ok = lambda r: r and not any(x in r.lower() for x in ["couldn't","failed","could not"])
     if ok(res_s) or ok(res_e):
+        await _close_calendar_popup()
         return f"Date filter set: {s['dmy']} to {e['dmy']}."
 
     return (
@@ -774,7 +1187,7 @@ async def handle_browser_date_filter(start_date: str = "", end_date: str = "", t
         f"Click the start date → navigate to {MONTH_NAMES[s['m']]} {s['y']} → click {s['d']}. "
         f"Then end date → {MONTH_NAMES[e['m']]} {e['y']} → click {e['d']}."
     )
-    
+
 async def handle_smart_logout(text: str = "", **_) -> str:
     """
     Smart multi-layer logout handler.
@@ -1731,14 +2144,26 @@ def register_all_intents() -> None:
             name="browser_date_filter",
             domain="browser",
             patterns=[
-                r"^(?:filter|set|change|update)\s+(?:the\s+)?date(?:\s+(?:range|filter|from))?\s+(?P<start_date>[\d\-/]+(?:\s+\w+\s+\d{4})?)\s+to\s+(?P<end_date>[\d\-/]+(?:\s+\w+\s+\d{4})?)$",
-                r"^(?:from|between)\s+(?P<start_date>[\d\-/]+(?:\s+\w+\s+\d{4})?)\s+to\s+(?P<end_date>[\d\-/]+(?:\s+\w+\s+\d{4})?)$",
-                r"^(?:date\s+from|date\s+range)\s+(?P<start_date>[\d\-/]+(?:\s+\w+\s+\d{4})?)\s+to\s+(?P<end_date>[\d\-/]+(?:\s+\w+\s+\d{4})?)$",
+                # numeric-only dates:  filter date 1-4-2026 to 20-5-2026
+                r"^(?:filter|set|change|update)\s+(?:the\s+)?date(?:\s+(?:range|filter|from))?\s+(?P<start_date>[\d][\d\-/]*(?:\s+\w+\s+\d{4})?)\s+to\s+(?P<end_date>[\d][\d\-/]*(?:\s+\w+\s+\d{4})?)$",
+                # word-month dates:  filter date 4 may 2026 to 10 jun 2026
+                r"^(?:filter|set|change|update)\s+(?:the\s+)?date(?:\s+(?:range|filter|from))?\s+(?P<start_date>\d{1,2}\s+\w+\s+\d{4})\s+to\s+(?P<end_date>\d{1,2}\s+\w+\s+\d{4})$",
+                r"^(?:from|between)\s+(?P<start_date>[\d][\d\-/]*(?:\s+\w+\s+\d{4})?)\s+to\s+(?P<end_date>[\d][\d\-/]*(?:\s+\w+\s+\d{4})?)$",
+                r"^(?:from|between)\s+(?P<start_date>\d{1,2}\s+\w+\s+\d{4})\s+to\s+(?P<end_date>\d{1,2}\s+\w+\s+\d{4})$",
+                r"^(?:date\s+from|date\s+range)\s+(?P<start_date>[\d][\d\-/]*(?:\s+\w+\s+\d{4})?)\s+to\s+(?P<end_date>[\d][\d\-/]*(?:\s+\w+\s+\d{4})?)$",
                 r"^(?:set|change)\s+(?:the\s+)?(?:date\s+)?(?:start|from)\s+(?P<start_date>[\d\-/]+(?:\s+\w+\s+\d{4})?)(?:\s+(?:and\s+)?(?:end|to)\s+(?P<end_date>[\d\-/]+(?:\s+\w+\s+\d{4})?))?$",
             ],
             handler=handle_browser_date_filter,
             description="Set a date range filter on any website (CRM, analytics, booking, reporting)",
-            examples=["filter date 1-4-2026 to 20-5-2026", "set date 1-4-2026 to 20-5-2026", "from 1-4-2026 to 20-5-2026", "change date 1 April 2026 to 20 May 2026", "date range 1-1-2026 to 30-6-2026"],
+            examples=[
+                "filter date 1-4-2026 to 20-5-2026",
+                "set date 1-4-2026 to 20-5-2026",
+                "filter date 4 may 2026 to 10 jun 2026",
+                "set date 4 may 2026 to 10 jun 2026",
+                "from 1-4-2026 to 20-5-2026",
+                "change date 1 April 2026 to 20 May 2026",
+                "date range 1-1-2026 to 30-6-2026",
+            ],
             param_names=["start_date", "end_date"],
         ),
         # Audio Control
@@ -1892,6 +2317,16 @@ def register_all_intents() -> None:
             handler=handle_browser_go_back,
             description="Navigate back in the browser",
             examples=["go back", "go to previous page"],
+        ),
+        Intent(
+            name="browser_refresh",
+            domain="browser",
+            patterns=[
+                r"^(?:refresh|reload)(?:\s+(?:this|the\s+)?(?:page|tab|website))?$",
+            ],
+            handler=handle_browser_refresh,
+            description="Refresh or reload the current webpage",
+            examples=["refresh the page", "reload", "refresh", "reload the tab"],
         ),
         Intent(
             name="browser_click_result",
@@ -2115,6 +2550,18 @@ def register_all_intents() -> None:
             param_names=["state"]
         ),
         Intent(
+            name="crm_clear_search",
+            domain="browser",
+            patterns=[
+                r"^(?:clear|reset|remove|erase|wipe)\s+(?:the\s+)?(?:search|filter|query|results?|dates?|date\s+filter)$",
+                r"^(?:clear|reset)\s+(?:search|date)(?:\s+(?:bar|box|field|input|filter))?$",
+                r"^(?:show|display)\s+all\s+(?:leads|records|results|entries|contacts|accounts|orders|quotes)$",
+            ],
+            handler=handle_crm_clear_search,
+            description="Clear the search/filter input or date filter on the current CRM page",
+            examples=["clear search", "reset search", "clear filter", "clear dates", "reset date filter"],
+        ),
+        Intent(
             name="browser_clear_marks",
             domain="browser",
             patterns=[r"clear\s+highlights", r"remove\s+marks"],
@@ -2167,6 +2614,21 @@ def register_all_intents() -> None:
             handler=handle_browser_upload,
             description="Handle file upload",
             examples=["upload a file"]
+        ),
+        # ---> ADD THE NEW INTENT HERE <---
+        Intent(
+            name="browser_paginate",
+            domain="browser",
+            patterns=[
+                r"^(?:go\s+to|click|navigate\s+to)\s+(?:the\s+)?(?P<direction>next|previous|prev|first|last)\s+page$",
+                r"^(?P<direction>next|previous|prev|first|last)\s+page$",
+                r"^(?:go\s+to|click|navigate\s+to)\s+page\s+(?P<page_num>\d+)$",
+                r"^page\s+(?P<page_num>\d+)$"
+            ],
+            handler=handle_browser_paginate,
+            description="Navigate through pagination controls (next, previous, specific page)",
+            examples=["go to next page", "go to page 3", "previous page", "first page"],
+            param_names=["direction", "page_num"]
         ),
         # ── Dismiss / Cancel / Close Popup — HIGH PRIORITY (before crm_workflow) ──
         Intent(

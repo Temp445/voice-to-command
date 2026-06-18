@@ -336,6 +336,12 @@ class VoicePipeline:
                     if self.on_command_result:
                         self.on_command_result(result)
 
+                    # ── Persist to command_history (non-blocking) ─────────────
+                    asyncio.ensure_future(
+                        self._save_history(clean_text, result),
+                        loop=self._loop,
+                    )
+
                     response_text = result.get("result", "Done")
                     await self._speak(response_text)
                     
@@ -366,6 +372,44 @@ class VoicePipeline:
         finally:
             self._set_state(PipelineState.IDLE)
             self._wake_word.start()
+
+    async def _save_history(self, raw_text: str, result: dict) -> None:
+        """
+        Persist a voice command execution to Supabase command_history.
+        Mirrors the row structure written by the HTTP /commands/execute route so
+        voice and text commands appear identically in the history UI.
+        Errors are silently logged — a DB failure must never block TTS playback.
+        """
+        try:
+            import uuid as _uuid
+            from datetime import datetime, timezone
+            from app.core.supabase_client import supabase_admin, sb_run
+            from app.config import settings
+
+            # Resolve user_id: prefer the authenticated session user, fall back to
+            # the owner_id from config (set during first-run / settings).
+            user_id: str | None = getattr(settings, "owner_user_id", None)
+            if not user_id:
+                logger.debug("[History] owner_user_id not set — history row skipped")
+                return
+
+            row = {
+                "id":          str(_uuid.uuid4()),
+                "user_id":     user_id,
+                "raw_text":    raw_text,
+                "intent":      result.get("intent"),
+                "parameters":  result.get("parameters"),
+                "status":      result.get("status", "failed"),
+                "result":      result.get("result"),
+                "source":      "voice",
+                "executed_at": datetime.now(timezone.utc).isoformat(),
+                "duration_ms": result.get("duration_ms"),
+            }
+
+            await sb_run(lambda: supabase_admin.table("command_history").insert(row).execute())
+            logger.debug(f"[History] Saved voice command: '{raw_text}' → {result.get('intent')}")
+        except Exception as e:
+            logger.warning(f"[History] Failed to save voice command history: {e}")
 
     async def _speak(self, text: str) -> None:
         """Synthesize and play TTS response."""

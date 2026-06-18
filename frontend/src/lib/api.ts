@@ -48,8 +48,18 @@ export async function getBackendWsUrl(): Promise<string> {
 }
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+  // Prevent SSR fetch execution pointing to 127.0.0.1 which fails in Node/Docker
+  if (typeof window === 'undefined') {
+    throw new Error("API requests must be made on the client side, not during SSR.");
+  }
+
   const base = await getResolvedBaseUrl();
-  const headers: Record<string, string> = { "Content-Type": "application/json", ...((options.headers as Record<string, string>) || {}) };
+  const headers: Record<string, string> = { 
+    "Content-Type": "application/json", 
+    "X-DevTunnel-Skip": "true", // Bypass MS Dev Tunnels warning screen
+    "ngrok-skip-browser-warning": "true", // Bypass Ngrok warning screen
+    ...((options.headers as Record<string, string>) || {}) 
+  };
   
   // Attach local JWT token if available
   try {
@@ -64,6 +74,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     cache: "no-store",
     ...options,
   });
+  
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.message || `HTTP ${res.status}`);
@@ -124,6 +135,7 @@ export const api = {
 
   // Health / Ping
   getHealthPing: async () => {
+    if (typeof window === 'undefined') return { processTime: "0ms", networkTime: 0, ok: false };
     const base = await getResolvedBaseUrl();
     const start = performance.now();
     const res = await fetch(`${base}/health`, { cache: "no-store" });

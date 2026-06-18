@@ -26,12 +26,16 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ session: null, user: null });
   },
   initializeAuth: () => {
-    const syncWithBackend = async (token: string) => {
+    const syncWithBackend = async (token: string, retries = 5, delay = 1000) => {
       try {
         const response: any = await api.sync(token);
         localStorage.setItem("ace-local-token", response.access_token);
       } catch (e) {
-        console.error("Failed to sync auth with backend", e);
+        if (retries > 0) {
+          setTimeout(() => syncWithBackend(token, retries - 1, delay * 2), delay);
+        } else {
+          console.error("Failed to sync auth with backend after all retries", e);
+        }
       }
     };
 

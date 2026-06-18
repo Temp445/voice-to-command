@@ -123,6 +123,8 @@ async def register(body: RegisterRequest):
         raise HTTPException(status_code=400, detail=str(e))
 
     await _ensure_settings(sb_user.id)
+    from app.config import settings as global_settings
+    global_settings.owner_user_id = sb_user.id
     token = create_access_token({"sub": sb_user.id, "email": sb_user.email})
     logger.info(f"New user registered: {sb_user.email}")
     return TokenResponse(access_token=token, user_id=sb_user.id, email=sb_user.email)
@@ -149,6 +151,8 @@ async def login(body: LoginRequest):
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
     await _ensure_settings(sb_user.id)
+    from app.config import settings as global_settings
+    global_settings.owner_user_id = sb_user.id
     token = create_access_token({"sub": sb_user.id, "email": sb_user.email})
     logger.info(f"User logged in: {sb_user.email}")
     return TokenResponse(access_token=token, user_id=sb_user.id, email=sb_user.email)
@@ -166,6 +170,8 @@ async def sync_supabase_user(body: SyncRequest):
     sb_user = await _get_supabase_user(body.access_token)
 
     await _ensure_settings(sb_user.id)
+    from app.config import settings as global_settings
+    global_settings.owner_user_id = sb_user.id
     token = create_access_token({"sub": sb_user.id, "email": sb_user.email})
     logger.info(f"User synced: {sb_user.email}")
     return TokenResponse(access_token=token, user_id=sb_user.id, email=sb_user.email)

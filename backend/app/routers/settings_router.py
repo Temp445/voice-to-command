@@ -146,6 +146,8 @@ async def update_settings(
     user_id: str = Depends(get_current_user_id),
 ):
     s = await _get_or_create_settings(user_id)
+    from app.config import settings as global_settings
+    global_settings.owner_user_id = user_id
     updates: dict = {}
 
     for field, value in body.model_dump(exclude_none=True).items():
@@ -154,7 +156,6 @@ async def update_settings(
         else:
             updates[field] = value
             # Sync to in-memory config
-            from app.config import settings as global_settings
             if hasattr(global_settings, field):
                 setattr(global_settings, field, value)
 
