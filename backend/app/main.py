@@ -152,42 +152,72 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"⚠️ Browser integration failed: {e}")
 
-    # ── Background Initialization ───────────────────────────────────────────
-    # Pushing heavy tasks to the background allows Uvicorn to bind the port instantly
+    # Spawn the background initialization task so lifespan yields immediately
+    loop = asyncio.get_running_loop()
+
+
+    # ── Background Initialization — 3 parallel phases ────────────────────────
+    # Phase 1: All independent init tasks (settings, LLM, caches) run concurrently
+    # Phase 2: Voice pipeline (depends on Phase 1 settings being applied first)
+    # Phase 3: Model pre-warming — Whisper + Semantic Router run concurrently
     async def _background_init(app_state, running_loop):
-        # 1. Restore Settings from Supabase (overrides .env if DB has values set)
-        try:
-            from app.core.supabase_client import supabase_admin, sb_run
-            from app.routers.settings_router import _apply_llm_settings
-            res = await sb_run(
-                lambda: supabase_admin.table("settings").select("*").order("updated_at", desc=True).limit(1).execute()
-            )
-            if res.data:
-                s = res.data[0]
-                from app.config import settings as global_settings
-                for field in ("wake_word", "whisper_model", "tts_provider", "piper_voice",
-                              "active_mode_timeout", "browser_type", "enable_desktop_overlay",
-                              "crm_url", "crm_keywords", "crm_sites",
-                              "llm_provider", "llm_model",
-                              "llm_mode", "llm_temperature"):
-                    if field in s and s[field] is not None and hasattr(global_settings, field):
-                        setattr(global_settings, field, s[field])
-                if s.get("llm_api_key_encrypted"):
-                    _apply_llm_settings(s)
-                logger.info("✅ All settings restored from Supabase")
-        except Exception as e:
-            logger.warning(f"⚠️  Could not restore settings from Supabase: {e}")
 
-        # 2. Initialize LLM from .env (fallback if DB has no LLM set)
-        from app.services.llm.llm_service import llm_service
-        if not llm_service.is_ready:
-            _init_llm_from_env()
+        # ── Phase 1: Independent startup tasks ────────────────────────────────
+        # All four are I/O-bound (Supabase + file reads) with no inter-dependencies.
+        # Running them concurrently cuts ~1.5-2s off the sequential total.
 
-        # 3. Pre-load workflow macros into in-memory cache (eliminates per-command DB query)
-        from app.services.command_service import command_service
-        await command_service.refresh_workflows_cache()
+        async def _restore_settings():
+            """Restore settings from Supabase, overriding .env values."""
+            try:
+                from app.core.supabase_client import supabase_admin, sb_run
+                from app.routers.settings_router import _apply_llm_settings
+                res = await sb_run(
+                    lambda: supabase_admin.table("settings").select("*").order("updated_at", desc=True).limit(1).execute()
+                )
+                if res.data:
+                    s = res.data[0]
+                    from app.config import settings as global_settings
+                    for field in ("wake_word", "whisper_model", "tts_provider", "piper_voice",
+                                  "active_mode_timeout", "browser_type", "enable_desktop_overlay",
+                                  "crm_url", "crm_keywords", "crm_sites",
+                                  "llm_provider", "llm_model",
+                                  "llm_mode", "llm_temperature"):
+                        if field in s and s[field] is not None and hasattr(global_settings, field):
+                            setattr(global_settings, field, s[field])
+                    if s.get("llm_api_key_encrypted"):
+                        _apply_llm_settings(s)
+                    logger.info("✅ All settings restored from Supabase")
+            except Exception as e:
+                logger.warning(f"⚠️  Could not restore settings from Supabase: {e}")
 
-        # 4. Start the voice pipeline in the background process
+        async def _init_llm():
+            """Initialize LLM from .env (fallback if DB has no LLM set)."""
+            from app.services.llm.llm_service import llm_service
+            if not llm_service.is_ready:
+                _init_llm_from_env()
+
+        async def _warm_workflows():
+            """Pre-load workflow macros into in-memory cache."""
+            from app.services.command_service import command_service
+            await command_service.refresh_workflows_cache()
+
+        async def _warm_shortcuts():
+            """Pre-load website shortcuts into in-memory cache (no per-command DB hit)."""
+            from app.services.command_service import command_service
+            await command_service.warm_website_shortcuts()
+
+        logger.info("⚡ Background init Phase 1: settings + LLM + caches (parallel)...")
+        await asyncio.gather(
+            _restore_settings(),
+            _init_llm(),
+            _warm_workflows(),
+            _warm_shortcuts(),
+            return_exceptions=True,   # One failure must not block others
+        )
+        logger.info("✅ Background init Phase 1 complete")
+
+        # ── Phase 2: Voice pipeline ───────────────────────────────────────────
+        # Must run AFTER Phase 1 so settings (wake_word, whisper_model, etc.) are applied.
         try:
             from voice.pipeline import VoicePipeline, PipelineState
             from app.websocket.manager import ws_manager
@@ -232,8 +262,13 @@ async def lifespan(app: FastAPI):
             )
             logger.info("🎙️ Voice pipeline started — wake word listening in background")
 
-            # 5. Pre-warm Whisper model — loads it into RAM before the first voice command
-            # Eliminates the cold-start delay on the very first transcription
+        except Exception as e:
+            logger.warning(f"⚠️  Voice pipeline failed to start (API will still work): {e}")
+            app_state.pipeline = None
+
+        # ── Phase 3: Model pre-warming ────────────────────────────────────────
+        # Whisper and Semantic Router are fully independent — warm both in parallel.
+        async def _prewarm_whisper():
             try:
                 from voice.stt.transcriber import Transcriber
                 await asyncio.to_thread(Transcriber()._load_model)
@@ -241,7 +276,7 @@ async def lifespan(app: FastAPI):
             except Exception as warm_err:
                 logger.warning(f"⚠️ Could not pre-warm Whisper: {warm_err}")
 
-            # 6. Pre-warm Semantic Router (FastEmbed)
+        async def _prewarm_semantic():
             try:
                 from app.services.semantic_router import semantic_router
                 from app.services.command_service import command_service
@@ -250,29 +285,31 @@ async def lifespan(app: FastAPI):
             except Exception as warm_err:
                 logger.warning(f"⚠️ Could not pre-warm Semantic Router: {warm_err}")
 
-            # 7. Start Desktop Overlay if enabled
-            from app.config import settings as global_settings
-            if getattr(global_settings, "enable_desktop_overlay", False):
-                import subprocess, os, sys
-                from pathlib import Path
-                _BACKEND = Path(__file__).resolve().parent.parent
-                python_exe = os.path.join(str(_BACKEND), ".venv", "Scripts", "python.exe")
-                if not os.path.exists(python_exe):
-                    python_exe = sys.executable
-                overlay_path = os.path.join(str(_BACKEND), "automation", "desktop", "overlay.py")
-                if os.path.exists(overlay_path):
-                    app_state.overlay_process = subprocess.Popen(
-                        [python_exe, overlay_path],
-                        creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
-                    )
-                    logger.info("🖥️ Desktop Overlay started automatically on startup")
+        logger.info("⚡ Background init Phase 3: Whisper + Semantic Router pre-warm (parallel)...")
+        await asyncio.gather(
+            _prewarm_whisper(),
+            _prewarm_semantic(),
+            return_exceptions=True,
+        )
+        logger.info("✅ Background init Phase 3 complete — all systems warm and ready")
 
-        except Exception as e:
-            logger.warning(f"⚠️  Voice pipeline failed to start (API will still work): {e}")
-            app_state.pipeline = None
+        # ── Desktop Overlay (after pipeline is up) ────────────────────────────
+        from app.config import settings as global_settings
+        if getattr(global_settings, "enable_desktop_overlay", False):
+            import subprocess, os, sys
+            from pathlib import Path
+            _BACKEND = Path(__file__).resolve().parent.parent
+            python_exe = os.path.join(str(_BACKEND), ".venv", "Scripts", "python.exe")
+            if not os.path.exists(python_exe):
+                python_exe = sys.executable
+            overlay_path = os.path.join(str(_BACKEND), "automation", "desktop", "overlay.py")
+            if os.path.exists(overlay_path):
+                app_state.overlay_process = subprocess.Popen(
+                    [python_exe, overlay_path],
+                    creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+                )
+                logger.info("🖥️ Desktop Overlay started automatically on startup")
 
-    # Spawn the background initialization task so lifespan yields immediately
-    loop = asyncio.get_running_loop()
     asyncio.create_task(_background_init(app.state, loop))
 
     yield

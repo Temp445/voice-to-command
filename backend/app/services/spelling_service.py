@@ -76,6 +76,10 @@ class CommandSpellingCorrector:
     (e.g., 'trail' -> 'trial', 'com' -> 'crm', 'notbad' -> 'notepad').
 
     Credentials (email, passwords, tokens) are ALWAYS skipped — their exact casing is preserved.
+
+    Optimization: The heavy SymSpell dictionary load (~200–400ms) runs in a background
+    daemon thread started at instantiation. The module import is now near-instant.
+    correct() gracefully skips correction if the dictionary hasn't finished loading yet.
     """
     _instance = None
 
@@ -83,33 +87,47 @@ class CommandSpellingCorrector:
         if cls._instance is None:
             cls._instance = super().__new__(cls)
             cls._instance._initialized = False
+            cls._instance._loading = False
         return cls._instance
 
     def __init__(self):
-        if self._initialized:
+        if self._initialized or self._loading:
             return
-            
+        # Mark as loading immediately so __init__ is never re-entered
+        self._loading = True
+        self.sym_spell = None
+        self.custom_vocabulary: dict = {}
+        self.hard_mappings: dict = {}
+        # Start the heavy dictionary load in a background daemon thread so the
+        # module import is instant and the async event loop is never blocked.
+        import threading
+        threading.Thread(target=self._load, daemon=True, name="SymSpellLoader").start()
+
+    def _load(self) -> None:
+        """Run the full SymSpell initialisation in a background thread."""
+        import time
+        t0 = time.perf_counter()
         try:
             import symspellpy
-            from symspellpy import SymSpell, Verbosity
-            
-            self.sym_spell = SymSpell(max_dictionary_edit_distance=2, prefix_length=7)
-            
+            from symspellpy import SymSpell
+
+            sym_spell = SymSpell(max_dictionary_edit_distance=2, prefix_length=7)
+
             # Locate default English frequency dictionary packaged with symspellpy
             symspell_dir = os.path.dirname(symspellpy.__file__)
             dictionary_path = os.path.join(symspell_dir, "frequency_dictionary_en_82_765.txt")
-            
-            if not self.sym_spell.load_dictionary(dictionary_path, term_index=0, count_index=1):
+
+            if not sym_spell.load_dictionary(dictionary_path, term_index=0, count_index=1):
                 logger.warning("Failed to load SymSpell default dictionary.")
-                
+
             # Load the bigram dictionary for compound lookup helper support if needed
             bigram_path = os.path.join(symspell_dir, "frequency_bigramdictionary_en_243_342.txt")
             if os.path.exists(bigram_path):
-                self.sym_spell.load_bigram_dictionary(bigram_path, term_index=0, count_index=2)
-                
+                sym_spell.load_bigram_dictionary(bigram_path, term_index=0, count_index=2)
+
             # 1. Custom Vocabulary: Ensure these common app/automation terms are preserved
             # and have high frequencies so typos are corrected to them.
-            self.custom_vocabulary = {
+            custom_vocabulary = {
                 "crm": 1000000000,
                 "open": 900000000,
                 "click": 800000000,
@@ -128,13 +146,13 @@ class CommandSpellingCorrector:
                 "maximize": 500000000,
                 "close": 500000000,
             }
-            
-            for word, freq in self.custom_vocabulary.items():
-                self.sym_spell.create_dictionary_entry(word, freq)
-                
+
+            for word, freq in custom_vocabulary.items():
+                sym_spell.create_dictionary_entry(word, freq)
+
             # 2. Hard Mappings: Direct replacements for homophones/phonetic confusions
             # where both words are valid in English, but only one makes sense in our command context.
-            self.hard_mappings = {
+            hard_mappings = {
                 "trail": "trial",
                 "com": "crm",
                 "notbad": "notepad",
@@ -143,14 +161,21 @@ class CommandSpellingCorrector:
                 "pla": "play",
                 "pau": "pause",
             }
-            
+
+            # Atomically publish results — correct() checks _initialized before use
+            self.sym_spell = sym_spell
+            self.custom_vocabulary = custom_vocabulary
+            self.hard_mappings = hard_mappings
             self._initialized = True
-            logger.info("✅ CommandSpellingCorrector service initialized successfully.")
-            
+            elapsed = (time.perf_counter() - t0) * 1000
+            logger.info(f"✅ CommandSpellingCorrector ready ({elapsed:.0f}ms, loaded in background thread)")
+
         except ImportError:
             logger.warning("⚠️ symspellpy not installed. Spelling correction will be disabled.")
             self.sym_spell = None
             self._initialized = False
+        finally:
+            self._loading = False
 
     def correct(self, text: str) -> str:
         """
