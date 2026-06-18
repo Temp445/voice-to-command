@@ -47,6 +47,7 @@ CREATE TABLE IF NOT EXISTS public.settings (
     llm_api_key_encrypted       TEXT,
     llm_temperature             FLOAT DEFAULT 0.7,
     llm_mode                    TEXT DEFAULT 'fallback',
+    scan_mode                   TEXT DEFAULT 'auto' CHECK (scan_mode IN ('auto', 'manual')),
     updated_at                  TIMESTAMPTZ DEFAULT NOW(),
     UNIQUE(user_id)
 );

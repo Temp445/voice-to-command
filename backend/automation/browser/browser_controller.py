@@ -320,19 +320,38 @@ class VoiceBrowserCommands:
         # --- CRM Workflows ---
         if self.crm:
             from app.config import settings
-            crm_keys = [k.strip().lower() for k in settings.crm_keywords.split(",") if k.strip()]
-            # Built-in synonym set — catches 'launch crm', 'start crm', 'go to crm', 'open crm', etc.
+            import json as _json
+
+            # ── Multi-site keyword matching ───────────────────────────────────
+            # Build list of (url, keywords) from crm_sites JSON; fall back to
+            # the single crm_url/crm_keywords if crm_sites is empty or invalid.
+            _matched_url: str | None = None
+            try:
+                _all_sites = _json.loads(settings.crm_sites) if settings.crm_sites else []
+            except Exception:
+                _all_sites = []
+            if not _all_sites:
+                _all_sites = [{"url": settings.crm_url, "keywords": settings.crm_keywords}]
+
+            for _site in _all_sites:
+                _site_keys = [k.strip().lower() for k in _site.get("keywords", "").split(",") if k.strip()]
+                if any(key in transcript_lower for key in _site_keys if key):
+                    _matched_url = _site.get("url", settings.crm_url)
+                    break
+
+            # Built-in synonym pattern — catches generic 'open crm', 'go to crm', etc.
             _builtin_crm_pattern = re.compile(
                 r'\b(launch|start|run|go\s+to|open|load|boot|bring\s+up)\s+(my\s+)?(ace\s+)?crm\b'
                 r'|\bopen\s+my\s+crm\b'
                 r'|\bcrm\b',
                 re.IGNORECASE
             )
+            if _matched_url is None and bool(_builtin_crm_pattern.search(transcript)):
+                _matched_url = settings.crm_url   # fall back to primary for generic matches
 
-            # Check user-defined keys first, then fall back to built-in pattern
-            crm_match = any(key in transcript for key in crm_keys if key) or bool(_builtin_crm_pattern.search(transcript))
+            crm_match = _matched_url is not None
             if crm_match:
-                return await self.crm.open_crm(transcript)
+                return await self.crm.open_crm(transcript, target_url=_matched_url)
                 
             # Direct Login Credential Extraction
             cred_match = re.search(r"(?:email|username)(?:\s+is)?[\s\:]+([^\s\,]+)(?:[\,\s]+and[\,\s]+|[\,\s]+)password(?:\s+is)?[\s\:]+([^\s]+)", transcript, re.IGNORECASE)

@@ -25,6 +25,10 @@ FORMAT = pyaudio.paInt16
 CHANNELS = 1
 DETECTION_THRESHOLD = 0.3  # Confidence threshold
 
+# Max bytes we allow to queue up before dropping stale audio.
+# 3 × 1280 samples × 2 bytes = ~240ms of backlog before we start skipping.
+_MAX_BUFFER_BYTES = CHUNK_SIZE * 2 * 3
+
 
 class WakeWordDetector:
     """
@@ -45,8 +49,6 @@ class WakeWordDetector:
         if not OWW_AVAILABLE:
             raise RuntimeError("openwakeword is not installed")
 
-        # OWW supports pre-trained wake words: hey_jarvis, alexa, hey_mycroft, hey_rhasspy
-        # The acoustic model must match what is actually spoken
         model_map = {
             "alexa": "alexa",
             "hey_jarvis": "hey_jarvis",
@@ -63,16 +65,13 @@ class WakeWordDetector:
             )
         else:
             logger.info(f"Loading OpenWakeWord model for: '{self.wake_word}' (using '{model_name}')")
-        
-        # We explicitly omit openwakeword.utils.download_models() without arguments because it attempts to
-        # download ALL models (30+ files) which frequently causes HuggingFace connection timeouts.
-        # Instead, we download just the specific model we need.
+
         try:
             from openwakeword.utils import download_models
             download_models(model_names=[f"{model_name}_v0.1"])
         except Exception as e:
             logger.warning(f"Could not download model {model_name}: {e}")
-            
+
         return OWWModel(wakeword_models=[model_name], inference_framework="onnx")
 
     def start(self) -> None:
@@ -98,66 +97,74 @@ class WakeWordDetector:
                 import time
                 time.sleep(5)
                 continue
-        
+
         if not self._running:
             return
 
         from voice.remote_mic import subscribe, unsubscribe
         remote_q = subscribe()
-        import queue
 
         logger.info(f"✅ Listening for wake word: '{self.wake_word}' (Global Mic Stream)")
 
         try:
             while self._running:
-                # Drain the queue to get all available chunks
-                raw_bytes = bytearray()
+                # ─── FIX 1: Get ONE chunk at a time, never drain the whole queue.
+                # Draining accumulates hundreds of ms of audio before OWW sees any
+                # of it, which causes detections to fire long after the word was spoken.
                 try:
-                    # Block for at least one chunk to avoid busy looping
-                    first_chunk = remote_q.get(timeout=0.1)
-                    if first_chunk:
-                        raw_bytes.extend(first_chunk)
-                    
-                    # Drain all remaining chunks in the queue
-                    while not remote_q.empty():
-                        nxt = remote_q.get_nowait()
-                        if nxt:
-                            raw_bytes.extend(nxt)
+                    raw = remote_q.get(timeout=0.08)   # 80ms = one OWW frame
                 except queue.Empty:
-                    if not raw_bytes:
-                        continue
-                        
-                raw = bytes(raw_bytes)
+                    continue
+
                 if not raw:
                     continue
 
+                # ─── FIX 2: Drop stale audio if the queue has built up.
+                # If we fell behind (e.g. the callback took too long), the queue
+                # contains old audio. Skip it so we always process near-live audio.
+                backlog = remote_q.qsize()
+                if backlog > 3:
+                    for _ in range(backlog - 1):   # keep the newest one already got
+                        try:
+                            remote_q.get_nowait()
+                        except queue.Empty:
+                            break
+                    logger.debug(f"Dropped {backlog - 1} stale audio chunks to catch up")
+                    self._audio_buffer = np.array([], dtype=np.int16)  # reset buffer too
+
+                # ─── FIX 3: Ensure even byte count before converting.
                 if len(raw) % 2 != 0:
-                    raw = raw[:-(len(raw) % 2)]
+                    raw = raw[: -(len(raw) % 2)]
 
                 audio_np = np.frombuffer(raw, dtype=np.int16)
                 self._audio_buffer = np.concatenate((self._audio_buffer, audio_np))
 
+                # ─── Process every complete 1280-sample chunk immediately.
+                # No batching — each chunk is fed to OWW as soon as it arrives.
                 while len(self._audio_buffer) >= CHUNK_SIZE:
                     chunk = self._audio_buffer[:CHUNK_SIZE]
                     self._audio_buffer = self._audio_buffer[CHUNK_SIZE:]
-                    
+
                     predictions = self._model.predict(chunk)
 
+                    detected = False
                     for model_name, score in predictions.items():
                         if score > 0.1:
                             logger.debug(f"Wake word '{model_name}' score: {score:.3f}")
                         if score >= DETECTION_THRESHOLD:
-                            logger.info(f"🔔 Wake word detected! ('{self.wake_word}', score={score:.2f})")
-                            self._model.reset()   # Reset prediction buffer
-                            self._audio_buffer = np.array([], dtype=np.int16) # Clear our buffer
-                            # NOTE: We DO NOT clear queues anymore! 
-                            # Doing so destroys the command audio that immediately follows the wake word.
+                            logger.info(
+                                f"🔔 Wake word detected! ('{self.wake_word}', score={score:.2f})"
+                            )
+                            self._model.reset()
+                            self._audio_buffer = np.array([], dtype=np.int16)
                             if self.on_detected:
                                 self.on_detected()
+                            detected = True
                             break
-                    else:
-                        continue
-                    break # Break out of inner loop if wake word detected
+
+                    if detected:
+                        break   # stop processing remaining buffer chunks this cycle
+
         except Exception as e:
             logger.error(f"Detector loop error: {e}")
         finally:

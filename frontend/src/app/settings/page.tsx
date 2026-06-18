@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Settings, Mic, Volume2, Globe, Shield, CheckCircle2, Eye, EyeOff, Bot, Loader2, Link2 } from "lucide-react";
+import { Settings, Mic, Volume2, Globe, Shield, CheckCircle2, Eye, EyeOff, Bot, Loader2, Link2, RefreshCw, HardDrive } from "lucide-react";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { TopBar } from "@/components/layout/TopBar";
 import { useSettingsStore } from "@/store/settingsStore";
@@ -48,7 +48,7 @@ const TABS = [
 
 export default function SettingsPage() {
   const settings = useSettingsStore();
-  const { connected } = useWSStore();
+  const { connected, scanLastAt, scanAppCount } = useWSStore();
   const [activeTab, setActiveTab] = useState("voice");
   const [saving,  setSaving]  = useState(false);
   const [saved,   setSaved]   = useState(false);
@@ -74,6 +74,14 @@ export default function SettingsPage() {
   const [testTtsText, setTestTtsText] = useState("Hello, I am your desktop assistant.");
   const [testingTts, setTestingTts] = useState(false);
 
+  // Scan State
+  const [scanning, setScanning] = useState(false);
+
+  // Clear spinner when backend broadcasts scan_complete
+  useEffect(() => {
+    if (scanLastAt) setScanning(false);
+  }, [scanLastAt]);
+
   useEffect(() => {
     api.getLLMProviders().then((data: any) => setProviders(data)).catch(err => console.error(err));
     api.getSettings().then((data: any) => {
@@ -84,8 +92,12 @@ export default function SettingsPage() {
         browserType: data.browser_type, startupOnBoot: data.startup_on_boot, minimizeToTray: data.minimize_to_tray,
         theme: data.theme, browserAnimationsEnabled: data.browser_animations_enabled, enableDesktopOverlay: data.enable_desktop_overlay,
         crmUrl: data.crm_url, crmKeywords: data.crm_keywords,
+        crmSites: (() => {
+          try { return JSON.parse(data.crm_sites || "[]") || []; } catch { return []; }
+        })(),
         llmEnabled: data.llm_enabled, llmProvider: data.llm_provider, llmModel: data.llm_model,
         llmMode: data.llm_mode, llmTemperature: data.llm_temperature,
+        scanMode: (data.scan_mode as "auto" | "manual") || "auto",
       });
       setInitialLoaded(true);
     }).catch(err => console.error(err));
@@ -107,9 +119,9 @@ export default function SettingsPage() {
     settings.ttsProvider, settings.piperVoice, settings.theme, settings.browserType,
     settings.startupOnBoot, settings.minimizeToTray, settings.browserAnimationsEnabled, settings.enableDesktopOverlay,
     settings.activeModeTimeout, settings.requireWakeWordAlways,
-    settings.crmUrl, settings.crmKeywords,
+    settings.crmUrl, settings.crmKeywords, JSON.stringify(settings.crmSites),
     settings.llmEnabled, settings.llmProvider, settings.llmModel, settings.llmMode,
-    settings.llmTemperature, settings.llmApiKey
+    settings.llmTemperature, settings.llmApiKey, settings.scanMode
   ]);
 
   const handleTestLlm = async () => {
@@ -243,8 +255,10 @@ export default function SettingsPage() {
         browser_type: settings.browserType, startup_on_boot: settings.startupOnBoot, minimize_to_tray: settings.minimizeToTray,
         theme: settings.theme, browser_animations_enabled: settings.browserAnimationsEnabled, enable_desktop_overlay: settings.enableDesktopOverlay,
         crm_url: settings.crmUrl, crm_keywords: settings.crmKeywords,
+        crm_sites: JSON.stringify(settings.crmSites),
         llm_enabled: settings.llmEnabled, llm_provider: settings.llmProvider, llm_model: settings.llmModel,
         llm_mode: settings.llmMode, llm_temperature: settings.llmTemperature,
+        scan_mode: settings.scanMode,
       };
       if (settings.llmApiKey) patch.llm_api_key = settings.llmApiKey;
       await api.updateSettings(patch);
@@ -599,19 +613,76 @@ export default function SettingsPage() {
                 <Toggle checked={settings.browserAnimationsEnabled} onChange={() => settings.update({ browserAnimationsEnabled: !settings.browserAnimationsEnabled })} />
               </div>
 
+              {/* ── Website Shortcuts ── */}
               <div style={{ marginTop: "1rem", paddingTop: "1.5rem", borderTop: "1px solid var(--border)" }}>
-                <p style={{ fontSize: "1rem", fontWeight: 600, color: "var(--foreground)", marginBottom: "1rem" }}>CRM Integration</p>
-                <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.5rem" }}>
                   <div>
-                    <p style={lbl}>CRM Base URL</p>
-                    <input style={inp} value={settings.crmUrl} onChange={(e) => settings.update({ crmUrl: e.target.value })} placeholder="https://crm.acesoftcloud.in/" />
-                    <p style={sub}>The landing page or base URL of your CRM system.</p>
+                    <p style={{ fontSize: "1rem", fontWeight: 600, color: "var(--foreground)" }}>Website Shortcuts</p>
+                    <p style={{ fontSize: "0.8rem", color: "var(--muted-foreground)", marginTop: "0.2rem" }}>Say a keyword to instantly open any website — CRM, dashboards, tools, anything.</p>
                   </div>
-                  <div>
-                    <p style={lbl}>Trigger Keywords (comma separated)</p>
-                    <input style={inp} value={settings.crmKeywords} onChange={(e) => settings.update({ crmKeywords: e.target.value })} placeholder="open crm, open my crm" />
-                    <p style={sub}>Voice phrases that will trigger the browser to navigate to your CRM.</p>
-                  </div>
+                  <button
+                    id="add-website-shortcut-btn"
+                    onClick={() => settings.update({ crmSites: [...settings.crmSites, { url: "", keywords: "" }] })}
+                    style={{ display: "flex", alignItems: "center", gap: "0.375rem", padding: "0.375rem 0.875rem", borderRadius: "0.5rem", fontSize: "0.8125rem", fontWeight: 600, cursor: "pointer", background: "var(--primary)", color: "var(--primary-foreground, #fff)", border: "none", flexShrink: 0 }}>
+                    + Add Website
+                  </button>
+                </div>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: "0.875rem" }}>
+                  {settings.crmSites.map((site, idx) => (
+                    <div key={idx} style={{ background: "var(--secondary)", borderRadius: "0.75rem", padding: "1rem", border: "1px solid var(--border)" }}>
+                      {/* Site header */}
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.75rem" }}>
+                        <span style={{ fontSize: "0.8125rem", fontWeight: 600, color: "var(--muted-foreground)" }}>Website {idx + 1}</span>
+                        {settings.crmSites.length > 1 && (
+                          <button
+                            onClick={() => {
+                              const updated = settings.crmSites.filter((_, i) => i !== idx);
+                              settings.update({ crmSites: updated, crmUrl: updated[0]?.url || "", crmKeywords: updated[0]?.keywords || "" });
+                            }}
+                            style={{ background: "none", border: "none", cursor: "pointer", color: "var(--muted-foreground)", fontSize: "1rem", padding: "0 0.25rem", lineHeight: 1 }}
+                            title="Remove this website">
+                            ✕
+                          </button>
+                        )}
+                      </div>
+
+                      {/* URL row */}
+                      <div style={{ marginBottom: "0.625rem" }}>
+                        <p style={{ ...lbl, marginBottom: "0.375rem" }}>Website URL</p>
+                        <input
+                          style={inp}
+                          value={site.url}
+                          placeholder="https://example.com/"
+                          onChange={(e) => {
+                            const updated = settings.crmSites.map((s, i) => i === idx ? { ...s, url: e.target.value } : s);
+                            settings.update({ crmSites: updated, ...(idx === 0 ? { crmUrl: e.target.value } : {}) });
+                          }}
+                        />
+                      </div>
+
+                      {/* Keywords row */}
+                      <div>
+                        <p style={{ ...lbl, marginBottom: "0.375rem" }}>Voice Keywords <span style={{ fontWeight: 400, color: "var(--muted-foreground)" }}>(comma separated)</span></p>
+                        <input
+                          style={inp}
+                          value={site.keywords}
+                          placeholder="open my dashboard, open analytics"
+                          onChange={(e) => {
+                            const updated = settings.crmSites.map((s, i) => i === idx ? { ...s, keywords: e.target.value } : s);
+                            settings.update({ crmSites: updated, ...(idx === 0 ? { crmKeywords: e.target.value } : {}) });
+                          }}
+                        />
+                        <p style={sub}>Say any of these phrases to instantly open this website.</p>
+                      </div>
+                    </div>
+                  ))}
+
+                  {settings.crmSites.length === 0 && (
+                    <p style={{ fontSize: "0.875rem", color: "var(--muted-foreground)", textAlign: "center", padding: "1rem" }}>
+                      No websites configured. Click <strong>+ Add Website</strong> to add your first shortcut.
+                    </p>
+                  )}
                 </div>
               </div>
             </div>
@@ -654,6 +725,77 @@ export default function SettingsPage() {
                     </div>
                   );
                 })}
+              </div>
+
+              {/* ── App & File Scanning ── */}
+              <div style={{ marginTop: "1.5rem", paddingTop: "1.5rem", borderTop: "1px solid var(--border)" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.625rem", marginBottom: "1rem" }}>
+                  <HardDrive style={{ width: "1.125rem", height: "1.125rem", color: "var(--primary)" }} />
+                  <p style={{ fontSize: "0.9375rem", fontWeight: 600, color: "var(--foreground)" }}>App &amp; File Scanning</p>
+                </div>
+
+                {/* Mode selector */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginBottom: "1.25rem" }}>
+                  {([
+                    { key: "auto",   label: "Auto",   desc: "Scan on startup and refresh automatically", icon: "🔄" },
+                    { key: "manual", label: "Manual", desc: "Only scan when you click the button below", icon: "🖐" },
+                  ] as const).map(({ key, label, desc, icon }) => {
+                    const active = settings.scanMode === key;
+                    return (
+                      <button key={key} onClick={() => settings.update({ scanMode: key })}
+                        style={{
+                          textAlign: "left", padding: "1.125rem", borderRadius: "0.75rem",
+                          cursor: "pointer", transition: "all 0.2s ease",
+                          background: active ? "var(--secondary)" : "transparent",
+                          border: active ? "2px solid var(--primary)" : "1px solid var(--border)",
+                          boxShadow: active ? "0 4px 12px rgba(0,0,0,0.05)" : "none",
+                        }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.375rem" }}>
+                          <span style={{ fontSize: "1.1rem" }}>{icon}</span>
+                          <span style={{ fontSize: "0.9375rem", fontWeight: 600, color: "var(--foreground)" }}>{label}</span>
+                        </div>
+                        <p style={{ fontSize: "0.8125rem", color: "var(--muted-foreground)" }}>{desc}</p>
+                        {active && (
+                          <div style={{ marginTop: "0.625rem", display: "flex", alignItems: "center", gap: "0.25rem", color: "var(--primary)", fontSize: "0.75rem", fontWeight: 600 }}>
+                            <CheckCircle2 style={{ width: "0.875rem", height: "0.875rem" }} /> Selected
+                          </div>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Scan Now row */}
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "1rem 1.25rem", background: "var(--secondary)", borderRadius: "0.75rem", border: "1px solid var(--border)" }}>
+                  <div>
+                    <p style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--foreground)" }}>Scan Now</p>
+                    <p style={{ fontSize: "0.75rem", color: "var(--muted-foreground)", marginTop: "0.25rem" }}>
+                      {scanLastAt
+                        ? `Last scanned: ${new Date(scanLastAt).toLocaleTimeString()} · ${scanAppCount ?? "?"} apps found`
+                        : "Not scanned yet this session"}
+                    </p>
+                  </div>
+                  <button
+                    id="scan-now-btn"
+                    onClick={async () => {
+                      if (scanning) return;
+                      setScanning(true);
+                      try { await api.triggerScan(); } catch (e) { console.error(e); setScanning(false); }
+                    }}
+                    disabled={scanning}
+                    style={{
+                      display: "flex", alignItems: "center", gap: "0.5rem",
+                      padding: "0.5rem 1.25rem", borderRadius: "0.5rem",
+                      fontSize: "0.875rem", fontWeight: 600, cursor: scanning ? "not-allowed" : "pointer",
+                      background: "var(--background)", border: "1px solid var(--border)",
+                      color: "var(--foreground)", opacity: scanning ? 0.7 : 1,
+                      boxShadow: "0 1px 2px rgba(0,0,0,0.05)", transition: "all 0.2s",
+                    }}>
+                    {scanning
+                      ? <><Loader2 size={15} className="animate-spin" /> Scanning...</>
+                      : <><RefreshCw size={15} /> Scan Now</>}
+                  </button>
+                </div>
               </div>
             </div>
           </section>

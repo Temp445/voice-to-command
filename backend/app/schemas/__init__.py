@@ -48,6 +48,7 @@ class SettingsUpdate(BaseModel):
     listen_shortcut: str | None = None
     crm_url: str | None = None
     crm_keywords: str | None = None
+    crm_sites: str | None = None       # JSON: [{"url":"...","keywords":"..."}]
     # LLM
     llm_enabled: bool | None = None
     llm_provider: str | None = None
@@ -55,6 +56,7 @@ class SettingsUpdate(BaseModel):
     llm_api_key: str | None = None        # raw; encrypted before storage
     llm_temperature: float | None = None
     llm_mode: str | None = None           # "fallback" | "always_on"
+    scan_mode: str | None = None          # "auto" | "manual"
 
 
 class SettingsResponse(BaseModel):
@@ -76,6 +78,7 @@ class SettingsResponse(BaseModel):
     listen_shortcut: str
     crm_url: str
     crm_keywords: str
+    crm_sites: str                     # JSON: [{"url":"...","keywords":"..."}]
     # LLM
     llm_enabled: bool
     llm_provider: str
@@ -83,6 +86,7 @@ class SettingsResponse(BaseModel):
     llm_configured: bool    # True if API key is set
     llm_temperature: float
     llm_mode: str
+    scan_mode: str          # "auto" | "manual"
 
 
 # ─── Commands ────────────────────────────────────────────────────────────────

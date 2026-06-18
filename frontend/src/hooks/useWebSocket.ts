@@ -12,12 +12,19 @@ interface WSStore {
   setConnected: (v: boolean) => void; 
   sendBytes: (data: ArrayBuffer | ArrayBufferView) => void;
   setSendBytes: (fn: (data: ArrayBuffer | ArrayBufferView) => void) => void;
+  // Scan tracking
+  scanLastAt: string | null;
+  scanAppCount: number | null;
+  setScanResult: (timestamp: string, appCount: number) => void;
 }
 export const useWSStore = create<WSStore>((set) => ({
   connected: false,
   setConnected: (v) => set({ connected: v }),
   sendBytes: () => {},
   setSendBytes: (fn) => set({ sendBytes: fn }),
+  scanLastAt: null,
+  scanAppCount: null,
+  setScanResult: (timestamp, appCount) => set({ scanLastAt: timestamp, scanAppCount: appCount }),
 }));
 
 export function WebSocketManager() {
@@ -81,6 +88,9 @@ export function WebSocketManager() {
             break;
           case "system_error":
             useSettingsStore.getState().update({ llmSystemError: data.error });
+            break;
+          case "scan_complete":
+            useWSStore.getState().setScanResult(data.timestamp, data.app_count);
             break;
         }
       } catch {}

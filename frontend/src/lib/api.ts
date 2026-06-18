@@ -91,6 +91,7 @@ export const api = {
   getSettings:     () => request("/settings"),
   updateSettings:  (patch: Record<string, unknown>) =>
     request("/settings", { method: "PATCH", body: JSON.stringify(patch) }),
+  triggerScan:     () => request("/settings/scan", { method: "POST" }),
 
   // Workflows
   listWorkflows:   () => request("/workflows"),

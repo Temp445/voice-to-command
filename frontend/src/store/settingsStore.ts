@@ -21,8 +21,9 @@ interface SettingsStore {
   listenShortcut: string;
   
   // CRM Integration
-  crmUrl: string;
-  crmKeywords: string;
+  crmUrl: string;       // legacy: first site URL (kept for backward compat)
+  crmKeywords: string;  // legacy: first site keywords
+  crmSites: Array<{ url: string; keywords: string }>;
 
   // LLM
   llmEnabled: boolean;
@@ -32,6 +33,9 @@ interface SettingsStore {
   llmMode: "fallback" | "always_on";
   llmTemperature: number;
   llmSystemError: string | null;
+
+  // Scanning
+  scanMode: "auto" | "manual";
 
   setTtsProvider: (p: "piper" | "gtts") => void;
   update: (patch: Partial<SettingsStore>) => void;
@@ -68,9 +72,10 @@ export const useSettingsStore = create<SettingsStore>()(
       overlayShortcut: "Alt+A",
       listenShortcut: "Alt+S",
 
-      // CRM Defaults
-      crmUrl:         "https://crm.acesoftcloud.in/",
-      crmKeywords:    "open my crm, open crm, open ace crm",
+      // CRM / Website Shortcuts (empty by default — users add their own)
+      crmUrl:         "",
+      crmKeywords:    "",
+      crmSites:       [],
 
       // LLM Defaults
       llmEnabled:     true,
@@ -80,6 +85,9 @@ export const useSettingsStore = create<SettingsStore>()(
       llmMode:        "fallback",
       llmTemperature: 0.7,
       llmSystemError: null,
+
+      // Scanning
+      scanMode:       "auto",
 
       setTtsProvider: (p) => set({ ttsProvider: p }),
       update: (patch) => {

@@ -90,8 +90,9 @@ class Settings(BaseSettings):
     log_file: str = str(_APPDATA_DIR / "logs" / "ace.log")
 
     # --- CRM Integration ---
-    crm_url: str = "https://crm.acesoftcloud.in/"
-    crm_keywords: str = "open my crm, open crm, open ace crm"
+    crm_url: str = ""
+    crm_keywords: str = ""
+    crm_sites: str = "[]"  # JSON array, empty by default — users add their own
 
     # --- LLM Providers ---
     # Set whichever provider you want to use. Only one is active at a time.

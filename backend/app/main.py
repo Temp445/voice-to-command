@@ -104,21 +104,40 @@ async def lifespan(app: FastAPI):
     from automation.desktop.app_scanner import AppScanner, get_scanner
     scanner = get_scanner()
     # Always load whatever exists in cache immediately (fast),
-    # then refresh in the background (never blocks startup)
+    # then refresh in the background only if scan_mode is 'auto'
     scanner.load_cache()
-    async def _refresh_scan():
-        await scanner.scan_and_cache()
-        logger.info(f"✅ Background app scan complete — {len(scanner.apps)} apps")
-    asyncio.create_task(_refresh_scan())
+
+    # Fetch scan_mode from Supabase before deciding whether to auto-scan
+    _scan_mode = "auto"  # safe default
+    try:
+        from app.core.supabase_client import supabase_admin, sb_run
+        _sm_res = await sb_run(
+            lambda: supabase_admin.table("settings").select("scan_mode").order("updated_at", desc=True).limit(1).execute()
+        )
+        if _sm_res.data and _sm_res.data[0].get("scan_mode"):
+            _scan_mode = _sm_res.data[0]["scan_mode"]
+    except Exception as _e:
+        logger.warning(f"Could not fetch scan_mode from Supabase, defaulting to 'auto': {_e}")
+
+    if _scan_mode == "auto":
+        async def _refresh_scan():
+            await scanner.scan_and_cache()
+            logger.info(f"✅ Background app scan complete — {len(scanner.apps)} apps")
+        asyncio.create_task(_refresh_scan())
+        logger.info(f"✅ App discovery ready ({len(scanner.apps)} cached apps, auto-refresh running in background)")
+    else:
+        logger.info(f"✅ App discovery ready ({len(scanner.apps)} cached apps, manual scan mode — no auto-refresh)")
     app.state.app_scanner = scanner
-    logger.info(f"✅ App discovery ready ({len(scanner.apps)} cached apps, refresh running in background)")
 
     # ── Background File Indexer ──────────────────────────────────────────────
     from automation.desktop.file_indexer import get_indexer
     file_indexer = get_indexer()
-    file_indexer.start_background_indexing()
+    if _scan_mode == "auto":
+        file_indexer.start_background_indexing()
+        logger.info("✅ File indexer running in background")
+    else:
+        logger.info("✅ File indexer ready (manual scan mode — skipping auto-indexing)")
     app.state.file_indexer = file_indexer
-    logger.info("✅ File indexer running in background")
 
     register_all_intents()
     logger.info("✅ Command intents registered")
@@ -148,7 +167,8 @@ async def lifespan(app: FastAPI):
                 from app.config import settings as global_settings
                 for field in ("wake_word", "whisper_model", "tts_provider", "piper_voice",
                               "active_mode_timeout", "browser_type", "enable_desktop_overlay",
-                              "crm_url", "crm_keywords", "llm_provider", "llm_model",
+                              "crm_url", "crm_keywords", "crm_sites",
+                              "llm_provider", "llm_model",
                               "llm_mode", "llm_temperature"):
                     if field in s and s[field] is not None and hasattr(global_settings, field):
                         setattr(global_settings, field, s[field])

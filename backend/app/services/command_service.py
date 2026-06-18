@@ -221,7 +221,79 @@ class CommandService:
                 
                 return {"intent": pending["intent"], "status": "failed", "result": "Invalid selection. Search cancelled.", "duration_ms": int((time.perf_counter() - start) * 1000)}
 
-        # 0.5. Check if the full text perfectly matches a known compound-aware intent FIRST
+        # 0.5a. Check website shortcuts — user-defined keywords that open a URL.
+        # This MUST run before open_app regex so "open acesoft" hits the website,
+        # not the application handler.
+        try:
+            from app.config import settings as _gs
+            import json as _json
+
+            # ── Build the sites list ──────────────────────────────────────────
+            # Tier 1: in-memory crm_sites (set at startup or on settings PATCH)
+            _sites: list = []
+            _sites_raw = getattr(_gs, "crm_sites", None)
+            if _sites_raw:
+                try:
+                    _sites = _json.loads(_sites_raw)
+                except Exception:
+                    pass
+
+            # Tier 2: If in-memory has only 1 entry (the default), try fetching
+            # the latest crm_sites value from Supabase.  We cache the result on
+            # the command_service instance to avoid a DB round-trip every command.
+            if len(_sites) <= 1 and not getattr(self, "_ws_cache_loaded", False):
+                try:
+                    from app.core.supabase_client import supabase_admin, sb_run
+                    if supabase_admin is not None:
+                        _res = await sb_run(
+                            lambda: supabase_admin.table("settings").select("crm_url,crm_keywords").order("updated_at", desc=True).limit(1).execute()
+                        )
+                        if _res.data:
+                            _row = _res.data[0]
+                            # crm_sites column may not exist yet — fall back to crm_url/crm_keywords
+                            _db_raw = _row.get("crm_sites")
+                            if _db_raw:
+                                try:
+                                    _db_sites = _json.loads(_db_raw)
+                                    if _db_sites:
+                                        _sites = _db_sites
+                                        _gs.crm_sites = _db_raw
+                                except Exception:
+                                    pass
+                        self._ws_cache_loaded = True
+                        logger.debug(f"Website shortcuts loaded from DB: {len(_sites)} site(s)")
+                except Exception as _db_err:
+                    logger.debug(f"Could not load website shortcuts from DB: {_db_err}")
+                    self._ws_cache_loaded = True  # Don't retry every command
+
+
+            # ── Match keywords ────────────────────────────────────────────────
+            _text_lower = text.lower()
+            _matched_site_url: str | None = None
+            for _site in _sites:
+                _kws = [k.strip().lower() for k in _site.get("keywords", "").split(",") if k.strip()]
+                if any(_kw and _kw in _text_lower for _kw in _kws):
+                    _matched_site_url = _site.get("url", "")
+                    break
+
+            if _matched_site_url:
+                logger.info(f"Website shortcut matched: '{text}' → {_matched_site_url}")
+                from automation.browser.crm_workflows import CRMMacros
+                from automation.browser.browser_engine import BrowserEngine
+                _mac = CRMMacros(BrowserEngine())
+                _nav_result = await _mac.open_crm(text, target_url=_matched_site_url)
+                return {
+                    "intent": "open_website_shortcut",
+                    "parameters": {"url": _matched_site_url},
+                    "result": _nav_result,
+                    "status": "success",
+                    "duration_ms": int((time.perf_counter() - start) * 1000),
+                    "is_fallback": False,
+                }
+        except Exception as _ws_err:
+            logger.debug(f"Website shortcut check failed: {_ws_err}")
+
+        # 0.5b. Check if the full text perfectly matches a known compound-aware intent FIRST
         initial_intent, initial_params = self._regex_match(text)
         skip_split = False
         if initial_intent in ["search_youtube", "search_google", "open_website"]:
