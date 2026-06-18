@@ -1890,9 +1890,9 @@ async def handle_cancel(app_name: str = "", **_) -> str:
     import pywinauto
     from automation.desktop.window_manager import WindowManager
     from automation.input.keyboard_controller import KeyboardController
+    from loguru import logger
 
     # ── Step 1: Browser popup/overlay dismissal ───────────────────────────────
-    # Priority: close button (×) → Escape in browser → click outside modal
     try:
         from automation.browser.browser_controller import BrowserController
         bc = BrowserController()
@@ -1901,24 +1901,23 @@ async def handle_cancel(app_name: str = "", **_) -> str:
             if page:
                 # 1a. Look for explicit close / dismiss / × buttons
                 CLOSE_SELECTORS = [
-                    # Aria-label based (most reliable)
                     "[aria-label*='close' i]",
                     "[aria-label*='dismiss' i]",
                     "[aria-label*='cancel' i]",
-                    # Common class names
                     "button.close",
+                    ".close",               # Added: Generic close class
+                    ".btn-close",           # Added: Bootstrap close class
                     ".modal-close",
                     ".popup-close",
                     ".dialog-close",
                     "[class*='close-btn' i]",
                     "[class*='closeBtn' i]",
                     "[class*='close-button' i]",
-                    # × / X text buttons
                     "button:has-text('×')",
                     "button:has-text('✕')",
-                    "button:has-text('✖')",
+                    "span:has-text('×')",   # Added: Spans with X
+                    "i:has-text('×')",      # Added: Icons with X
                     "button:has-text('X')",
-                    # Role-based
                     "[role='button'][aria-label*='close' i]",
                 ]
                 for sel in CLOSE_SELECTORS:
@@ -1949,7 +1948,18 @@ async def handle_cancel(app_name: str = "", **_) -> str:
                     except Exception:
                         pass
 
-                # 1c. Press Escape in browser context
+                # 1c. DOMAgent Fallback (Before pressing Escape)
+                try:
+                    from automation.browser.dom_agent import DOMAgent
+                    agent = DOMAgent(page)
+                    res = await agent.execute_intent("click the 'x' close button on the popup")
+                    if "couldn't find" not in res.lower() and "failed" not in res.lower():
+                        logger.info("[Cancel] Closed popup via DOMAgent.")
+                        return "Closed the popup."
+                except Exception as e:
+                    logger.debug(f"[Cancel] DOMAgent fallback failed: {e}")
+
+                # 1d. Press Escape in browser context
                 try:
                     await page.keyboard.press("Escape")
                     await asyncio.sleep(0.3)
@@ -1961,17 +1971,13 @@ async def handle_cancel(app_name: str = "", **_) -> str:
     except Exception as e:
         logger.debug(f"Browser cancel failed: {e}")
 
-
+    # ── Step 2: Desktop / Win32 Fallback ──────────────────────────────────────
     typed_via_pywinauto = False
-    
     try:
-        # 1. Try to find common Win32 dialogs globally (Save As, Open, Confirm, Notepad warnings)
         desktop = pywinauto.Desktop(backend="win32")
-        # Notepad warning dialog is usually titled "Notepad"
         dialogs = [w for w in desktop.windows() if w.window_text() in ("Save As", "Open", "Confirm Save As", "Notepad", app_name, app_name.title())]
         
         if dialogs:
-            # Sort by window area to find the smallest one (dialogs are smaller than main apps)
             dialogs.sort(key=lambda w: w.rectangle().width() * w.rectangle().height())
             top_win = dialogs[0]
             top_win.set_focus()
@@ -1979,7 +1985,6 @@ async def handle_cancel(app_name: str = "", **_) -> str:
             typed_via_pywinauto = True
             
         if not typed_via_pywinauto and app_name:
-            # 2. Fallback to UIA top window of the process
             win = WindowManager()._find_window_by_title(app_name)
             if win:
                 app = pywinauto.Application(backend="uia").connect(process=win.process_id())
@@ -1997,7 +2002,6 @@ async def handle_cancel(app_name: str = "", **_) -> str:
         KeyboardController().press_escape()
         
     return f"Canceled {f'in {app_name}' if app_name else ''}"
-
 
 async def handle_ask_llm(question: str = "", **_) -> str:
     from app.services.llm.llm_service import llm_service
@@ -2631,15 +2635,15 @@ def register_all_intents() -> None:
             param_names=["direction", "page_num"]
         ),
         # ── Dismiss / Cancel / Close Popup — HIGH PRIORITY (before crm_workflow) ──
-        Intent(
+       Intent(
             name="dismiss_overlay",
             domain="browser",
             patterns=[
-                r"^(?:cancel|escape|close\s+(?:the\s+)?(?:popup|overlay|modal|dialog|video|window|ad)|dismiss|press\s+escape|close\s+it)$",
+                r"^(?:cancel|escape|close\s+(?:the\s+)?(?:popup|overlay|modal|dialog|video|window|ad|card|box|banner)|dismiss|press\s+escape|close\s+it)(?:\s+.*)?$",
             ],
             handler=handle_cancel,
-            description="Close a popup, overlay, modal, or dialog by pressing Escape",
-            examples=["cancel", "escape", "close the popup", "close the overlay", "dismiss", "close the video"],
+            description="Close a popup, overlay, modal, or dialog by pressing Escape or clicking X",
+            examples=["cancel", "escape", "close the popup", "close the overlay card"],
         ),
         Intent(
             name="crm_workflow",
