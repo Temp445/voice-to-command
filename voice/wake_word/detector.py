@@ -23,7 +23,7 @@ SAMPLE_RATE = 16000
 CHUNK_SIZE = 1280          # 80ms at 16kHz (OWW requirement)
 FORMAT = pyaudio.paInt16
 CHANNELS = 1
-DETECTION_THRESHOLD = 0.3  # Confidence threshold
+DETECTION_THRESHOLD = 0.05  # Confidence threshold (Lowered from 0.3 for low-gain mics)
 
 # Max bytes we allow to queue up before dropping stale audio.
 # 3 × 1280 samples × 2 bytes = ~240ms of backlog before we start skipping.
@@ -37,7 +37,31 @@ class WakeWordDetector:
     """
 
     def __init__(self, wake_word: str = "alexa", on_detected: Callable | None = None):
-        self.wake_word = wake_word.lower().strip()
+        raw_wake_word = wake_word.lower().strip()
+        
+        # OpenWakeWord only supports specific pre-trained models.
+        # Map user input to the correct acoustic model, or fallback to alexa.
+        model_map = {
+            "alexa": "alexa",
+            "hey jarvis": "hey_jarvis",
+            "hey_jarvis": "hey_jarvis",
+            "hey mycroft": "hey_mycroft",
+            "hey_mycroft": "hey_mycroft",
+            "hey rhasspy": "hey_rhasspy",
+            "hey_rhasspy": "hey_rhasspy",
+        }
+        
+        self.acoustic_model = model_map.get(raw_wake_word, "alexa")
+        # Overwrite the actual wake_word used by the pipeline for stripping
+        # to match what the acoustic model is actually listening for.
+        self.wake_word = self.acoustic_model.replace("_", " ")
+        
+        if raw_wake_word not in model_map:
+            logger.warning(
+                f"⚠️ Wake word '{raw_wake_word}' has no offline model. "
+                f"Falling back to '{self.wake_word}'. You MUST SAY: '{self.wake_word}'!"
+            )
+            
         self.on_detected = on_detected
         self._running = False
         self._thread: threading.Thread | None = None
@@ -49,30 +73,15 @@ class WakeWordDetector:
         if not OWW_AVAILABLE:
             raise RuntimeError("openwakeword is not installed")
 
-        model_map = {
-            "alexa": "alexa",
-            "hey_jarvis": "hey_jarvis",
-            "hey_mycroft": "hey_mycroft",
-            "hey_rhasspy": "hey_rhasspy",
-        }
-        model_name = model_map.get(self.wake_word, "alexa")
-
-        if self.wake_word not in (model_name, model_name.replace("_", " ")):
-            logger.warning(
-                f"⚠️  Wake word '{self.wake_word}' has no dedicated offline model. "
-                f"Using '{model_name}' acoustic model. "
-                f"You MUST SAY: '{model_name.replace('_', ' ')}' to trigger detection!"
-            )
-        else:
-            logger.info(f"Loading OpenWakeWord model for: '{self.wake_word}' (using '{model_name}')")
+        logger.info(f"Loading OpenWakeWord model: '{self.acoustic_model}'")
 
         try:
             from openwakeword.utils import download_models
-            download_models(model_names=[f"{model_name}_v0.1"])
+            download_models(model_names=[f"{self.acoustic_model}_v0.1"])
         except Exception as e:
-            logger.warning(f"Could not download model {model_name}: {e}")
+            logger.warning(f"Could not download model {self.acoustic_model}: {e}")
 
-        return OWWModel(wakeword_models=[model_name], inference_framework="onnx")
+        return OWWModel(wakeword_models=[self.acoustic_model], inference_framework="onnx")
 
     def start(self) -> None:
         if self._running:
@@ -119,18 +128,18 @@ class WakeWordDetector:
                 if not raw:
                     continue
 
-                # ─── FIX 2: Drop stale audio if the queue has built up.
-                # If we fell behind (e.g. the callback took too long), the queue
-                # contains old audio. Skip it so we always process near-live audio.
+                # ─── FIX 2: Only drop stale audio if severely behind (> 4 seconds).
+                # Predict is fast (~5ms), so we should just process the queue to catch up.
+                # Dropping audio breaks the contiguous stream OpenWakeWord needs to detect words.
                 backlog = remote_q.qsize()
-                if backlog > 3:
-                    for _ in range(backlog - 1):   # keep the newest one already got
+                if backlog > 50:
+                    logger.warning(f"Audio queue severely behind ({backlog} chunks). Dropping stale audio to catch up.")
+                    while not remote_q.empty():
                         try:
                             remote_q.get_nowait()
                         except queue.Empty:
                             break
-                    logger.debug(f"Dropped {backlog - 1} stale audio chunks to catch up")
-                    self._audio_buffer = np.array([], dtype=np.int16)  # reset buffer too
+                    self._audio_buffer = np.array([], dtype=np.int16)
 
                 # ─── FIX 3: Ensure even byte count before converting.
                 if len(raw) % 2 != 0:
@@ -149,8 +158,8 @@ class WakeWordDetector:
 
                     detected = False
                     for model_name, score in predictions.items():
-                        if score > 0.1:
-                            logger.debug(f"Wake word '{model_name}' score: {score:.3f}")
+                        if score > 0.05:
+                            logger.info(f"Wake word '{model_name}' score: {score:.3f}")
                         if score >= DETECTION_THRESHOLD:
                             logger.info(
                                 f"🔔 Wake word detected! ('{self.wake_word}', score={score:.2f})"

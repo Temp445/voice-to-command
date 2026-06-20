@@ -134,14 +134,14 @@ class AppController:
 
         # Native OS launch (automatically focuses window on Windows)
         try:
-            os.startfile(abs_exe)
-        except AttributeError:
             import subprocess
-            subprocess.Popen([abs_exe], shell=False, creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP)
+            if abs_exe.lower().endswith(".exe"):
+                subprocess.Popen([abs_exe], shell=False, creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP)
+            else:
+                subprocess.Popen(f'start "" "{abs_exe}"', shell=True)
         except Exception as e:
-            logger.error(f"Failed to launch via OS native methods: {e}")
-            import subprocess
-            subprocess.Popen([abs_exe], shell=False, creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP)
+            logger.error(f"Failed to launch: {e}")
+            return False
 
         logger.info(f"Launched: {abs_exe}")
         return True
@@ -223,7 +223,8 @@ class AppController:
                 
                 # If no dialog is active, fallback to opening a new Explorer window
                 try:
-                    os.startfile(folder_path)
+                    import subprocess
+                    subprocess.Popen(f'start "" "{folder_path}"', shell=True)
                     return f"Opened {key.title()} folder"
                 except Exception as e:
                     logger.error(f"Failed to open folder {folder_path}: {e}")

@@ -279,19 +279,24 @@ class WindowManager:
             
         import threading, time
         def _focus():
-            time.sleep(1.0)
+            import pythoncom
+            pythoncom.CoInitialize()
             try:
-                self.focus_by_title(title_substring)
-                win = self._find_window_by_title(title_substring)
-                if win:
-                    try:
-                        import ctypes
-                        ctypes.windll.user32.ShowWindow(win.handle, 3)
-                        ctypes.windll.user32.PostMessageW(win.handle, 0x0112, 0xF030, 0)
-                    except Exception:
-                        pass
-            except Exception:
-                pass
+                time.sleep(1.0)
+                try:
+                    self.focus_by_title(title_substring)
+                    win = self._find_window_by_title(title_substring)
+                    if win:
+                        try:
+                            import ctypes
+                            ctypes.windll.user32.ShowWindow(win.handle, 3)
+                            ctypes.windll.user32.PostMessageW(win.handle, 0x0112, 0xF030, 0)
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+            finally:
+                pythoncom.CoUninitialize()
         threading.Thread(target=_focus, daemon=True).start()
 
     def force_focus_by_exe(self, exe_path: str) -> None:
@@ -300,17 +305,22 @@ class WindowManager:
         
         import threading, time
         def _focus():
-            time.sleep(1.5)
+            import pythoncom
+            pythoncom.CoInitialize()
             try:
-                app = pywinauto.Application(backend="uia").connect(path=exe_path, timeout=3)
-                top = app.top_window()
-                top.set_focus()
+                time.sleep(1.5)
                 try:
-                    top.maximize()
+                    app = pywinauto.Application(backend="uia").connect(path=exe_path, timeout=3)
+                    top = app.top_window()
+                    top.set_focus()
+                    try:
+                        top.maximize()
+                    except Exception:
+                        pass
                 except Exception:
                     pass
-            except Exception:
-                pass
+            finally:
+                pythoncom.CoUninitialize()
         threading.Thread(target=_focus, daemon=True).start()
 
     def list_windows(self) -> list[dict]:

@@ -318,6 +318,16 @@ class CommandService:
 
                 return {"intent": pending["intent"], "status": "failed", "result": "Invalid selection. Search cancelled.", "duration_ms": int((time.perf_counter() - start) * 1000)}
 
+            elif pending.get("intent") == "confirm_search_app":
+                t_lower = text.lower()
+                positive = ["yes", "execute", "yeah", "yep", "sure", "ok", "okay", "search", "go ahead", "do it"]
+                if any(w in t_lower for w in positive) and "no" not in t_lower:
+                    app_to_search = pending["params"]["app_name"]
+                    from automation.browser.browser_controller import BrowserController
+                    res = await BrowserController().search_google(app_to_search)
+                    return {"intent": "search_google", "status": "success", "result": res, "duration_ms": int((time.perf_counter() - start) * 1000)}
+                else:
+                    return {"intent": "confirm_search_app", "status": "success", "result": "Okay, search cancelled.", "duration_ms": int((time.perf_counter() - start) * 1000)}
         # 0.5a. Check website shortcuts — uses pre-warmed in-memory cache (no DB hit)
         try:
             import json as _json
@@ -602,6 +612,10 @@ class CommandService:
                 elif result.startswith("PENDING_FILENAME:"):
                     self._pending_action = {"intent": "set_filename", "params": {"app_name": params.get("app_name", "")}}
                     result = result.replace("PENDING_FILENAME:", "").strip()
+                elif result.startswith("PENDING_SEARCH_APP:"):
+                    app_to_search = result.replace("PENDING_SEARCH_APP:", "").strip()
+                    self._pending_action = {"intent": "confirm_search_app", "params": {"app_name": app_to_search}}
+                    result = f"I can't find the application {app_to_search}. Should I search for it on the web?"
 
             from app.services.llm.llm_service import llm_service
             if llm_service.is_ready and intent_name not in ("ask_llm", "ask_and_type"):

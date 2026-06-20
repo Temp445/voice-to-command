@@ -82,27 +82,11 @@ def _clean_name(raw: str) -> str:
     return cleaned.lower()
 
 
-# ─── Per-thread COM shell (reuse instead of recreating per .lnk file) ────────
+# ─── LNK Resolution ──────────────────────────────────────────────────────────
 
-_thread_local = threading.local()
-
-
-def _get_shell():
-    """
-    Return a WScript.Shell COM object for the current thread.
-    Creating one COM object per thread (instead of per .lnk file) cuts
-    LNK resolution time by ~10x on large Start Menu folders.
-    """
-    if not hasattr(_thread_local, "shell"):
-        import win32com.client  # type: ignore
-        _thread_local.shell = win32com.client.Dispatch("WScript.Shell")
-    return _thread_local.shell
-
-
-def _resolve_lnk(lnk_path: Path) -> Optional[str]:
-    """Resolve a .lnk shortcut using the thread-local COM shell."""
+def _resolve_lnk(lnk_path: Path, shell: 'Any') -> Optional[str]:
+    """Resolve a .lnk shortcut using the provided COM shell."""
     try:
-        shell = _get_shell()
         shortcut = shell.CreateShortcut(str(lnk_path))
         target = shortcut.TargetPath
         if target:
@@ -250,19 +234,32 @@ class AppScanner:
     def _scan_lnk_folder(self, folder: Path, source: str) -> None:
         """
         Recursively resolve .lnk files in *folder*.
-        Uses a thread-local COM shell object — no per-file COM creation overhead.
+        Explicitly initializes COM per-thread to prevent segfaults on thread exit.
         """
         if not folder.exists():
             return
         count = 0
-        for lnk in folder.rglob("*.lnk"):
-            try:
-                target = _resolve_lnk(lnk)
-                if target:
-                    self._add(lnk.stem, target, source)
-                    count += 1
-            except Exception:
-                pass
+        try:
+            import pythoncom
+            import win32com.client  # type: ignore
+            pythoncom.CoInitialize()
+            
+            shell = win32com.client.Dispatch("WScript.Shell")
+            for lnk in folder.rglob("*.lnk"):
+                try:
+                    target = _resolve_lnk(lnk, shell)
+                    if target:
+                        self._add(lnk.stem, target, source)
+                        count += 1
+                except Exception:
+                    pass
+            
+            # Explicit teardown to prevent 0xC0000005 access violations
+            shell = None
+            pythoncom.CoUninitialize()
+        except Exception as e:
+            pass
+            
         logger.debug(f"LNK scan [{source}] {folder.name}: {count} resolved")
 
     def _scan_registry_hive(self, hive: int, subkey: str) -> None:

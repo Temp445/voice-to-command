@@ -7,12 +7,9 @@ import asyncio
 import sys
 import warnings
 
-warnings.filterwarnings("ignore", category=UserWarning, message="Apply externally defined coinit_flags: 0")
-
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
 
-sys.coinit_flags = 0  # Fix COM threading mode conflict for pywinauto
 from pathlib import Path
 _ROOT = Path(__file__).resolve().parent.parent.parent
 if str(_ROOT) not in sys.path:
@@ -269,16 +266,10 @@ async def lifespan(app: FastAPI):
             app_state.pipeline = None
 
         # ── Phase 3: Model pre-warming ────────────────────────────────────────
-        # Whisper and Semantic Router are fully independent — warm both in parallel.
-        async def _prewarm_whisper():
-            try:
-                from voice.stt.transcriber import Transcriber
-                await asyncio.to_thread(Transcriber()._load_model)
-                logger.info("🎙️ Whisper model pre-warmed and ready")
-            except Exception as warm_err:
-                logger.warning(f"⚠️ Could not pre-warm Whisper: {warm_err}")
-
+        # Semantic Router uses ONNX which can deadlock if initialized exactly
+        # concurrently with OpenWakeWord (also ONNX). Small delay prevents this.
         async def _prewarm_semantic():
+            await asyncio.sleep(2.0)
             try:
                 from app.services.semantic_router import semantic_router
                 from app.services.command_service import command_service
@@ -287,9 +278,8 @@ async def lifespan(app: FastAPI):
             except Exception as warm_err:
                 logger.warning(f"⚠️ Could not pre-warm Semantic Router: {warm_err}")
 
-        logger.info("⚡ Background init Phase 3: Whisper + Semantic Router pre-warm (parallel)...")
+        logger.info("⚡ Background init Phase 3: Semantic Router pre-warm...")
         await asyncio.gather(
-            _prewarm_whisper(),
             _prewarm_semantic(),
             return_exceptions=True,
         )

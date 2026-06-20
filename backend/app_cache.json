@@ -2578,5 +2578,29 @@
     "exe_name": "RUXIMICS.exe",
     "path": "C:\\Program Files\\RUXIM\\RUXIMICS.exe",
     "source": "process"
+  },
+  "espeak ng": {
+    "name": "eSpeak NG",
+    "exe_name": "espeak-ng.exe",
+    "path": "C:\\Program Files\\eSpeak NG\\espeak-ng.exe",
+    "source": "program_files"
+  },
+  "livekit-wakeword": {
+    "name": "livekit-wakeword",
+    "exe_name": "livekit-wakeword.exe",
+    "path": "C:\\Users\\nithi\\Desktop\\Clones\\Wakeword\\.venv\\Scripts\\livekit-wakeword.exe",
+    "source": "process"
+  },
+  "dataexchangehost": {
+    "name": "DataExchangeHost",
+    "exe_name": "DataExchangeHost.exe",
+    "path": "C:\\Windows\\System32\\DataExchangeHost.exe",
+    "source": "process"
+  },
+  "sppextcomobj": {
+    "name": "SppExtComObj",
+    "exe_name": "SppExtComObj.Exe",
+    "path": "C:\\Windows\\System32\\SppExtComObj.Exe",
+    "source": "process"
   }
 }

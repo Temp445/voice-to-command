@@ -23,6 +23,8 @@ from app.config import settings
 
 
 
+import threading
+
 class Transcriber:
     """
     Speech-to-text using Faster-Whisper.
@@ -30,6 +32,7 @@ class Transcriber:
     """
 
     _model: WhisperModel | None = None
+    _lock = threading.Lock()
 
     def __init__(self):
         pass
@@ -38,15 +41,20 @@ class Transcriber:
         if Transcriber._model is not None:
             return Transcriber._model
 
-        model_size = settings.whisper_model
-        # float32 gives the highest accuracy on CPU for base/small models.
-        # int8 saves RAM (~4×) but introduces quantization errors that are a
-        # disproportionately large fraction of small model weights, degrading
-        # accuracy by 8–15% on short commands.
-        logger.info(f"Loading Whisper model: {model_size} (device=cpu, compute=float32)")
-        Transcriber._model = WhisperModel(model_size, device="cpu", compute_type="float32")
-        logger.info(f"✅ Whisper model '{model_size}' loaded (CPU, float32)")
-        return Transcriber._model
+        with Transcriber._lock:
+            # Double-checked locking
+            if Transcriber._model is not None:
+                return Transcriber._model
+
+            model_size = settings.whisper_model
+            # float32 gives the highest accuracy on CPU for base/small models.
+            # int8 saves RAM (~4×) but introduces quantization errors that are a
+            # disproportionately large fraction of small model weights, degrading
+            # accuracy by 8–15% on short commands.
+            logger.info(f"Loading Whisper model: {model_size} (device=cpu, compute=float32)")
+            Transcriber._model = WhisperModel(model_size, device="cpu", compute_type="float32")
+            logger.info(f"✅ Whisper model '{model_size}' loaded (CPU, float32)")
+            return Transcriber._model
 
     def transcribe(self, audio_bytes: bytes) -> str:
         """

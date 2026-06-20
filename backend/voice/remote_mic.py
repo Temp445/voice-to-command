@@ -51,8 +51,10 @@ def _local_mic_loop():
         return
         
     try:
+        default_device = p.get_default_input_device_info()
+        device_name = default_device.get("name", "Unknown Device")
         stream = p.open(format=pyaudio.paInt16, channels=1, rate=16000, input=True, frames_per_buffer=1280)
-        logger.info("🎤 Local microphone broadcast started.")
+        logger.info(f"🎤 Local microphone broadcast started on: '{device_name}'")
         while _local_mic_running:
             raw = stream.read(1280, exception_on_overflow=False)
             put_chunk(raw)

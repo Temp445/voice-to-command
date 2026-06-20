@@ -21,6 +21,7 @@ cryptography
 
 # --- Config ---
 pydantic
+pydantic[email]
 pydantic-settings
 python-dotenv
 
@@ -81,3 +82,5 @@ beautifulsoup4
 lxml
 pycaw
 plyer
+
+pyinstaller

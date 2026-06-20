@@ -59,20 +59,8 @@ async def handle_open_app(app: str = "", text: str = "", **_) -> str:
             nav_result = await bc.navigate(url)
             return f"'{app_name}' is not installed. Opened {url} in browser instead."
             
-        # Fallback to DOMAgent (user might be trying to click a 'start X' button on a webpage)
-        try:
-            from automation.browser.browser_controller import BrowserController
-            bc = BrowserController()
-            logger.info(f"App '{app_name}' not found. Falling back to DOMAgent for 'click {app_name}'")
-            from automation.browser.dom_agent import DOMAgent
-            page = await bc.engine.ensure_browser()
-            agent = DOMAgent(page)
-            # Use 'click' to force a button check for the app name
-            dom_res = await agent.execute_intent(f"click {app_name}")
-            if "couldn't find" not in dom_res.lower() and "failed" not in dom_res.lower():
-                return dom_res
-        except Exception as e:
-            logger.error(f"Failed to fallback to DOMAgent in open_app: {e}")
+        # Fallback to conversational search prompt
+        return f"PENDING_SEARCH_APP:{app_name}"
 
     return res
 
