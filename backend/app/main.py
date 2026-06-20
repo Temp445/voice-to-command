@@ -305,7 +305,9 @@ async def lifespan(app: FastAPI):
                     [python_exe, overlay_path],
                     creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
                 )
-                logger.info("🖥️ Desktop Overlay started automatically on startup")
+                logger.info("🖥️ Desktop Overlay started invisibly in background on startup")
+
+        logger.info("🎉 ACE is now fully initialized and ready to execute commands!")
 
     asyncio.create_task(_background_init(app.state, loop))
 
@@ -377,6 +379,7 @@ async def websocket_endpoint(websocket: WebSocket):
         await ws_manager.send_to(websocket, "connected", {
             "message": "ACE WebSocket connected",
             "version": settings.app_version,
+            "wake_word": settings.wake_word,
         })
         while True:
             message = await websocket.receive()
@@ -397,6 +400,10 @@ async def websocket_endpoint(websocket: WebSocket):
                         logger.info("🔘 Overlay Command Received: Stop Listen")
                         if getattr(app.state, "pipeline", None):
                             app.state.pipeline.stop_listening()
+                    elif data.get("type") == "stop":
+                        logger.info("🔘 Overlay Command Received: Stop Pipeline")
+                        if getattr(app.state, "pipeline", None):
+                            app.state.pipeline.deactivate()
                     elif data.get("type") == "replay":
                         logger.info("🔘 Overlay Command Received: Replay")
                         if getattr(app.state, "pipeline", None):

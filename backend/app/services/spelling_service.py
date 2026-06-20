@@ -13,7 +13,11 @@ def _is_credential_like(word: str) -> bool:
         return True
     # Mixed case (e.g., reSet@123, MyPass) — user intentionally specified casing
     if any(c.isupper() for c in word) and any(c.islower() for c in word):
-        return True
+        # Exclude simple Title Case words at the start of sentences
+        if word.istitle():
+            pass
+        else:
+            return True
     # Contains special characters typical in passwords
     if any(c in word for c in ['!', '#', '$', '%', '^', '&', '*', '(', ')', '_', '+', '=', '/', '\\', '.', '~']):
         return True
@@ -160,6 +164,8 @@ class CommandSpellingCorrector:
                 "opne": "open",
                 "pla": "play",
                 "pau": "pause",
+                "serum": "crm",
+                "video": "window",
             }
 
             # Atomically publish results — correct() checks _initialized before use
@@ -224,29 +230,40 @@ class CommandSpellingCorrector:
                 corrected_words.append(word)
                 continue
 
-            word_lower = word.lower()
+            # Separate leading/trailing punctuation from the core word
+            m = re.match(r'^([^a-zA-Z0-9]*)(.*?)([^a-zA-Z0-9]*)$', word)
+            if m:
+                prefix, core, suffix = m.groups()
+            else:
+                prefix, core, suffix = "", word, ""
+
+            if not core:
+                corrected_words.append(word)
+                continue
+
+            core_lower = core.lower()
 
             # Apply hard mappings
-            if word_lower in self.hard_mappings:
-                corrected_words.append(self.hard_mappings[word_lower])
+            if core_lower in self.hard_mappings:
+                corrected_words.append(prefix + self.hard_mappings[core_lower] + suffix)
                 continue
 
             # Preserve known custom vocabulary words
-            if word_lower in self.custom_vocabulary:
-                corrected_words.append(word_lower)
+            if core_lower in self.custom_vocabulary:
+                corrected_words.append(prefix + core_lower + suffix)
                 continue
 
             # Query SymSpell for closest suggestions
             try:
                 from symspellpy import Verbosity
-                suggestions = self.sym_spell.lookup(word_lower, Verbosity.CLOSEST, max_edit_distance=2)
+                suggestions = self.sym_spell.lookup(core_lower, Verbosity.CLOSEST, max_edit_distance=2)
                 if suggestions:
-                    corrected_words.append(suggestions[0].term)
+                    corrected_words.append(prefix + suggestions[0].term + suffix)
                 else:
-                    corrected_words.append(word_lower)
+                    corrected_words.append(prefix + core_lower + suffix)
             except Exception as e:
                 logger.debug(f"SymSpell lookup failed for '{word}': {e}")
-                corrected_words.append(word_lower)
+                corrected_words.append(prefix + core_lower + suffix)
 
         return " ".join(corrected_words)
 

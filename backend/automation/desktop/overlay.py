@@ -24,6 +24,7 @@ _SVGS = {
     "volume3": b'<svg xmlns="http://www.w3.org/2000/svg" width="{s}" height="{s}" viewBox="0 0 24 24" fill="none" stroke="{c}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>',
     "loader": b'<svg xmlns="http://www.w3.org/2000/svg" width="{s}" height="{s}" viewBox="0 0 24 24" fill="none" stroke="{c}" stroke-width="2.5" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>',
     "x": b'<svg xmlns="http://www.w3.org/2000/svg" width="{s}" height="{s}" viewBox="0 0 24 24" fill="none" stroke="{c}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>',
+    "stop": b'<svg xmlns="http://www.w3.org/2000/svg" width="{s}" height="{s}" viewBox="0 0 24 24" fill="{c}" stroke="{c}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="2" ry="2"/></svg>',
 }
 
 def make_pixmap(name: str, color: str, size: int = 18, rotation: int = 0) -> QPixmap:
@@ -393,8 +394,7 @@ class OverlayApp(QWidget):
         self.anim_timer.timeout.connect(self._tick)
         self.anim_timer.start(80)
 
-        # Initial show before auto-hiding
-        self._auto_hide_timer.start(5000)
+        # Do not show initially, stay hidden until activated by WebSocket
 
     # ── UI Construction ───────────────────────────────────────────────────────
 
@@ -450,6 +450,15 @@ class OverlayApp(QWidget):
         )
         self.replay_btn.clicked.connect(self._on_replay_clicked)
         pill_layout.addWidget(self.replay_btn)
+
+        # Stop: red when enabled, dim white when disabled
+        self.stop_btn = IconButton(
+            "stop", "Stop current action",
+            enabled_icon_color="#ef4444",   # red
+            disabled_icon_color="#e5e7eb",
+        )
+        self.stop_btn.clicked.connect(self._on_stop_clicked)
+        pill_layout.addWidget(self.stop_btn)
 
         # ── Style ──────────────────────────────────────────────────────────
         self.setStyleSheet("""
@@ -562,6 +571,8 @@ class OverlayApp(QWidget):
 
         # Enable replay only when ACE is idle
         self.replay_btn.set_enabled_state(is_idle)
+        # Enable stop only when ACE is active
+        self.stop_btn.set_enabled_state(not is_idle)
 
         if state == "listening":
             self._auto_hide_timer.stop()
@@ -608,9 +619,8 @@ class OverlayApp(QWidget):
                 self.sub_label.setText(f"Wake word: {self._wake_word}")
                 self._set_pill_accent(None)
                 
-                # Make sure it's visible, then auto-hide after 3s
-                self.show()
-                if not self._auto_hide_timer.isActive():
+                # If it's already visible (e.g., finishing a command), start the auto-hide timer
+                if self.isVisible() and not self._auto_hide_timer.isActive():
                     self._auto_hide_timer.start(3000)
 
     def _on_settings_update(self, settings_data: dict):
@@ -652,7 +662,7 @@ class OverlayApp(QWidget):
             self.show_card_signal.emit("🔁 Last Response", "Nothing to replay yet.")
         elif text.startswith('"') or text.startswith('✓') or text.startswith('✗'):
             self._last_transcript = text
-            if self.current_state in ("processing", "speaking", "idle"):
+            if self.current_state in ("processing", "speaking", "idle", "listening"):
                 self.status_label.setText(text)
                 if text.startswith('✓'):
                     self.status_label.setStyleSheet("color: #10b981;")
@@ -721,6 +731,11 @@ class OverlayApp(QWidget):
             # The backend `replay` command triggers the TTS.
             asyncio.create_task(send_command("replay"))
 
+    def _on_stop_clicked(self):
+        """Request the backend to forcefully stop the current pipeline action."""
+        if self.current_state not in ("idle", "error"):
+            asyncio.create_task(send_command("stop"))
+
     # ── Dragging ──────────────────────────────────────────────────────────────
 
     def mousePressEvent(self, event):
@@ -786,22 +801,18 @@ async def websocket_client(overlay: OverlayApp):
                 overlay.update_status_signal.emit("Connected")
                 overlay.update_state_signal.emit("idle")
                 
-                # Fetch initial settings
-                try:
-                    import urllib.request
-                    with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/settings") as response:
-                        settings_data = json.loads(response.read().decode())
-                        overlay.update_settings_signal.emit(settings_data)
-                except Exception as e:
-                    print(f"Failed to fetch initial settings: {e}")
-
+                # Wait for websocket messages
                 async for message in ws:
                     try:
                         data = json.loads(message)
                         etype = data.get("event", "")
                         payload = data.get("data", {})
 
-                        if etype == "pipeline_state":
+                        if etype == "connected":
+                            if "wake_word" in payload:
+                                overlay.update_settings_signal.emit({"wake_word": payload["wake_word"]})
+                        
+                        elif etype == "pipeline_state":
                             state = payload.get("state", "idle")
                             overlay.update_state_signal.emit(state)
                             
@@ -839,7 +850,7 @@ def main():
     asyncio.set_event_loop(loop)
 
     overlay = OverlayApp()
-    overlay.show()
+    # Start hidden, only show when WebSocket state changes
 
     loop.create_task(websocket_client(overlay))
     with loop:

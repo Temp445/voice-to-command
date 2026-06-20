@@ -1,0 +1,1610 @@
+{
+  "7-zip 18.01": {
+    "name": "7-Zip 18.01 (x64)",
+    "exe_name": "7z.exe",
+    "path": "C:\\Program Files\\7-Zip\\7z.exe",
+    "source": "registry"
+  },
+  "firefox private browsing": {
+    "name": "Firefox Private Browsing",
+    "exe_name": "private_browsing.exe",
+    "path": "C:\\Program Files (x86)\\Mozilla Firefox\\private_browsing.exe",
+    "source": "start_menu"
+  },
+  "access": {
+    "name": "Access",
+    "exe_name": "MSACCESS.EXE",
+    "path": "C:\\Program Files (x86)\\Microsoft Office\\root\\Office16\\MSACCESS.EXE",
+    "source": "start_menu"
+  },
+  "apexsql search": {
+    "name": "ApexSQL Search",
+    "exe_name": "unins001.exe",
+    "path": "C:\\Program Files\\ApexSQL\\ApexSQL Search\\unins001.exe",
+    "source": "registry"
+  },
+  "blend for visual studio 2022": {
+    "name": "Blend for Visual Studio 2022",
+    "exe_name": "Blend.exe",
+    "path": "D:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\Common7\\IDE\\Blend.exe",
+    "source": "start_menu"
+  },
+  "advanced installer": {
+    "name": "Advanced Installer 21.9",
+    "exe_name": "advinst.exe",
+    "path": "C:\\Program Files (x86)\\Advanced Installer 21.9\\bin\\x86\\advinst.exe",
+    "source": "desktop"
+  },
+  "cpuid cpu-z": {
+    "name": "CPUID CPU-Z 1.82",
+    "exe_name": "cpuz.exe",
+    "path": "C:\\Program Files\\CPUID\\CPU-Z\\cpuz.exe",
+    "source": "registry"
+  },
+  "kls backup 2025 professional": {
+    "name": "KLS Backup 2025 Professional (x64) 14.0.1.0",
+    "exe_name": "klsbum.exe",
+    "path": "C:\\Program Files\\KLS Soft\\KLS Backup 2025 Professional\\klsbum.exe",
+    "source": "registry"
+  },
+  "apowersoft free screen recorder": {
+    "name": "Apowersoft Free Screen Recorder",
+    "exe_name": "Apowersoft Free Screen Recorder.exe",
+    "path": "C:\\Program Files (x86)\\Apowersoft\\Apowersoft Free Screen Recorder\\Apowersoft Free Screen Recorder.exe",
+    "source": "desktop"
+  },
+  "nightly private browsing": {
+    "name": "Nightly Private Browsing",
+    "exe_name": "private_browsing.exe",
+    "path": "C:\\Users\\Nivin\\AppData\\Local\\ms-playwright\\firefox-1522\\firefox\\private_browsing.exe",
+    "source": "start_menu"
+  },
+  "crystal reports": {
+    "name": "Crystal Reports",
+    "exe_name": "SCRIcons.exe",
+    "path": "C:\\WINDOWS\\Installer\\{7699B723-9718-41DE-8C18-549F341C02CE}\\SCRIcons.exe",
+    "source": "start_menu"
+  },
+  "excel": {
+    "name": "Excel",
+    "exe_name": "EXCEL.EXE",
+    "path": "C:\\Program Files (x86)\\Microsoft Office\\root\\Office16\\EXCEL.EXE",
+    "source": "start_menu"
+  },
+  "foxit reader": {
+    "name": "Foxit Reader",
+    "exe_name": "unins000.exe",
+    "path": "C:\\Program Files (x86)\\Foxit Software\\Foxit Reader\\unins000.exe",
+    "source": "registry"
+  },
+  "google chrome": {
+    "name": "Google Chrome",
+    "exe_name": "chrome.exe",
+    "path": "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
+    "source": "registry"
+  },
+  "firefox": {
+    "name": "Firefox",
+    "exe_name": "firefox.exe",
+    "path": "C:\\Program Files (x86)\\Mozilla Firefox\\firefox.exe",
+    "source": "start_menu"
+  },
+  "kaspersky password manager": {
+    "name": "Kaspersky Password Manager",
+    "exe_name": "kpm.exe",
+    "path": "C:\\Program Files (x86)\\Kaspersky Lab\\Kaspersky Password Manager 25.1\\kpm.exe",
+    "source": "desktop"
+  },
+  "kaspersky small office security": {
+    "name": "Kaspersky Small Office Security",
+    "exe_name": "avpui.exe",
+    "path": "C:\\Program Files (x86)\\Kaspersky Lab\\Kaspersky Small Office Security 21.25\\avpui.exe",
+    "source": "desktop"
+  },
+  "magnify": {
+    "name": "Magnify",
+    "exe_name": "magnify.exe",
+    "path": "C:\\WINDOWS\\system32\\magnify.exe",
+    "source": "start_menu"
+  },
+  "microsoft edge": {
+    "name": "Microsoft Edge",
+    "exe_name": "msedge.exe",
+    "path": "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
+    "source": "desktop"
+  },
+  "immersive control panel": {
+    "name": "Immersive Control Panel",
+    "exe_name": "Control.exe",
+    "path": "C:\\WINDOWS\\System32\\Control.exe",
+    "source": "start_menu"
+  },
+  "narrator": {
+    "name": "Narrator",
+    "exe_name": "narrator.exe",
+    "path": "C:\\WINDOWS\\system32\\narrator.exe",
+    "source": "start_menu"
+  },
+  "portable wifi": {
+    "name": "Portable WiFi",
+    "exe_name": "PortableWiFi.exe",
+    "path": "C:\\Program Files (x86)\\D-Link\\DWA-131 revE\\IHV\\PortableWiFi.exe",
+    "source": "desktop"
+  },
+  "on-screen keyboard": {
+    "name": "On-Screen Keyboard",
+    "exe_name": "osk.exe",
+    "path": "C:\\WINDOWS\\system32\\osk.exe",
+    "source": "start_menu"
+  },
+  "stdu xml editor": {
+    "name": "STDU XML Editor",
+    "exe_name": "STDUXMLEditor.exe",
+    "path": "C:\\Portables\\STDU XML Editor\\STDUXMLEditor.exe",
+    "source": "desktop"
+  },
+  "teamviewer": {
+    "name": "TeamViewer",
+    "exe_name": "TeamViewer.exe",
+    "path": "C:\\Users\\Public\\temp\\TeamViewer\\TeamViewer.exe",
+    "source": "desktop"
+  },
+  "ultraviewer": {
+    "name": "UltraViewer",
+    "exe_name": "UltraViewer_Desktop.exe",
+    "path": "C:\\Program Files (x86)\\UltraViewer\\UltraViewer_Desktop.exe",
+    "source": "desktop"
+  },
+  "internet explorer": {
+    "name": "Internet Explorer",
+    "exe_name": "iexplore.exe",
+    "path": "C:\\Program Files\\Internet Explorer\\iexplore.exe",
+    "source": "start_menu"
+  },
+  "wondershare pdfelement pro": {
+    "name": "Wondershare PDFelement Pro",
+    "exe_name": "PDFelement.exe",
+    "path": "C:\\Program Files (x86)\\Wondershare\\Wondershare PDFelement Pro for Windows (CPC)\\PDFelement.exe",
+    "source": "desktop"
+  },
+  "git": {
+    "name": "Git",
+    "exe_name": "git-cmd.exe",
+    "path": "C:\\Users\\Nivin\\AppData\\Local\\Programs\\Git\\git-cmd.exe",
+    "source": "registry"
+  },
+  "postman x64": {
+    "name": "Postman x64 12.10.6",
+    "exe_name": "Update.exe",
+    "path": "C:\\Users\\Nivin\\AppData\\Local\\Postman\\Update.exe",
+    "source": "registry"
+  },
+  "postman agent x64": {
+    "name": "Postman Agent x64 0.4.86",
+    "exe_name": "Update.exe",
+    "path": "C:\\Users\\Nivin\\AppData\\Local\\Postman-Agent\\Update.exe",
+    "source": "registry"
+  },
+  "microsoft visual studio code": {
+    "name": "Microsoft Visual Studio Code (User)",
+    "exe_name": "Code.exe",
+    "path": "D:\\Users\\Nivin\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe",
+    "source": "registry"
+  },
+  "antigravity": {
+    "name": "Antigravity (User)",
+    "exe_name": "unins000.exe",
+    "path": "C:\\Users\\Nivin\\AppData\\Local\\Programs\\Antigravity\\unins000.exe",
+    "source": "registry"
+  },
+  "7-zip": {
+    "name": "7-Zip",
+    "exe_name": "7z.exe",
+    "path": "C:\\Program Files\\7-Zip\\7z.exe",
+    "source": "program_files"
+  },
+  "notepad++": {
+    "name": "Notepad++",
+    "exe_name": "notepad++.exe",
+    "path": "C:\\Program Files (x86)\\Notepad++\\notepad++.exe",
+    "source": "start_menu"
+  },
+  "microsoft help viewer": {
+    "name": "Microsoft Help Viewer 2.2",
+    "exe_name": "HlpViewer.exe",
+    "path": "C:\\Program Files (x86)\\Microsoft Help Viewer\\v2.2\\HlpViewer.exe",
+    "source": "registry"
+  },
+  "mozilla firefox": {
+    "name": "Mozilla Firefox (x86 en-US)",
+    "exe_name": "firefox.exe",
+    "path": "C:\\Program Files (x86)\\Mozilla Firefox\\firefox.exe",
+    "source": "registry"
+  },
+  "beyond compare 4": {
+    "name": "Beyond Compare 4",
+    "exe_name": "BCompare.exe",
+    "path": "C:\\Program Files\\Beyond Compare 4\\BCompare.exe",
+    "source": "program_files"
+  },
+  "dotnet": {
+    "name": "dotnet",
+    "exe_name": "dotnet.exe",
+    "path": "C:\\Program Files\\dotnet\\dotnet.exe",
+    "source": "program_files"
+  },
+  "espeak ng": {
+    "name": "eSpeak NG",
+    "exe_name": "espeak-ng.exe",
+    "path": "C:\\Program Files\\eSpeak NG\\espeak-ng.exe",
+    "source": "program_files"
+  },
+  "stdu xml editor version": {
+    "name": "STDU XML Editor version 1.0.126.0",
+    "exe_name": "unins000.exe",
+    "path": "C:\\Portables\\STDU XML Editor\\unins000.exe",
+    "source": "registry"
+  },
+  "onedrive": {
+    "name": "OneDrive",
+    "exe_name": "OneDrive.exe",
+    "path": "C:\\Program Files\\Microsoft OneDrive\\OneDrive.exe",
+    "source": "start_menu"
+  },
+  "git bash": {
+    "name": "Git Bash",
+    "exe_name": "git-bash.exe",
+    "path": "C:\\Users\\Nivin\\AppData\\Local\\Programs\\Git\\git-bash.exe",
+    "source": "start_menu"
+  },
+  "web components": {
+    "name": "Web Components",
+    "exe_name": "unins000.exe",
+    "path": "C:\\Program Files (x86)\\Web Components\\unins000.exe",
+    "source": "registry"
+  },
+  "git cmd": {
+    "name": "Git CMD",
+    "exe_name": "git-cmd.exe",
+    "path": "C:\\Users\\Nivin\\AppData\\Local\\Programs\\Git\\git-cmd.exe",
+    "source": "start_menu"
+  },
+  "hyper-v": {
+    "name": "Hyper-V",
+    "exe_name": "VMImport.exe",
+    "path": "C:\\Program Files\\Hyper-V\\VMImport.exe",
+    "source": "program_files"
+  },
+  "onenote": {
+    "name": "OneNote",
+    "exe_name": "ONENOTE.EXE",
+    "path": "C:\\Program Files (x86)\\Microsoft Office\\root\\Office16\\ONENOTE.EXE",
+    "source": "start_menu"
+  },
+  "apowersoft free screen recorder v3.1.0": {
+    "name": "Apowersoft Free Screen Recorder V3.1.0",
+    "exe_name": "Lame.exe",
+    "path": "C:\\Program Files (x86)\\Apowersoft\\Apowersoft Free Screen Recorder\\Lame.exe",
+    "source": "registry"
+  },
+  "git gui": {
+    "name": "Git GUI",
+    "exe_name": "git-gui.exe",
+    "path": "C:\\Users\\Nivin\\AppData\\Local\\Programs\\Git\\cmd\\git-gui.exe",
+    "source": "start_menu"
+  },
+  "outlook": {
+    "name": "Outlook (classic)",
+    "exe_name": "OUTLOOK.EXE",
+    "path": "C:\\Program Files (x86)\\Microsoft Office\\root\\Office16\\OUTLOOK.EXE",
+    "source": "start_menu"
+  },
+  "iis express": {
+    "name": "IIS Express",
+    "exe_name": "iisexpress.exe",
+    "path": "C:\\Program Files\\IIS Express\\iisexpress.exe",
+    "source": "program_files"
+  },
+  "wondershare helper compact": {
+    "name": "Wondershare Helper Compact 2.5.2",
+    "exe_name": "unins000.exe",
+    "path": "C:\\Program Files (x86)\\Common Files\\Wondershare\\Wondershare Helper Compact\\unins000.exe",
+    "source": "registry"
+  },
+  "postman agent": {
+    "name": "Postman Agent",
+    "exe_name": "Postman Agent.exe",
+    "path": "C:\\Users\\Nivin\\AppData\\Local\\Postman-Agent\\Postman Agent.exe",
+    "source": "start_menu"
+  },
+  "wondershare pdfelement 7 pro": {
+    "name": "Wondershare PDFelement 7 Pro(Build 7.0.1)",
+    "exe_name": "zip.exe",
+    "path": "C:\\Program Files (x86)\\Wondershare\\Wondershare PDFelement Pro for Windows (CPC)\\zip.exe",
+    "source": "registry"
+  },
+  "postman": {
+    "name": "Postman",
+    "exe_name": "Postman.exe",
+    "path": "C:\\Users\\Nivin\\AppData\\Local\\Postman\\Postman.exe",
+    "source": "start_menu"
+  },
+  "pc health check": {
+    "name": "PC Health Check",
+    "exe_name": "PCHealthCheck.exe",
+    "path": "C:\\Program Files\\PCHealthCheck\\PCHealthCheck.exe",
+    "source": "start_menu"
+  },
+  "d-link dwa-131 - v5.12b02": {
+    "name": "D-Link DWA-131 - V5.12b02",
+    "exe_name": "vcredist_x64.exe",
+    "path": "C:\\Program Files (x86)\\D-Link\\DWA-131 revE\\vcredist_x64.exe",
+    "source": "registry"
+  },
+  "stopupdates10 version": {
+    "name": "StopUpdates10 version 4.5.2023.0523",
+    "exe_name": "wu.exe",
+    "path": "C:\\Program Files (x86)\\StopUpdates10\\wu.exe",
+    "source": "registry"
+  },
+  "microsoft onedrive": {
+    "name": "Microsoft OneDrive",
+    "exe_name": "OneDrive.exe",
+    "path": "C:\\Program Files\\Microsoft OneDrive\\OneDrive.exe",
+    "source": "program_files"
+  },
+  "ultraviewer version": {
+    "name": "UltraViewer version 6.6.124",
+    "exe_name": "uv_x64.exe",
+    "path": "C:\\Program Files (x86)\\UltraViewer\\uv_x64.exe",
+    "source": "registry"
+  },
+  "webplugin.exe version": {
+    "name": "webplugin.exe version 3.1.0.3",
+    "exe_name": "unins000.exe",
+    "path": "C:\\Program Files (x86)\\webplugin.exe\\unins000.exe",
+    "source": "registry"
+  },
+  "cmd": {
+    "name": "cmd",
+    "exe_name": "cmd.exe",
+    "path": "C:\\Windows\\System32\\cmd.exe",
+    "source": "process"
+  },
+  "microsoft update health tools": {
+    "name": "Microsoft Update Health Tools",
+    "exe_name": "expediteupdater.exe",
+    "path": "C:\\Program Files\\Microsoft Update Health Tools\\expediteupdater.exe",
+    "source": "program_files"
+  },
+  "powerpoint": {
+    "name": "PowerPoint",
+    "exe_name": "POWERPNT.EXE",
+    "path": "C:\\Program Files (x86)\\Microsoft Office\\root\\Office16\\POWERPNT.EXE",
+    "source": "start_menu"
+  },
+  "nodejs": {
+    "name": "nodejs",
+    "exe_name": "node.exe",
+    "path": "C:\\Program Files\\nodejs\\node.exe",
+    "source": "program_files"
+  },
+  "pchealthcheck": {
+    "name": "PCHealthCheck",
+    "exe_name": "PCHealthCheck.exe",
+    "path": "C:\\Program Files\\PCHealthCheck\\PCHealthCheck.exe",
+    "source": "program_files"
+  },
+  "lsaiso": {
+    "name": "LsaIso",
+    "exe_name": "LsaIso.exe",
+    "path": "C:\\Windows\\System32\\LsaIso.exe",
+    "source": "process"
+  },
+  "chrome": {
+    "name": "chrome",
+    "exe_name": "chrome.exe",
+    "path": "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
+    "source": "process"
+  },
+  "idle": {
+    "name": "IDLE (Python 3.11 64-bit)",
+    "exe_name": "pythonw.exe",
+    "path": "C:\\Users\\Nivin\\AppData\\Local\\Programs\\Python\\Python311\\pythonw.exe",
+    "source": "start_menu"
+  },
+  "sgrmbroker": {
+    "name": "SgrmBroker",
+    "exe_name": "SgrmBroker.exe",
+    "path": "C:\\Windows\\System32\\SgrmBroker.exe",
+    "source": "process"
+  },
+  "python 3.11": {
+    "name": "Python 3.11 (64-bit)",
+    "exe_name": "python.exe",
+    "path": "C:\\Users\\Nivin\\AppData\\Local\\Programs\\Python\\Python311\\python.exe",
+    "source": "start_menu"
+  },
+  "publisher": {
+    "name": "Publisher",
+    "exe_name": "MSPUB.EXE",
+    "path": "C:\\Program Files (x86)\\Microsoft Office\\root\\Office16\\MSPUB.EXE",
+    "source": "start_menu"
+  },
+  "sticky notes": {
+    "name": "Sticky Notes (new)",
+    "exe_name": "ONENOTE.EXE",
+    "path": "C:\\Program Files (x86)\\Microsoft Office\\root\\Office16\\ONENOTE.EXE",
+    "source": "start_menu"
+  },
+  "applicationframehost": {
+    "name": "ApplicationFrameHost",
+    "exe_name": "ApplicationFrameHost.exe",
+    "path": "C:\\Windows\\System32\\ApplicationFrameHost.exe",
+    "source": "process"
+  },
+  "igfxtray": {
+    "name": "igfxTray",
+    "exe_name": "igfxTray.exe",
+    "path": "C:\\Windows\\System32\\igfxTray.exe",
+    "source": "process"
+  },
+  "igfxem": {
+    "name": "igfxEM",
+    "exe_name": "igfxEM.exe",
+    "path": "C:\\Windows\\System32\\igfxEM.exe",
+    "source": "process"
+  },
+  "powershell": {
+    "name": "powershell",
+    "exe_name": "powershell.exe",
+    "path": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+    "source": "process"
+  },
+  "vmms": {
+    "name": "vmms",
+    "exe_name": "vmms.exe",
+    "path": "C:\\Windows\\System32\\vmms.exe",
+    "source": "process"
+  },
+  "ruxim": {
+    "name": "RUXIM",
+    "exe_name": "RUXIMIH.exe",
+    "path": "C:\\Program Files\\RUXIM\\RUXIMIH.exe",
+    "source": "program_files"
+  },
+  "su10guard": {
+    "name": "SU10Guard",
+    "exe_name": "SU10Guard.exe",
+    "path": "C:\\Program Files (x86)\\StopUpdates10\\SU10Guard.exe",
+    "source": "process"
+  },
+  "igfxcuiservice": {
+    "name": "igfxCUIService",
+    "exe_name": "igfxCUIService.exe",
+    "path": "C:\\Windows\\System32\\igfxCUIService.exe",
+    "source": "process"
+  },
+  "python 3.11 module docs": {
+    "name": "Python 3.11 Module Docs (64-bit)",
+    "exe_name": "python.exe",
+    "path": "C:\\Users\\Nivin\\AppData\\Local\\Programs\\Python\\Python311\\python.exe",
+    "source": "start_menu"
+  },
+  "compattelrunner": {
+    "name": "CompatTelRunner",
+    "exe_name": "CompatTelRunner.exe",
+    "path": "C:\\Windows\\System32\\CompatTelRunner.exe",
+    "source": "process"
+  },
+  "presentationfontcache": {
+    "name": "PresentationFontCache",
+    "exe_name": "PresentationFontCache.exe",
+    "path": "C:\\Windows\\Microsoft.NET\\Framework64\\v3.0\\WPF\\PresentationFontCache.exe",
+    "source": "process"
+  },
+  "avpui": {
+    "name": "avpui",
+    "exe_name": "avpui.exe",
+    "path": "C:\\Program Files (x86)\\Kaspersky Lab\\Kaspersky Small Office Security 21.25\\avpui.exe",
+    "source": "process"
+  },
+  "visual studio 2017": {
+    "name": "Visual Studio 2017",
+    "exe_name": "devenv.exe",
+    "path": "C:\\Program Files (x86)\\Microsoft Visual Studio\\2017\\Community\\Common7\\IDE\\devenv.exe",
+    "source": "start_menu"
+  },
+  "searchindexer": {
+    "name": "SearchIndexer",
+    "exe_name": "SearchIndexer.exe",
+    "path": "C:\\Windows\\System32\\SearchIndexer.exe",
+    "source": "process"
+  },
+  "windows defender": {
+    "name": "Windows Defender",
+    "exe_name": "ConfigSecurityPolicy.exe",
+    "path": "C:\\Program Files\\Windows Defender\\ConfigSecurityPolicy.exe",
+    "source": "program_files"
+  },
+  "ace-voice-controller": {
+    "name": "ace-voice-controller",
+    "exe_name": "ace-voice-controller.exe",
+    "path": "E:\\Nivin_Sync\\ACE\\Voice\\voice-to-command\\frontend\\src-tauri\\target\\debug\\ace-voice-controller.exe",
+    "source": "process"
+  },
+  "send to onenote": {
+    "name": "Send to OneNote",
+    "exe_name": "ONENOTEM.EXE",
+    "path": "C:\\Program Files (x86)\\Microsoft Office\\root\\Office16\\ONENOTEM.EXE",
+    "source": "start_menu"
+  },
+  "officeclicktorun": {
+    "name": "OfficeClickToRun",
+    "exe_name": "OfficeClickToRun.exe",
+    "path": "C:\\Program Files\\Common Files\\microsoft shared\\ClickToRun\\OfficeClickToRun.exe",
+    "source": "process"
+  },
+  "avp": {
+    "name": "avp",
+    "exe_name": "avp.exe",
+    "path": "C:\\Program Files (x86)\\Kaspersky Lab\\Kaspersky Small Office Security 21.25\\avp.exe",
+    "source": "process"
+  },
+  "commonhkfpmodulesvr": {
+    "name": "CommonHKFPModuleSvr",
+    "exe_name": "CommonHKFPModuleSvr.exe",
+    "path": "C:\\Users\\Public\\HKFPModuleSvr\\CommonHKFPModuleSvr.exe",
+    "source": "process"
+  },
+  "kpm_service": {
+    "name": "kpm_service",
+    "exe_name": "kpm_service.exe",
+    "path": "C:\\Program Files (x86)\\Kaspersky Lab\\Kaspersky Password Manager 25.1\\kpm_service.exe",
+    "source": "process"
+  },
+  "snmp": {
+    "name": "snmp",
+    "exe_name": "snmp.exe",
+    "path": "C:\\Windows\\System32\\snmp.exe",
+    "source": "process"
+  },
+  "testcontainers.desktop": {
+    "name": "testcontainers.desktop",
+    "exe_name": "testcontainers-desktop.exe",
+    "path": "E:\\Nivin_Sync\\ACE\\New folder\\testcontainers-desktop.exe",
+    "source": "start_menu"
+  },
+  "sqlwriter": {
+    "name": "sqlwriter",
+    "exe_name": "sqlwriter.exe",
+    "path": "C:\\Program Files\\Microsoft SQL Server\\90\\Shared\\sqlwriter.exe",
+    "source": "process"
+  },
+  "teamviewer_service": {
+    "name": "TeamViewer_Service",
+    "exe_name": "TeamViewer_Service.exe",
+    "path": "C:\\Users\\Public\\temp\\TeamViewer\\TeamViewer_Service.exe",
+    "source": "process"
+  },
+  "windows defender advanced threat protection": {
+    "name": "Windows Defender Advanced Threat Protection",
+    "exe_name": "SenseAadAuthenticator.exe",
+    "path": "C:\\Program Files\\Windows Defender Advanced Threat Protection\\SenseAadAuthenticator.exe",
+    "source": "program_files"
+  },
+  "ultidev.webserver.monitor": {
+    "name": "UltiDev.WebServer.Monitor",
+    "exe_name": "UltiDev.WebServer.Monitor.exe",
+    "path": "C:\\Program Files (x86)\\UltiDev\\Web Server\\UltiDev.WebServer.Monitor.exe",
+    "source": "process"
+  },
+  "visual studio 2022": {
+    "name": "Visual Studio 2022",
+    "exe_name": "devenv.exe",
+    "path": "D:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\Common7\\IDE\\devenv.exe",
+    "source": "start_menu"
+  },
+  "windows mail": {
+    "name": "Windows Mail",
+    "exe_name": "wabmig.exe",
+    "path": "C:\\Program Files\\Windows Mail\\wabmig.exe",
+    "source": "program_files"
+  },
+  "administrative tools": {
+    "name": "Administrative Tools",
+    "exe_name": "control.exe",
+    "path": "C:\\WINDOWS\\system32\\control.exe",
+    "source": "start_menu"
+  },
+  "ultraviewer_service": {
+    "name": "UltraViewer_Service",
+    "exe_name": "UltraViewer_Service.exe",
+    "path": "C:\\Program Files (x86)\\UltraViewer\\UltraViewer_Service.exe",
+    "source": "process"
+  },
+  "explorer": {
+    "name": "explorer",
+    "exe_name": "explorer.exe",
+    "path": "C:\\Windows\\explorer.exe",
+    "source": "process"
+  },
+  "visual studio installer": {
+    "name": "Visual Studio Installer",
+    "exe_name": "setup.exe",
+    "path": "C:\\Program Files (x86)\\Microsoft Visual Studio\\Installer\\setup.exe",
+    "source": "start_menu"
+  },
+  "command prompt": {
+    "name": "Command Prompt",
+    "exe_name": "cmd.exe",
+    "path": "C:\\WINDOWS\\system32\\cmd.exe",
+    "source": "start_menu"
+  },
+  "tiworker": {
+    "name": "TiWorker",
+    "exe_name": "TiWorker.exe",
+    "path": "C:\\Windows\\WinSxS\\amd64_microsoft-windows-servicingstack_31bf3856ad364e35_10.0.19041.3745_none_7ded3f327ca60a41\\TiWorker.exe",
+    "source": "process"
+  },
+  "word": {
+    "name": "Word",
+    "exe_name": "WINWORD.EXE",
+    "path": "C:\\Program Files (x86)\\Microsoft Office\\root\\Office16\\WINWORD.EXE",
+    "source": "start_menu"
+  },
+  "dashost": {
+    "name": "dasHost",
+    "exe_name": "dasHost.exe",
+    "path": "C:\\Windows\\System32\\dasHost.exe",
+    "source": "process"
+  },
+  "msedgewebview2": {
+    "name": "msedgewebview2",
+    "exe_name": "msedgewebview2.exe",
+    "path": "C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\149.0.4022.80\\msedgewebview2.exe",
+    "source": "process"
+  },
+  "igfxhk": {
+    "name": "igfxHK",
+    "exe_name": "igfxHK.exe",
+    "path": "C:\\Windows\\System32\\igfxHK.exe",
+    "source": "process"
+  },
+  "klsbservice": {
+    "name": "klsbservice",
+    "exe_name": "klsbservice.exe",
+    "path": "C:\\Program Files\\KLS Soft\\KLS Backup 2025 Professional\\klsbservice.exe",
+    "source": "process"
+  },
+  "visual studio code": {
+    "name": "Visual Studio Code",
+    "exe_name": "Code.exe",
+    "path": "D:\\Users\\Nivin\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe",
+    "source": "start_menu"
+  },
+  "vmcompute": {
+    "name": "vmcompute",
+    "exe_name": "vmcompute.exe",
+    "path": "C:\\Windows\\System32\\vmcompute.exe",
+    "source": "process"
+  },
+  "onedrivestandaloneupdater": {
+    "name": "OneDriveStandaloneUpdater",
+    "exe_name": "OneDriveStandaloneUpdater.exe",
+    "path": "C:\\Program Files\\Microsoft OneDrive\\OneDriveStandaloneUpdater.exe",
+    "source": "process"
+  },
+  "msdtc": {
+    "name": "msdtc",
+    "exe_name": "msdtc.exe",
+    "path": "C:\\Windows\\System32\\msdtc.exe",
+    "source": "process"
+  },
+  "greenshot": {
+    "name": "Greenshot",
+    "exe_name": "Greenshot.exe",
+    "path": "D:\\Program Files (x86)\\Greenshot\\Greenshot.exe",
+    "source": "process"
+  },
+  "rdpclip": {
+    "name": "rdpclip",
+    "exe_name": "rdpclip.exe",
+    "path": "C:\\Windows\\System32\\rdpclip.exe",
+    "source": "process"
+  },
+  "trustedinstaller": {
+    "name": "TrustedInstaller",
+    "exe_name": "TrustedInstaller.exe",
+    "path": "C:\\Windows\\servicing\\TrustedInstaller.exe",
+    "source": "process"
+  },
+  "windows media player": {
+    "name": "Windows Media Player",
+    "exe_name": "wmplayer.exe",
+    "path": "C:\\Program Files\\Windows Media Player\\wmplayer.exe",
+    "source": "program_files"
+  },
+  "windows photo viewer": {
+    "name": "Windows Photo Viewer",
+    "exe_name": "ImagingDevices.exe",
+    "path": "C:\\Program Files\\Windows Photo Viewer\\ImagingDevices.exe",
+    "source": "program_files"
+  },
+  "uws.apphost.clr2.anycpu": {
+    "name": "UWS.AppHost.Clr2.AnyCpu",
+    "exe_name": "UWS.AppHost.Clr2.AnyCpu.exe",
+    "path": "C:\\Program Files (x86)\\UltiDev\\Web Server\\UWS.AppHost.Clr2.AnyCpu.exe",
+    "source": "process"
+  },
+  "7-zip file manager": {
+    "name": "7-Zip File Manager",
+    "exe_name": "7zFM.exe",
+    "path": "C:\\Program Files\\7-Zip\\7zFM.exe",
+    "source": "start_menu"
+  },
+  "uws.apphost.clr4.anycpu": {
+    "name": "UWS.AppHost.Clr4.AnyCPU",
+    "exe_name": "UWS.AppHost.Clr4.AnyCPU.exe",
+    "path": "C:\\Program Files (x86)\\UltiDev\\Web Server\\UWS.AppHost.Clr4.AnyCPU.exe",
+    "source": "process"
+  },
+  "crashpad_handler": {
+    "name": "crashpad_handler",
+    "exe_name": "crashpad_handler.exe",
+    "path": "C:\\Users\\Public\\temp\\TeamViewer\\crashpad_handler.exe",
+    "source": "process"
+  },
+  "language_server_windows_x64": {
+    "name": "language_server_windows_x64",
+    "exe_name": "language_server_windows_x64.exe",
+    "path": "C:\\Users\\Nivin\\AppData\\Local\\Programs\\Antigravity\\resources\\app\\extensions\\antigravity\\bin\\language_server_windows_x64.exe",
+    "source": "process"
+  },
+  "windows powershell": {
+    "name": "Windows PowerShell (x86)",
+    "exe_name": "powershell.exe",
+    "path": "C:\\Windows\\SysWOW64\\WindowsPowerShell\\v1.0\\powershell.exe",
+    "source": "start_menu"
+  },
+  "lmc": {
+    "name": "lmc",
+    "exe_name": "lmc.exe",
+    "path": "E:\\Software\\Lan_Messenger\\lmc.exe",
+    "source": "process"
+  },
+  "taskhostw": {
+    "name": "taskhostw",
+    "exe_name": "taskhostw.exe",
+    "path": "C:\\Windows\\System32\\taskhostw.exe",
+    "source": "process"
+  },
+  "pyrefly": {
+    "name": "pyrefly",
+    "exe_name": "pyrefly.exe",
+    "path": "C:\\Users\\Nivin\\.antigravity\\extensions\\meta.pyrefly-1.1.1-win32-x64\\bin\\pyrefly.exe",
+    "source": "process"
+  },
+  "textinputhost": {
+    "name": "TextInputHost",
+    "exe_name": "TextInputHost.exe",
+    "path": "C:\\Windows\\SystemApps\\MicrosoftWindows.Client.CBS_cw5n1h2txyewy\\TextInputHost.exe",
+    "source": "process"
+  },
+  "searchfilterhost": {
+    "name": "SearchFilterHost",
+    "exe_name": "SearchFilterHost.exe",
+    "path": "C:\\Windows\\System32\\SearchFilterHost.exe",
+    "source": "process"
+  },
+  "winrar": {
+    "name": "WinRAR",
+    "exe_name": "WinRAR.exe",
+    "path": "C:\\Program Files\\WinRAR\\WinRAR.exe",
+    "source": "program_files"
+  },
+  "node": {
+    "name": "node",
+    "exe_name": "node.exe",
+    "path": "C:\\Program Files\\nodejs\\node.exe",
+    "source": "process"
+  },
+  "testcontainers-desktop": {
+    "name": "testcontainers-desktop",
+    "exe_name": "testcontainers-desktop.exe",
+    "path": "E:\\Nivin_Sync\\ACE\\New folder\\testcontainers-desktop.exe",
+    "source": "process"
+  },
+  "shellexperiencehost": {
+    "name": "ShellExperienceHost",
+    "exe_name": "ShellExperienceHost.exe",
+    "path": "C:\\Windows\\SystemApps\\ShellExperienceHost_cw5n1h2txyewy\\ShellExperienceHost.exe",
+    "source": "process"
+  },
+  "python": {
+    "name": "python",
+    "exe_name": "python.exe",
+    "path": "C:\\Users\\Nivin\\AppData\\Local\\Programs\\Python\\Python311\\python.exe",
+    "source": "process"
+  },
+  "searchprotocolhost": {
+    "name": "SearchProtocolHost",
+    "exe_name": "SearchProtocolHost.exe",
+    "path": "C:\\Windows\\System32\\SearchProtocolHost.exe",
+    "source": "process"
+  },
+  "speech recognition": {
+    "name": "Speech Recognition",
+    "exe_name": "sapisvr.exe",
+    "path": "C:\\WINDOWS\\Speech\\Common\\sapisvr.exe",
+    "source": "start_menu"
+  },
+  "sdxhelper": {
+    "name": "SDXHelper",
+    "exe_name": "SDXHelper.exe",
+    "path": "C:\\Program Files (x86)\\Microsoft Office\\root\\Office16\\SDXHelper.exe",
+    "source": "process"
+  },
+  "vssvc": {
+    "name": "VSSVC",
+    "exe_name": "VSSVC.exe",
+    "path": "C:\\Windows\\System32\\VSSVC.exe",
+    "source": "process"
+  },
+  "wmiprvse": {
+    "name": "WmiPrvSE",
+    "exe_name": "WmiPrvSE.exe",
+    "path": "C:\\Windows\\SysWOW64\\wbem\\WmiPrvSE.exe",
+    "source": "process"
+  },
+  "math input panel": {
+    "name": "Math Input Panel",
+    "exe_name": "mip.exe",
+    "path": "C:\\Program Files\\Common Files\\Microsoft Shared\\Ink\\mip.exe",
+    "source": "start_menu"
+  },
+  "useroobebroker": {
+    "name": "UserOOBEBroker",
+    "exe_name": "UserOOBEBroker.exe",
+    "path": "C:\\Windows\\System32\\oobe\\UserOOBEBroker.exe",
+    "source": "process"
+  },
+  "notepad": {
+    "name": "notepad",
+    "exe_name": "notepad.exe",
+    "path": "C:\\Windows\\System32\\notepad.exe",
+    "source": "process"
+  },
+  "logonui": {
+    "name": "LogonUI",
+    "exe_name": "LogonUI.exe",
+    "path": "C:\\Windows\\System32\\LogonUI.exe",
+    "source": "process"
+  },
+  "paint": {
+    "name": "Paint",
+    "exe_name": "mspaint.exe",
+    "path": "C:\\WINDOWS\\system32\\mspaint.exe",
+    "source": "start_menu"
+  },
+  "quick assist": {
+    "name": "Quick Assist",
+    "exe_name": "quickassist.exe",
+    "path": "C:\\WINDOWS\\system32\\quickassist.exe",
+    "source": "start_menu"
+  },
+  "ivms-4200 site": {
+    "name": "iVMS-4200 Site",
+    "exe_name": "uninstall.exe",
+    "path": "C:\\Program Files (x86)\\iVMS-4200 Site\\uninstall.exe",
+    "source": "program_files"
+  },
+  "remote desktop connection": {
+    "name": "Remote Desktop Connection",
+    "exe_name": "mstsc.exe",
+    "path": "C:\\WINDOWS\\system32\\mstsc.exe",
+    "source": "start_menu"
+  },
+  "snipping tool": {
+    "name": "Snipping Tool",
+    "exe_name": "SnippingTool.exe",
+    "path": "C:\\WINDOWS\\system32\\SnippingTool.exe",
+    "source": "start_menu"
+  },
+  "steps recorder": {
+    "name": "Steps Recorder",
+    "exe_name": "psr.exe",
+    "path": "C:\\WINDOWS\\system32\\psr.exe",
+    "source": "start_menu"
+  },
+  "windows fax and scan": {
+    "name": "Windows Fax and Scan",
+    "exe_name": "WFS.exe",
+    "path": "C:\\WINDOWS\\system32\\WFS.exe",
+    "source": "start_menu"
+  },
+  "mozilla maintenance service": {
+    "name": "Mozilla Maintenance Service",
+    "exe_name": "maintenanceservice.exe",
+    "path": "C:\\Program Files (x86)\\Mozilla Maintenance Service\\maintenanceservice.exe",
+    "source": "program_files"
+  },
+  "wordpad": {
+    "name": "Wordpad",
+    "exe_name": "wordpad.exe",
+    "path": "C:\\Program Files\\Windows NT\\Accessories\\wordpad.exe",
+    "source": "start_menu"
+  },
+  "pecompact": {
+    "name": "PECompact",
+    "exe_name": "pec.exe",
+    "path": "C:\\Program Files (x86)\\PECompact\\pec.exe",
+    "source": "program_files"
+  },
+  "xps viewer": {
+    "name": "XPS Viewer",
+    "exe_name": "xpsrchvw.exe",
+    "path": "C:\\WINDOWS\\system32\\xpsrchvw.exe",
+    "source": "start_menu"
+  },
+  "stopupdates10": {
+    "name": "StopUpdates10",
+    "exe_name": "StopUpdates10.exe",
+    "path": "C:\\Program Files (x86)\\StopUpdates10\\StopUpdates10.exe",
+    "source": "program_files"
+  },
+  "web publish": {
+    "name": "Web Publish",
+    "exe_name": "WPWIZ.EXE",
+    "path": "C:\\Program Files (x86)\\Web Publish\\WPWIZ.EXE",
+    "source": "program_files"
+  },
+  "webplugin.exe": {
+    "name": "webplugin.exe",
+    "exe_name": "unins000.exe",
+    "path": "C:\\Program Files (x86)\\webplugin.exe\\unins000.exe",
+    "source": "program_files"
+  },
+  "character map": {
+    "name": "Character Map",
+    "exe_name": "charmap.exe",
+    "path": "C:\\WINDOWS\\system32\\charmap.exe",
+    "source": "start_menu"
+  },
+  "dfrgui": {
+    "name": "dfrgui",
+    "exe_name": "dfrgui.exe",
+    "path": "C:\\WINDOWS\\system32\\dfrgui.exe",
+    "source": "start_menu"
+  },
+  "disk cleanup": {
+    "name": "Disk Cleanup",
+    "exe_name": "cleanmgr.exe",
+    "path": "C:\\WINDOWS\\system32\\cleanmgr.exe",
+    "source": "start_menu"
+  },
+  "hyper-v manager": {
+    "name": "Hyper-V Manager",
+    "exe_name": "mmc.exe",
+    "path": "C:\\WINDOWS\\System32\\mmc.exe",
+    "source": "start_menu"
+  },
+  "iscsi initiator": {
+    "name": "iSCSI Initiator",
+    "exe_name": "iscsicpl.exe",
+    "path": "C:\\WINDOWS\\system32\\iscsicpl.exe",
+    "source": "start_menu"
+  },
+  "memory diagnostics tool": {
+    "name": "Memory Diagnostics Tool",
+    "exe_name": "MdSched.exe",
+    "path": "C:\\WINDOWS\\system32\\MdSched.exe",
+    "source": "start_menu"
+  },
+  "odbc data sources": {
+    "name": "ODBC Data Sources (32-bit)",
+    "exe_name": "odbcad32.exe",
+    "path": "C:\\WINDOWS\\syswow64\\odbcad32.exe",
+    "source": "start_menu"
+  },
+  "recoverydrive": {
+    "name": "RecoveryDrive",
+    "exe_name": "RecoveryDrive.exe",
+    "path": "C:\\WINDOWS\\system32\\RecoveryDrive.exe",
+    "source": "start_menu"
+  },
+  "registry editor": {
+    "name": "Registry Editor",
+    "exe_name": "regedit.exe",
+    "path": "C:\\WINDOWS\\regedit.exe",
+    "source": "start_menu"
+  },
+  "resource monitor": {
+    "name": "Resource Monitor",
+    "exe_name": "perfmon.exe",
+    "path": "C:\\WINDOWS\\system32\\perfmon.exe",
+    "source": "start_menu"
+  },
+  "system configuration": {
+    "name": "System Configuration",
+    "exe_name": "msconfig.exe",
+    "path": "C:\\WINDOWS\\system32\\msconfig.exe",
+    "source": "start_menu"
+  },
+  "system information": {
+    "name": "System Information",
+    "exe_name": "msinfo32.exe",
+    "path": "C:\\WINDOWS\\system32\\msinfo32.exe",
+    "source": "start_menu"
+  },
+  "vmcreate": {
+    "name": "VMCreate",
+    "exe_name": "VMCreate.exe",
+    "path": "C:\\Program Files\\Hyper-V\\VMCreate.exe",
+    "source": "start_menu"
+  },
+  "advanced repackager": {
+    "name": "Advanced Repackager 21.9",
+    "exe_name": "Repackager.exe",
+    "path": "C:\\Program Files (x86)\\Advanced Installer 21.9\\bin\\x86\\Repackager.exe",
+    "source": "start_menu"
+  },
+  "check for advanced installer 21.9 updates": {
+    "name": "Check for Advanced Installer 21.9 Updates",
+    "exe_name": "updater.exe",
+    "path": "C:\\Program Files (x86)\\Advanced Installer 21.9\\bin\\x86\\updater.exe",
+    "source": "start_menu"
+  },
+  "conflicts detector": {
+    "name": "Conflicts Detector 21.9",
+    "exe_name": "ConflictsDetector.exe",
+    "path": "C:\\Program Files (x86)\\Advanced Installer 21.9\\bin\\x86\\ConflictsDetector.exe",
+    "source": "start_menu"
+  },
+  "intune deploy tool": {
+    "name": "Intune Deploy Tool 21.9",
+    "exe_name": "intune.exe",
+    "path": "C:\\Program Files (x86)\\Advanced Installer 21.9\\bin\\x86\\intune.exe",
+    "source": "start_menu"
+  },
+  "sccm deploy tool": {
+    "name": "SCCM Deploy Tool 21.9",
+    "exe_name": "sccm.exe",
+    "path": "C:\\Program Files (x86)\\Advanced Installer 21.9\\bin\\x86\\sccm.exe",
+    "source": "start_menu"
+  },
+  "uninstall apowersoft free screen recorder": {
+    "name": "Uninstall Apowersoft Free Screen Recorder",
+    "exe_name": "unins000.exe",
+    "path": "C:\\Program Files (x86)\\Apowersoft\\Apowersoft Free Screen Recorder\\unins000.exe",
+    "source": "start_menu"
+  },
+  "cpu-z": {
+    "name": "CPU-Z",
+    "exe_name": "cpuz.exe",
+    "path": "C:\\Program Files\\CPUID\\CPU-Z\\cpuz.exe",
+    "source": "start_menu"
+  },
+  "uninstall cpu-z": {
+    "name": "Uninstall CPU-Z",
+    "exe_name": "unins000.exe",
+    "path": "C:\\Program Files\\CPUID\\CPU-Z\\unins000.exe",
+    "source": "start_menu"
+  },
+  "crystal reports license": {
+    "name": "Crystal Reports License",
+    "exe_name": "SCRIcons.exe",
+    "path": "C:\\WINDOWS\\Installer\\{7699B723-9718-41DE-8C18-549F341C02CE}\\SCRIcons.exe",
+    "source": "start_menu"
+  },
+  "dwa-131e portable wifi": {
+    "name": "DWA-131E Portable WiFi",
+    "exe_name": "PortableWiFi.exe",
+    "path": "C:\\Program Files (x86)\\D-Link\\DWA-131 revE\\IHV\\PortableWiFi.exe",
+    "source": "start_menu"
+  },
+  "dwa-131e uninstall": {
+    "name": "DWA-131E Uninstall",
+    "exe_name": "setup.exe",
+    "path": "C:\\Program Files (x86)\\InstallShield Installation Information\\{B7C11488-750D-4E48-A9A4-7207A335984D}\\setup.exe",
+    "source": "start_menu"
+  },
+  "uninstall foxit reader": {
+    "name": "Uninstall Foxit Reader",
+    "exe_name": "unins000.exe",
+    "path": "C:\\Program Files (x86)\\Foxit Software\\Foxit Reader\\unins000.exe",
+    "source": "start_menu"
+  },
+  "microsoft office visio 2007": {
+    "name": "Microsoft Office Visio 2007",
+    "exe_name": "visicon.exe",
+    "path": "C:\\Windows\\Installer\\{90120000-0051-0000-0000-0000000FF1CE}\\visicon.exe",
+    "source": "start_menu"
+  },
+  "digital certificate for vba projects": {
+    "name": "Digital Certificate for VBA Projects",
+    "exe_name": "misc.exe",
+    "path": "C:\\Windows\\Installer\\{90120000-0051-0000-0000-0000000FF1CE}\\misc.exe",
+    "source": "start_menu"
+  },
+  "microsoft clip organizer": {
+    "name": "Microsoft Clip Organizer",
+    "exe_name": "cagicon.exe",
+    "path": "C:\\Windows\\Installer\\{90120000-0051-0000-0000-0000000FF1CE}\\cagicon.exe",
+    "source": "start_menu"
+  },
+  "microsoft office 2007 language settings": {
+    "name": "Microsoft Office 2007 Language Settings",
+    "exe_name": "misc.exe",
+    "path": "C:\\Windows\\Installer\\{90120000-0051-0000-0000-0000000FF1CE}\\misc.exe",
+    "source": "start_menu"
+  },
+  "microsoft office diagnostics": {
+    "name": "Microsoft Office Diagnostics",
+    "exe_name": "misc.exe",
+    "path": "C:\\Windows\\Installer\\{90120000-0051-0000-0000-0000000FF1CE}\\misc.exe",
+    "source": "start_menu"
+  },
+  "microsoft office document imaging": {
+    "name": "Microsoft Office Document Imaging",
+    "exe_name": "mspicons.exe",
+    "path": "C:\\Windows\\Installer\\{90120000-0051-0000-0000-0000000FF1CE}\\mspicons.exe",
+    "source": "start_menu"
+  },
+  "microsoft office document scanning": {
+    "name": "Microsoft Office Document Scanning",
+    "exe_name": "mspicons.exe",
+    "path": "C:\\Windows\\Installer\\{90120000-0051-0000-0000-0000000FF1CE}\\mspicons.exe",
+    "source": "start_menu"
+  },
+  "microsoft office picture manager": {
+    "name": "Microsoft Office Picture Manager",
+    "exe_name": "oisicon.exe",
+    "path": "C:\\Windows\\Installer\\{90120000-0051-0000-0000-0000000FF1CE}\\oisicon.exe",
+    "source": "start_menu"
+  },
+  "office upload center": {
+    "name": "Office Upload Center",
+    "exe_name": "AppVLP.exe",
+    "path": "C:\\Program Files (x86)\\Microsoft Office\\root\\Client\\AppVLP.exe",
+    "source": "start_menu"
+  },
+  "office language preferences": {
+    "name": "Office Language Preferences",
+    "exe_name": "SETLANG.EXE",
+    "path": "C:\\Program Files (x86)\\Microsoft Office\\root\\Office16\\SETLANG.EXE",
+    "source": "start_menu"
+  },
+  "sql server 2017 rc1 import and export data": {
+    "name": "SQL Server 2017 RC1 Import and Export Data (32-bit)",
+    "exe_name": "DTSWizard.exe",
+    "path": "C:\\Program Files (x86)\\Microsoft SQL Server\\140\\DTS\\Binn\\DTSWizard.exe",
+    "source": "start_menu"
+  },
+  "deployment wizard": {
+    "name": "Deployment Wizard",
+    "exe_name": "Microsoft.AnalysisServices.Deployment.exe",
+    "path": "C:\\Program Files (x86)\\Microsoft SQL Server\\140\\Tools\\Binn\\ManagementStudio\\Microsoft.AnalysisServices.Deployment.exe",
+    "source": "start_menu"
+  },
+  "reporting services configuration manager": {
+    "name": "Reporting Services Configuration Manager",
+    "exe_name": "RSConfigTool.exe",
+    "path": "C:\\Program Files (x86)\\Microsoft SQL Server\\140\\Tools\\Binn\\RSConfigTool.exe",
+    "source": "start_menu"
+  },
+  "sql server 2017 rc1 data feed publishing wizard": {
+    "name": "SQL Server 2017 RC1 Data Feed Publishing Wizard",
+    "exe_name": "ISDataFeedPublishingWizard.exe",
+    "path": "C:\\Program Files (x86)\\Microsoft SQL Server\\140\\DTS\\Binn\\ISDataFeedPublishingWizard.exe",
+    "source": "start_menu"
+  },
+  "sql server 2017 rc1 data profile viewer": {
+    "name": "SQL Server 2017 RC1 Data Profile Viewer",
+    "exe_name": "DataProfileViewer.exe",
+    "path": "C:\\Program Files (x86)\\Microsoft SQL Server\\140\\DTS\\Binn\\DataProfileViewer.exe",
+    "source": "start_menu"
+  },
+  "sql server 2017 rc1 deployment wizard": {
+    "name": "SQL Server 2017 RC1 Deployment Wizard",
+    "exe_name": "ISDeploymentWizard.exe",
+    "path": "C:\\Program Files (x86)\\Microsoft SQL Server\\140\\DTS\\Binn\\ISDeploymentWizard.exe",
+    "source": "start_menu"
+  },
+  "sql server 2017 rc1 execute package utility": {
+    "name": "SQL Server 2017 RC1 Execute Package Utility",
+    "exe_name": "DTExecUI.exe",
+    "path": "C:\\Program Files (x86)\\Microsoft SQL Server\\140\\Tools\\Binn\\ManagementStudio\\DTExecUI.exe",
+    "source": "start_menu"
+  },
+  "sql server 2017 rc1 project conversion wizard": {
+    "name": "SQL Server 2017 RC1 Project Conversion Wizard",
+    "exe_name": "ISProjectWizard.exe",
+    "path": "C:\\Program Files (x86)\\Microsoft SQL Server\\140\\DTS\\Binn\\ISProjectWizard.exe",
+    "source": "start_menu"
+  },
+  "sql server 2017 rc1 database engine tuning advisor": {
+    "name": "SQL Server 2017 RC1 Database Engine Tuning Advisor",
+    "exe_name": "DTASHELL.EXE",
+    "path": "C:\\Program Files (x86)\\Microsoft SQL Server\\140\\Tools\\Binn\\DTASHELL.EXE",
+    "source": "start_menu"
+  },
+  "microsoft sql server management studio 17": {
+    "name": "Microsoft SQL Server Management Studio 17",
+    "exe_name": "Ssms.exe",
+    "path": "C:\\Program Files (x86)\\Microsoft SQL Server\\140\\Tools\\Binn\\ManagementStudio\\Ssms.exe",
+    "source": "start_menu"
+  },
+  "sql server profiler 17": {
+    "name": "SQL Server Profiler 17",
+    "exe_name": "PROFILER.EXE",
+    "path": "C:\\Program Files (x86)\\Microsoft SQL Server\\140\\Tools\\Binn\\PROFILER.EXE",
+    "source": "start_menu"
+  },
+  "microsoft visual basic": {
+    "name": "Microsoft Visual Basic 6.0",
+    "exe_name": "VB6.EXE",
+    "path": "C:\\Program Files (x86)\\Microsoft Visual Studio\\VB98\\VB6.EXE",
+    "source": "start_menu"
+  },
+  "microsoft visual interdev": {
+    "name": "Microsoft Visual InterDev 6.0",
+    "exe_name": "DEVENV.EXE",
+    "path": "C:\\Program Files (x86)\\Microsoft Visual Studio\\Common\\IDE\\IDE98\\DEVENV.EXE",
+    "source": "start_menu"
+  },
+  "activex control test container": {
+    "name": "ActiveX Control Test Container",
+    "exe_name": "TSTCON32.EXE",
+    "path": "C:\\Program Files (x86)\\Microsoft Visual Studio\\Common\\Tools\\TSTCON32.EXE",
+    "source": "start_menu"
+  },
+  "api text viewer": {
+    "name": "API Text Viewer",
+    "exe_name": "APILOAD.EXE",
+    "path": "C:\\Program Files (x86)\\Microsoft Visual Studio\\Common\\Tools\\Winapi\\APILOAD.EXE",
+    "source": "start_menu"
+  },
+  "dataobject viewer": {
+    "name": "DataObject Viewer",
+    "exe_name": "DOBJVIEW.EXE",
+    "path": "C:\\Program Files (x86)\\Microsoft Visual Studio\\Common\\Tools\\DOBJVIEW.EXE",
+    "source": "start_menu"
+  },
+  "dde spy": {
+    "name": "DDE Spy",
+    "exe_name": "DDESPY.EXE",
+    "path": "C:\\Program Files (x86)\\Microsoft Visual Studio\\Common\\Tools\\WinNT\\DDESPY.EXE",
+    "source": "start_menu"
+  },
+  "depends": {
+    "name": "Depends",
+    "exe_name": "DEPENDS.EXE",
+    "path": "C:\\Program Files (x86)\\Microsoft Visual Studio\\Common\\Tools\\DEPENDS.EXE",
+    "source": "start_menu"
+  },
+  "docfile viewer": {
+    "name": "DocFile Viewer",
+    "exe_name": "DFVIEW.EXE",
+    "path": "C:\\Program Files (x86)\\Microsoft Visual Studio\\Common\\Tools\\DFVIEW.EXE",
+    "source": "start_menu"
+  },
+  "error lookup": {
+    "name": "Error Lookup",
+    "exe_name": "ERRLOOK.EXE",
+    "path": "C:\\Program Files (x86)\\Microsoft Visual Studio\\Common\\Tools\\ERRLOOK.EXE",
+    "source": "start_menu"
+  },
+  "ole client test": {
+    "name": "OLE Client Test",
+    "exe_name": "CL32TEST.EXE",
+    "path": "C:\\Program Files (x86)\\Microsoft Visual Studio\\Common\\Tools\\WinNT\\CL32TEST.EXE",
+    "source": "start_menu"
+  },
+  "ole server test": {
+    "name": "OLE Server Test",
+    "exe_name": "SR32TEST.EXE",
+    "path": "C:\\Program Files (x86)\\Microsoft Visual Studio\\Common\\Tools\\WinNT\\SR32TEST.EXE",
+    "source": "start_menu"
+  },
+  "ole view": {
+    "name": "OLE View",
+    "exe_name": "OLEVIEW.EXE",
+    "path": "C:\\Program Files (x86)\\Microsoft Visual Studio\\Common\\Tools\\OLEVIEW.EXE",
+    "source": "start_menu"
+  },
+  "package & deployment wizard": {
+    "name": "Package & Deployment Wizard",
+    "exe_name": "PDCMDLN.EXE",
+    "path": "C:\\Program Files (x86)\\Microsoft Visual Studio\\VB98\\Wizards\\PDWizard\\PDCMDLN.EXE",
+    "source": "start_menu"
+  },
+  "process viewer": {
+    "name": "Process Viewer",
+    "exe_name": "PVIEW.EXE",
+    "path": "C:\\Program Files (x86)\\Microsoft Visual Studio\\Common\\Tools\\WinNT\\Tools\\PVIEW.EXE",
+    "source": "start_menu"
+  },
+  "rot viewer": {
+    "name": "ROT Viewer",
+    "exe_name": "IROTVIEW.EXE",
+    "path": "C:\\Program Files (x86)\\Microsoft Visual Studio\\Common\\Tools\\IROTVIEW.EXE",
+    "source": "start_menu"
+  },
+  "spy++": {
+    "name": "Spy++",
+    "exe_name": "SPYXX.EXE",
+    "path": "C:\\Program Files (x86)\\Microsoft Visual Studio\\Common\\Tools\\SPYXX.EXE",
+    "source": "start_menu"
+  },
+  "tracer": {
+    "name": "Tracer",
+    "exe_name": "TRACER.EXE",
+    "path": "C:\\Program Files (x86)\\Microsoft Visual Studio\\Common\\Tools\\TRACER.EXE",
+    "source": "start_menu"
+  },
+  "windiff": {
+    "name": "Windiff",
+    "exe_name": "WINDIFF.EXE",
+    "path": "C:\\Program Files (x86)\\Microsoft Visual Studio\\Common\\Tools\\WINDIFF.EXE",
+    "source": "start_menu"
+  },
+  "zoomin": {
+    "name": "Zoomin",
+    "exe_name": "ZOOMIN.EXE",
+    "path": "C:\\Program Files (x86)\\Microsoft Visual Studio\\Common\\Tools\\ZOOMIN.EXE",
+    "source": "start_menu"
+  },
+  "install additional tools for node.js": {
+    "name": "Install Additional Tools for Node.js",
+    "exe_name": "cmd.exe",
+    "path": "C:\\Windows\\System32\\cmd.exe",
+    "source": "start_menu"
+  },
+  "node.js command prompt": {
+    "name": "Node.js command prompt",
+    "exe_name": "cmd.exe",
+    "path": "C:\\Windows\\System32\\cmd.exe",
+    "source": "start_menu"
+  },
+  "node.js": {
+    "name": "Node.js",
+    "exe_name": "node.exe",
+    "path": "C:\\Program Files\\nodejs\\node.exe",
+    "source": "start_menu"
+  },
+  "uninstall stdu xml editor": {
+    "name": "Uninstall STDU XML Editor",
+    "exe_name": "unins000.exe",
+    "path": "C:\\Portables\\STDU XML Editor\\unins000.exe",
+    "source": "start_menu"
+  },
+  "uninstall stopupdates10": {
+    "name": "Uninstall StopUpdates10",
+    "exe_name": "unins000.exe",
+    "path": "C:\\Program Files (x86)\\StopUpdates10\\unins000.exe",
+    "source": "start_menu"
+  },
+  "repair server configuration": {
+    "name": "Repair Server Configuration",
+    "exe_name": "UWS.Reg.Repair.exe",
+    "path": "C:\\Program Files (x86)\\UltiDev\\Web Server\\UWS.Reg.Repair.exe",
+    "source": "start_menu"
+  },
+  "ultidev web app explorer": {
+    "name": "UltiDev Web App Explorer",
+    "exe_name": "UWS.Explorer.exe",
+    "path": "C:\\Program Files (x86)\\UltiDev\\Web Server\\UWS.Explorer.exe",
+    "source": "start_menu"
+  },
+  "uws for .net 1.x, 2.0, 3.x": {
+    "name": "UWS for .NET 1.x, 2.0, 3.x (32 bit on x64)",
+    "exe_name": "UWS.InteractiveServer.Clr2x86.exe",
+    "path": "C:\\Program Files (x86)\\UltiDev\\Web Server\\UWS.InteractiveServer.Clr2x86.exe",
+    "source": "start_menu"
+  },
+  "uws for .net 4": {
+    "name": "UWS for .NET 4 (32 bit on x64 systems)",
+    "exe_name": "UWS.InteractiveServer.Clr4x86.exe",
+    "path": "C:\\Program Files (x86)\\UltiDev\\Web Server\\UWS.InteractiveServer.Clr4x86.exe",
+    "source": "start_menu"
+  },
+  "uws for net 4": {
+    "name": "UWS for NET 4",
+    "exe_name": "UWS.InteractiveServer.Clr4AnyCPU.exe",
+    "path": "C:\\Program Files (x86)\\UltiDev\\Web Server\\UWS.InteractiveServer.Clr4AnyCPU.exe",
+    "source": "start_menu"
+  },
+  "visual studio web server replace or restore": {
+    "name": "Visual Studio Web Server Replace or Restore",
+    "exe_name": "WebDevReplacer.exe",
+    "path": "C:\\Program Files (x86)\\UltiDev\\Web Server\\WebDevReplacer.exe",
+    "source": "start_menu"
+  },
+  "debuggable package manager": {
+    "name": "Debuggable Package Manager",
+    "exe_name": "powershell.exe",
+    "path": "C:\\Windows\\SysWOW64\\WindowsPowerShell\\v1.0\\powershell.exe",
+    "source": "start_menu"
+  },
+  "developer command prompt for vs 2017": {
+    "name": "Developer Command Prompt for VS 2017",
+    "exe_name": "cmd.exe",
+    "path": "C:\\Windows\\System32\\cmd.exe",
+    "source": "start_menu"
+  },
+  "developer command prompt for vs 2022": {
+    "name": "Developer Command Prompt for VS 2022",
+    "exe_name": "cmd.exe",
+    "path": "C:\\Windows\\System32\\cmd.exe",
+    "source": "start_menu"
+  },
+  "developer powershell for vs 2022": {
+    "name": "Developer PowerShell for VS 2022",
+    "exe_name": "powershell.exe",
+    "path": "C:\\Windows\\SysWOW64\\WindowsPowerShell\\v1.0\\powershell.exe",
+    "source": "start_menu"
+  },
+  "x64 native tools command prompt for vs 2022": {
+    "name": "x64 Native Tools Command Prompt for VS 2022",
+    "exe_name": "cmd.exe",
+    "path": "C:\\Windows\\System32\\cmd.exe",
+    "source": "start_menu"
+  },
+  "x64_x86 cross tools command prompt for vs 2022": {
+    "name": "x64_x86 Cross Tools Command Prompt for VS 2022",
+    "exe_name": "cmd.exe",
+    "path": "C:\\Windows\\System32\\cmd.exe",
+    "source": "start_menu"
+  },
+  "x86 native tools command prompt for vs 2022": {
+    "name": "x86 Native Tools Command Prompt for VS 2022",
+    "exe_name": "cmd.exe",
+    "path": "C:\\Windows\\System32\\cmd.exe",
+    "source": "start_menu"
+  },
+  "x86_x64 cross tools command prompt for vs 2022": {
+    "name": "x86_x64 Cross Tools Command Prompt for VS 2022",
+    "exe_name": "cmd.exe",
+    "path": "C:\\Windows\\System32\\cmd.exe",
+    "source": "start_menu"
+  },
+  "uninstall web components": {
+    "name": "Uninstall Web Components",
+    "exe_name": "unins000.exe",
+    "path": "C:\\Program Files (x86)\\Web Components\\unins000.exe",
+    "source": "start_menu"
+  },
+  "uninstall webplugin.exe": {
+    "name": "Uninstall webplugin.exe",
+    "exe_name": "unins000.exe",
+    "path": "C:\\Program Files (x86)\\webplugin.exe\\unins000.exe",
+    "source": "start_menu"
+  },
+  "application verifier": {
+    "name": "Application Verifier (X64)",
+    "exe_name": "appverif.exe",
+    "path": "C:\\Windows\\System32\\appverif.exe",
+    "source": "start_menu"
+  },
+  "windows app cert kit": {
+    "name": "Windows App Cert Kit",
+    "exe_name": "appcertui.exe",
+    "path": "C:\\Program Files (x86)\\Windows Kits\\10\\App Certification Kit\\appcertui.exe",
+    "source": "start_menu"
+  },
+  "windows software development kit": {
+    "name": "Windows Software Development Kit",
+    "exe_name": "explorer.exe",
+    "path": "C:\\WINDOWS\\explorer.exe",
+    "source": "start_menu"
+  },
+  "windows powershell ise": {
+    "name": "Windows PowerShell ISE (x86)",
+    "exe_name": "PowerShell_ISE.exe",
+    "path": "C:\\WINDOWS\\syswow64\\WindowsPowerShell\\v1.0\\PowerShell_ISE.exe",
+    "source": "start_menu"
+  },
+  "pdfelement 7 pro": {
+    "name": "PDFelement 7 Pro",
+    "exe_name": "PDFelement.exe",
+    "path": "C:\\Program Files (x86)\\Wondershare\\Wondershare PDFelement Pro for Windows (CPC)\\PDFelement.exe",
+    "source": "start_menu"
+  },
+  "uninstall pdfelement 7 pro": {
+    "name": "Uninstall PDFelement 7 Pro",
+    "exe_name": "unins000.exe",
+    "path": "C:\\Program Files (x86)\\Wondershare\\Wondershare PDFelement Pro for Windows (CPC)\\unins000.exe",
+    "source": "start_menu"
+  },
+  "onedrive.sync.service": {
+    "name": "OneDrive.Sync.Service",
+    "exe_name": "OneDrive.Sync.Service.exe",
+    "path": "C:\\Program Files\\Microsoft OneDrive\\26.095.0519.0003\\OneDrive.Sync.Service.exe",
+    "source": "process"
+  },
+  "uvicorn": {
+    "name": "uvicorn",
+    "exe_name": "uvicorn.exe",
+    "path": "E:\\Nivin_Sync\\ACE\\Voice\\voice-to-command\\backend\\venv\\Scripts\\uvicorn.exe",
+    "source": "process"
+  },
+  "msedge": {
+    "name": "msedge",
+    "exe_name": "msedge.exe",
+    "path": "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
+    "source": "process"
+  },
+  "rustup": {
+    "name": "rustup",
+    "exe_name": "rustup.exe",
+    "path": "C:\\Users\\Nivin\\.cargo\\bin\\rustup.exe",
+    "source": "process"
+  },
+  "systemsettings": {
+    "name": "SystemSettings",
+    "exe_name": "SystemSettings.exe",
+    "path": "C:\\Windows\\ImmersiveControlPanel\\SystemSettings.exe",
+    "source": "process"
+  },
+  "cargo": {
+    "name": "cargo",
+    "exe_name": "cargo.exe",
+    "path": "C:\\Users\\Nivin\\.rustup\\toolchains\\stable-x86_64-pc-windows-msvc\\bin\\cargo.exe",
+    "source": "process"
+  },
+  "filecoauth": {
+    "name": "FileCoAuth",
+    "exe_name": "FileCoAuth.exe",
+    "path": "C:\\Program Files\\Microsoft OneDrive\\26.095.0519.0003\\FileCoAuth.exe",
+    "source": "process"
+  },
+  "opushutil": {
+    "name": "opushutil",
+    "exe_name": "opushutil.exe",
+    "path": "C:\\Program Files (x86)\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX86\\Microsoft Shared\\Office16\\opushutil.exe",
+    "source": "process"
+  },
+  "vsixconfigurationupdater": {
+    "name": "VSIXConfigurationUpdater",
+    "exe_name": "VSIXConfigurationUpdater.exe",
+    "path": "C:\\Program Files (x86)\\Microsoft Visual Studio\\Installer\\resources\\app\\ServiceHub\\Services\\Microsoft.VisualStudio.Setup.Service\\VSIXConfigurationUpdater.exe",
+    "source": "process"
+  },
+  "officec2rclient": {
+    "name": "OfficeC2RClient",
+    "exe_name": "OfficeC2RClient.exe",
+    "path": "C:\\Program Files\\Common Files\\microsoft shared\\ClickToRun\\OfficeC2RClient.exe",
+    "source": "process"
+  },
+  "cleanmgr": {
+    "name": "cleanmgr",
+    "exe_name": "cleanmgr.exe",
+    "path": "C:\\Windows\\System32\\cleanmgr.exe",
+    "source": "process"
+  },
+  "smartscreen": {
+    "name": "smartscreen",
+    "exe_name": "smartscreen.exe",
+    "path": "C:\\Windows\\System32\\smartscreen.exe",
+    "source": "process"
+  },
+  "updater": {
+    "name": "updater",
+    "exe_name": "updater.exe",
+    "path": "C:\\Program Files (x86)\\Google\\GoogleUpdater\\150.0.7863.0\\updater.exe",
+    "source": "process"
+  },
+  "klsbsched": {
+    "name": "klsbsched",
+    "exe_name": "klsbsched.exe",
+    "path": "C:\\Program Files\\KLS Soft\\KLS Backup 2025 Professional\\klsbsched.exe",
+    "source": "process"
+  },
+  "wermgr": {
+    "name": "wermgr",
+    "exe_name": "wermgr.exe",
+    "path": "C:\\Windows\\System32\\wermgr.exe",
+    "source": "process"
+  }
+}

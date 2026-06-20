@@ -577,7 +577,8 @@ class VoiceBrowserCommands:
             from automation.browser.dom_agent import DOMAgent
             page = await self.ctrl._ensure_page()
             agent = DOMAgent(page)
-            return await agent.execute_intent(transcript)
+            import asyncio
+            return await asyncio.wait_for(agent.execute_intent(transcript), timeout=20.0)
         except Exception as e:
             logger.error(f"DOM Agent failed: {e}")
             return "Command not recognized and dynamic agent failed."

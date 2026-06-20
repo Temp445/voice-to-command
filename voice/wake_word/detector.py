@@ -23,7 +23,7 @@ SAMPLE_RATE = 16000
 CHUNK_SIZE = 1280          # 80ms at 16kHz (OWW requirement)
 FORMAT = pyaudio.paInt16
 CHANNELS = 1
-DETECTION_THRESHOLD = 0.05  # Confidence threshold (Lowered from 0.3 for low-gain mics)
+DETECTION_THRESHOLD = 0.65  # Confidence threshold (Increased to 0.65 to strictly prevent false positives)
 
 # Max bytes we allow to queue up before dropping stale audio.
 # 3 × 1280 samples × 2 bytes = ~240ms of backlog before we start skipping.

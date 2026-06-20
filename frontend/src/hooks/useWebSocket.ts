@@ -42,6 +42,7 @@ export function WebSocketManager() {
       wsRef.current = ws;
 
       ws.onopen = () => {
+        if (wsRef.current !== ws) return;
         setConnected(true);
         setSendBytes((data) => {
           if (ws.readyState === WebSocket.OPEN) {
@@ -97,9 +98,11 @@ export function WebSocketManager() {
     };
 
     ws.onclose = () => {
-      setConnected(false);
-      if (isMounted.current) {
-        setTimeout(connect, 3000);
+      if (wsRef.current === ws) {
+        setConnected(false);
+        if (isMounted.current) {
+          setTimeout(connect, 3000);
+        }
       }
     };
 

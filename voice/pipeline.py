@@ -246,7 +246,13 @@ class VoicePipeline:
         return cleaned
 
     async def _capture_and_stream(self, timeout: float = 8.0, max_initial_silence_chunks: int = 20) -> tuple[bytes, str]:
-        """Start mic, stream speech segments to STT, and return final (audio_bytes, text)."""
+        """Start mic, stream speech segments to STT, and return final (audio_bytes, text).
+
+        Real-time partial transcription:
+          - A background ThreadPoolExecutor runs Whisper on accumulated audio every ~1s.
+          - Results are fired via on_transcript(text, False) so the UI shows live words.
+          - The final full-audio transcription is the definitive result.
+        """
         self._manually_stopped = False
         self._set_state(PipelineState.LISTENING)
         self._audio_capture.start()
@@ -260,19 +266,64 @@ class VoicePipeline:
 
         def _transcribe_stream():
             nonlocal final_text, final_audio_bytes
-            for audio_bytes, is_final in self._audio_capture.stream_speech_segment(timeout=timeout, max_initial_silence_chunks=max_initial_silence_chunks):
-                final_audio_bytes = audio_bytes
-                if is_final and len(audio_bytes) >= 3200:  # MIN_AUDIO_BYTES
-                    # Provide instant UI feedback that we are no longer listening
-                    self._set_state(PipelineState.PROCESSING)
-                    if self.on_transcript:
-                        self.on_transcript("Transcribing audio...", False)
-                    text = stt_provider.transcribe(audio_bytes)
-                    final_text = text
+            import concurrent.futures
+
+            # Single-worker executor: ensures only one Whisper job runs at a time.
+            partial_executor = concurrent.futures.ThreadPoolExecutor(
+                max_workers=1, thread_name_prefix="partial_stt"
+            )
+            partial_future: concurrent.futures.Future | None = None
+            last_transcribed_len = 0
+            # Require at least ~1s of NEW audio before submitting a new partial job.
+            MIN_NEW_BYTES_FOR_PARTIAL = 16000  # 16kHz * 2 bytes * 0.5s = 16000
+
+            try:
+                for audio_bytes, is_final in self._audio_capture.stream_speech_segment(
+                    timeout=timeout, max_initial_silence_chunks=max_initial_silence_chunks
+                ):
+                    final_audio_bytes = audio_bytes
+
+                    # ── Partial (interim) transcription ──────────────────────
+                    if not is_final and len(audio_bytes) >= 6400:
+                        new_bytes = len(audio_bytes) - last_transcribed_len
+                        partial_done = partial_future is None or partial_future.done()
+
+                        if new_bytes >= MIN_NEW_BYTES_FOR_PARTIAL and partial_done:
+                            last_transcribed_len = len(audio_bytes)
+                            audio_snapshot = bytes(audio_bytes)  # immutable snapshot
+
+                            def _do_partial(snap: bytes) -> None:
+                                try:
+                                    interim = stt_provider.transcribe(snap)
+                                    if interim.strip() and self.on_transcript:
+                                        self.on_transcript(interim, False)
+                                except Exception:
+                                    pass
+
+                            partial_future = partial_executor.submit(_do_partial, audio_snapshot)
+
+                    # ── Final transcription ───────────────────────────────────
+                    if is_final and len(audio_bytes) >= 3200:
+                        # Cancel any in-flight partial to free the Whisper model
+                        if partial_future and not partial_future.done():
+                            partial_future.cancel()
+
+                        if self._manually_stopped:
+                            final_text = ""
+                            break
+
+                        self._set_state(PipelineState.PROCESSING)
+                        if self.on_transcript:
+                            self.on_transcript("Transcribing audio...", False)
+                        text = stt_provider.transcribe(audio_bytes)
+                        final_text = text
+            finally:
+                partial_executor.shutdown(wait=False)
 
         await loop.run_in_executor(None, _transcribe_stream)
         self._audio_capture.stop()
         return final_audio_bytes, final_text
+
 
     async def _listen_and_process(self) -> None:
         """Full pipeline run: stream capture & transcribe → command → speak.

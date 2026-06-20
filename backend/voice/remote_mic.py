@@ -45,26 +45,62 @@ def clear_queues() -> None:
 
 def _local_mic_loop():
     import pyaudio
-    p = pyaudio.PyAudio()
-    if p.get_device_count() == 0:
-        logger.warning("No local audio devices found.")
-        return
-        
-    try:
-        default_device = p.get_default_input_device_info()
-        device_name = default_device.get("name", "Unknown Device")
-        stream = p.open(format=pyaudio.paInt16, channels=1, rate=16000, input=True, frames_per_buffer=1280)
-        logger.info(f"🎤 Local microphone broadcast started on: '{device_name}'")
-        while _local_mic_running:
-            raw = stream.read(1280, exception_on_overflow=False)
-            put_chunk(raw)
-    except Exception as e:
-        logger.error(f"Local mic broadcast error: {e}")
-    finally:
-        if 'stream' in locals() and stream:
-            stream.stop_stream()
-            stream.close()
-        p.terminate()
+    import time
+    
+    while _local_mic_running:
+        p = pyaudio.PyAudio()
+        stream = None
+        try:
+            num_devices = p.get_device_count()
+            if num_devices == 0:
+                logger.warning("No local audio devices found. Retrying in 5 seconds...")
+                time.sleep(5)
+                continue
+                
+            try:
+                default_device = p.get_default_input_device_info()
+                device_index = default_device.get("index")
+                device_name = default_device.get("name", "Unknown Device")
+            except OSError:
+                device_index = None
+                device_name = "Fallback Device"
+            
+            try:
+                stream = p.open(format=pyaudio.paInt16, channels=1, rate=16000, input=True, frames_per_buffer=1280, input_device_index=device_index)
+            except Exception as first_err:
+                logger.debug(f"Failed to open default mic: {first_err}. Searching for alternatives...")
+                for i in range(num_devices):
+                    try:
+                        info = p.get_device_info_by_index(i)
+                        if info.get('maxInputChannels', 0) > 0:
+                            stream = p.open(format=pyaudio.paInt16, channels=1, rate=16000, input=True, frames_per_buffer=1280, input_device_index=i)
+                            device_name = info.get("name", f"Device {i}")
+                            break
+                    except Exception:
+                        continue
+                if not stream:
+                    raise RuntimeError(f"No working microphone found. Initial error: {first_err}")
+
+            logger.info(f"🎤 Local microphone broadcast started on: '{device_name}'")
+            
+            while _local_mic_running:
+                raw = stream.read(1280, exception_on_overflow=False)
+                put_chunk(raw)
+                
+        except Exception as e:
+            logger.warning(f"Local mic broadcast issue: {e}. Retrying in 5 seconds...")
+            time.sleep(5)
+        finally:
+            if stream:
+                try:
+                    stream.stop_stream()
+                    stream.close()
+                except Exception:
+                    pass
+            try:
+                p.terminate()
+            except Exception:
+                pass
 
 def start_local_mic():
     global _local_mic_running

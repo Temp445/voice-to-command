@@ -494,7 +494,7 @@ class CommandService:
                 if bc.engine._context is not None:
                     from automation.browser.browser_controller import VoiceBrowserCommands
                     browser_cmd = VoiceBrowserCommands()
-                    browser_res = await browser_cmd.execute(text)
+                    browser_res = await asyncio.wait_for(browser_cmd.execute(text), timeout=20.0)
                     if browser_res and not browser_res.startswith("Command not recognized"):
                         return {
                             "intent": "dynamic_browser_command_fallback",
@@ -639,7 +639,7 @@ class CommandService:
                 try:
                     from automation.browser.browser_controller import VoiceBrowserCommands
                     browser_cmd = VoiceBrowserCommands()
-                    browser_res = await browser_cmd.execute(text)
+                    browser_res = await asyncio.wait_for(browser_cmd.execute(text), timeout=20.0)
                     if browser_res and not browser_res.startswith("Command not recognized"):
                         return {
                             "intent": "dynamic_browser_command_fallback",

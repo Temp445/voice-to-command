@@ -38,7 +38,7 @@ export function ActivityFeed() {
             const status = STATUS_STYLE[cmd.status as keyof typeof STATUS_STYLE] || STATUS_STYLE.pending;
             return (
               <motion.div
-                key={cmd.id}
+                key={cmd.id ? `${cmd.id}-${i}` : i}
                 initial={{ opacity: 0, x: -6 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: i * 0.04 }}

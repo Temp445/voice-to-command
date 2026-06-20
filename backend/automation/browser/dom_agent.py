@@ -316,7 +316,7 @@ class DOMAgent:
             
         element_text = "\n".join(element_lines)
         
-        headings = await self.extract_headings()
+        headings = await self.page.evaluate("() => Array.from(document.querySelectorAll('h1, h2, h3')).map(h => h.innerText).join(' | ')")
         
         prompt = f"""
 You are a browser automation agent. The user wants to perform an action: "{intent}"
@@ -343,7 +343,8 @@ Reply ONLY with a comma-separated list of integer IDs (e.g., '45' or '26, 27'). 
         tokens = len(prompt) // 4
         logger.info(f"DOM Agent queried LLM for element ID. Approx Payload: {tokens} tokens ({len(prompt)} chars)")
         try:
-            response = await llm_service.chat(prompt)
+            import asyncio
+            response = await asyncio.wait_for(llm_service.chat(prompt), timeout=10.0)
             response = response.strip()
             if response == "NONE" or not response:
                 return []
@@ -413,8 +414,9 @@ Reply ONLY with a comma-separated list of integer IDs (e.g., '45' or '26, 27'). 
             fill_result = await self.fill_form(intent)
             # Route through the friendly rewriter so the user gets a natural spoken confirmation
             try:
+                import asyncio
                 rewrite_prompt = f"User command: '{intent}'. System result: '{fill_result}'. Rewrite this into a very short, conversational confirmation as a helpful voice assistant (e.g. 'Filled in your email and password', 'Entered your details'). Do NOT reveal any credential values. Do NOT use the phrase 'for you'. Keep it under 1 short sentence."
-                friendly = await llm_service.chat(rewrite_prompt)
+                friendly = await asyncio.wait_for(llm_service.chat(rewrite_prompt), timeout=5.0)
                 return friendly.strip()
             except Exception:
                 return fill_result
@@ -534,7 +536,8 @@ Reply ONLY with a comma-separated list of integer IDs (e.g., '45' or '26, 27'). 
                         results.append("Checked the requested element.")
                 elif current_action == "select":
                     extract_prompt = f"Extract exactly the option text or value the user wants to select from this intent: '{intent}'. Reply ONLY with the text."
-                    option_to_select = await llm_service.chat(extract_prompt)
+                    import asyncio
+                    option_to_select = await asyncio.wait_for(llm_service.chat(extract_prompt), timeout=6.0)
                     option_to_select = option_to_select.strip()
                     
                     match_script = f"""
@@ -562,7 +565,8 @@ Reply ONLY with a comma-separated list of integer IDs (e.g., '45' or '26, 27'). 
                             raise Exception(f"Could not find an option matching '{option_to_select}' in the dropdown.")
                 elif current_action == "upload":
                     extract_prompt = f"Extract exactly the filename (with extension if provided) the user wants to upload from this intent: '{intent}'. Reply ONLY with the filename."
-                    filename = await llm_service.chat(extract_prompt)
+                    import asyncio
+                    filename = await asyncio.wait_for(llm_service.chat(extract_prompt), timeout=6.0)
                     filename = filename.strip()
                     
                     from automation.desktop.file_indexer import get_indexer
@@ -640,7 +644,8 @@ Reply ONLY with a comma-separated list of integer IDs (e.g., '45' or '26, 27'). 
                     else:
                         tokens = len(extract_prompt) // 4
                         logger.info(f"DOM Agent queried LLM for text extraction. Approx Payload: {tokens} tokens")
-                        text_to_type = await llm_service.chat(extract_prompt)
+                        import asyncio
+                        text_to_type = await asyncio.wait_for(llm_service.chat(extract_prompt), timeout=6.0)
                         text_to_type = text_to_type.strip()
                     
                     if el_info.get('type') == 'number':
@@ -697,8 +702,9 @@ Reply ONLY with a comma-separated list of integer IDs (e.g., '45' or '26, 27'). 
             return raw_result
             
         try:
+            import asyncio
             prompt = f"User command: '{intent}'. System result: '{raw_result}'. Rewrite this into a very short, conversational confirmation as a helpful voice assistant (e.g. 'Signed you in', 'Opened the dropdown', 'Typed John into the name field'). Do NOT use the phrase 'for you' or sound overly eager. Keep it under 1 short sentence."
-            friendly_result = await llm_service.chat(prompt)
+            friendly_result = await asyncio.wait_for(llm_service.chat(prompt), timeout=5.0)
             return friendly_result.strip()
         except Exception as e:
             logger.error(f"Failed to generate friendly response: {e}")

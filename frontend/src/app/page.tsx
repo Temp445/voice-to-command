@@ -9,7 +9,7 @@ import { StatusBar } from "@/components/dashboard/StatusBar";
 import { useVoiceStore } from "@/store/voiceStore";
 
 export default function DashboardPage() {
-  const { transcript } = useVoiceStore();
+  const { transcript, partialTranscript } = useVoiceStore();
 
   return (
     <div style={{ display: "flex", height: "100vh", overflow: "hidden", background: "var(--background)" }}>
@@ -33,16 +33,19 @@ export default function DashboardPage() {
             <StatusBar />
 
             {/* 2-column grid */}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: "1.5rem" }}>
+    <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: "1.5rem" }}>
               <VoicePanel />
               <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
                 <QuickActions />
-                {transcript && (
+                {(partialTranscript || transcript) && (
                   <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: "1rem", padding: "1rem" }}>
                     <p style={{ fontSize: "0.6875rem", fontWeight: 600, color: "var(--muted-foreground)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "0.5rem" }}>
-                      Last Transcript
+                      {partialTranscript ? "Live Transcript" : "Last Transcript"}
                     </p>
-                    <p style={{ color: "var(--foreground)", fontFamily: "var(--font-mono)", fontSize: "0.875rem" }}>{transcript}</p>
+                    <p style={{ color: "var(--foreground)", fontFamily: "var(--font-mono)", fontSize: "0.875rem" }}>
+                      {partialTranscript || transcript}
+                      {partialTranscript && <span style={{ animation: "pulse 1.5s infinite" }}>...</span>}
+                    </p>
                   </div>
                 )}
               </div>
