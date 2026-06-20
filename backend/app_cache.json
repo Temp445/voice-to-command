@@ -1606,5 +1606,11 @@
     "exe_name": "wermgr.exe",
     "path": "C:\\Windows\\System32\\wermgr.exe",
     "source": "process"
+  },
+  "actionsserver": {
+    "name": "ActionsServer",
+    "exe_name": "ActionsServer.exe",
+    "path": "C:\\Program Files (x86)\\Microsoft Office\\root\\vfs\\ProgramFilesCommonX86\\Microsoft Shared\\Office16\\ActionsServer\\ActionsServer.exe",
+    "source": "process"
   }
 }

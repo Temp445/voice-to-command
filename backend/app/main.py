@@ -177,7 +177,7 @@ async def lifespan(app: FastAPI):
                     if s.get("user_id"):
                         global_settings.owner_user_id = s["user_id"]
                     for field in ("wake_word", "whisper_model", "tts_provider", "piper_voice",
-                                  "active_mode_timeout", "browser_type", "enable_desktop_overlay",
+                                  "active_mode_timeout", "require_wake_word_always", "browser_type", "enable_desktop_overlay",
                                   "crm_url", "crm_keywords", "crm_sites",
                                   "llm_provider", "llm_model",
                                   "llm_mode", "llm_temperature"):
