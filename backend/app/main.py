@@ -301,6 +301,22 @@ async def lifespan(app: FastAPI):
                 python_exe = sys.executable
             overlay_path = os.path.join(str(_BACKEND), "automation", "desktop", "overlay.py")
             if os.path.exists(overlay_path):
+                # Kill any orphaned overlay processes first
+                if sys.platform == "win32":
+                    try:
+                        import psutil
+                        for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+                            try:
+                                if proc.info['name'] in ('python.exe', 'pythonw.exe'):
+                                    cmdline = proc.info.get('cmdline', [])
+                                    if cmdline and any('overlay.py' in str(cmd) for cmd in cmdline):
+                                        if proc.pid != os.getpid():
+                                            proc.terminate()
+                            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                                pass
+                    except ImportError:
+                        pass
+
                 app_state.overlay_process = subprocess.Popen(
                     [python_exe, overlay_path],
                     creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0

@@ -794,9 +794,13 @@ async def websocket_client(overlay: OverlayApp):
     import os
     port = os.environ.get("BACKEND_PORT", "8000")
     uri = f"ws://127.0.0.1:{port}/ws"
+    has_connected = False
+    retries = 0
     while True:
         try:
             async with websockets.connect(uri) as ws:
+                has_connected = True
+                retries = 0
                 active_websocket = ws
                 overlay.update_status_signal.emit("Connected")
                 overlay.update_state_signal.emit("idle")
@@ -836,6 +840,17 @@ async def websocket_client(overlay: OverlayApp):
                         pass
 
         except Exception:
+            if has_connected:
+                import sys
+                print("Lost connection to backend. Exiting to prevent orphaned process.")
+                sys.exit(0)
+            else:
+                retries += 1
+                if retries > 10:
+                    import sys
+                    print("Could not connect to backend. Exiting.")
+                    sys.exit(0)
+                
             active_websocket = None
             overlay.update_status_signal.emit("Reconnecting...")
             overlay.update_state_signal.emit("idle")
