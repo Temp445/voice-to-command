@@ -61,7 +61,14 @@ export function ShortcutManager() {
 
     async function registerShortcuts() {
       try {
-        const { register, unregisterAll } = await import('@tauri-apps/plugin-global-shortcut');
+        let tauriShortcut;
+        try {
+          tauriShortcut = await import('@tauri-apps/plugin-global-shortcut');
+        } catch (e) {
+          console.warn("Tauri shortcut plugin import failed (likely HMR), skipping registration.", e);
+          return;
+        }
+        const { register, unregisterAll } = tauriShortcut;
         
         // Always unregister all previous shortcuts before registering new ones
         // This is robust against Next.js Fast Refresh which might leave stale hotkeys registered
@@ -130,13 +137,17 @@ export function ShortcutManager() {
       if (seq === registrationSeqRef.current) {
         registrationSeqRef.current++;
         
-        import('@tauri-apps/plugin-global-shortcut').then(({ unregisterAll }) => {
-          // Double check if a newer sequence has started in the meantime
-          if (registrationSeqRef.current === seq + 1) {
-            unregisterAll().catch(console.warn);
-            registeredRef.current = {};
-          }
-        }).catch(() => {});
+        try {
+          import('@tauri-apps/plugin-global-shortcut').then(({ unregisterAll }) => {
+            // Double check if a newer sequence has started in the meantime
+            if (registrationSeqRef.current === seq + 1) {
+              unregisterAll().catch(console.warn);
+              registeredRef.current = {};
+            }
+          }).catch(() => {});
+        } catch (e) {
+          // Ignore synchronous import errors during HMR
+        }
       }
     };
   }, [overlayShortcut, listenShortcut, updateSettings]);

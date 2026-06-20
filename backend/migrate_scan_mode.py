@@ -11,10 +11,11 @@ SERVICE_KEY  = (
 )
 
 SQL_STATEMENTS = [
-    "ALTER TABLE public.settings ADD COLUMN IF NOT EXISTS scan_mode TEXT DEFAULT 'auto'",
+    "ALTER TABLE public.settings ADD COLUMN IF NOT EXISTS scan_mode TEXT DEFAULT 'manual'",
+    "ALTER TABLE public.settings ALTER COLUMN scan_mode SET DEFAULT 'manual'",
     "ALTER TABLE public.settings DROP CONSTRAINT IF EXISTS settings_scan_mode_check",
     "ALTER TABLE public.settings ADD CONSTRAINT settings_scan_mode_check CHECK (scan_mode IN ('auto', 'manual'))",
-    "UPDATE public.settings SET scan_mode = 'auto' WHERE scan_mode IS NULL",
+    "UPDATE public.settings SET scan_mode = 'manual' WHERE scan_mode IS NULL",
 ]
 
 MGMT_URL = f"https://api.supabase.com/v1/projects/{PROJECT_REF}/database/query"
@@ -68,7 +69,8 @@ except urllib.error.HTTPError as e:
     print("Run this SQL in your Supabase SQL editor:")
     print("  https://supabase.com/dashboard/project/xaqxspgbjmhznyfuesnt/sql/new")
     print()
-    print("  ALTER TABLE public.settings ADD COLUMN IF NOT EXISTS scan_mode TEXT DEFAULT 'auto';")
+    print("  ALTER TABLE public.settings ADD COLUMN IF NOT EXISTS scan_mode TEXT DEFAULT 'manual';")
+    print("  ALTER TABLE public.settings ALTER COLUMN scan_mode SET DEFAULT 'manual';")
     print("  ALTER TABLE public.settings DROP CONSTRAINT IF EXISTS settings_scan_mode_check;")
     print("  ALTER TABLE public.settings ADD CONSTRAINT settings_scan_mode_check CHECK (scan_mode IN ('auto', 'manual'));")
-    print("  UPDATE public.settings SET scan_mode = 'auto' WHERE scan_mode IS NULL;")
+    print("  UPDATE public.settings SET scan_mode = 'manual' WHERE scan_mode IS NULL OR scan_mode = 'auto';")

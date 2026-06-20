@@ -97,7 +97,7 @@ export default function SettingsPage() {
         })(),
         llmEnabled: data.llm_enabled, llmProvider: data.llm_provider, llmModel: data.llm_model,
         llmMode: data.llm_mode, llmTemperature: data.llm_temperature,
-        scanMode: (data.scan_mode as "auto" | "manual") || "auto",
+        scanMode: (data.scan_mode as "auto" | "manual") || "manual",
       });
       setInitialLoaded(true);
     }).catch(err => console.error(err));

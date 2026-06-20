@@ -44,7 +44,7 @@ _DEFAULTS = {
     "llm_api_key_encrypted": None,
     "llm_temperature": 0.7,
     "llm_mode": "fallback",
-    "scan_mode": "auto",
+    "scan_mode": "manual",
 }
 
 
@@ -54,7 +54,7 @@ async def get_current_user_id(
     credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
 ) -> str:
     if not credentials:
-        return _FALLBACK_USER_ID
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
     try:
         payload = decode_access_token(credentials.credentials)
         user_id = payload.get("sub")
@@ -127,15 +127,41 @@ def _build_response(s: dict) -> SettingsResponse:
         llm_configured=bool(s.get("llm_api_key_encrypted")),
         llm_temperature=s.get("llm_temperature", 0.7),
         llm_mode=s.get("llm_mode", "fallback"),
-        scan_mode=s.get("scan_mode", "auto"),
+        scan_mode=s.get("scan_mode", "manual"),
     )
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
 
 @router.get("", response_model=SettingsResponse)
-async def get_settings(user_id: str = Depends(get_current_user_id)):
+async def get_settings(request: Request, user_id: str = Depends(get_current_user_id)):
     s = await _get_or_create_settings(user_id)
+    
+    from app.config import settings as global_settings
+    global_settings.owner_user_id = user_id
+    
+    pipeline = getattr(request.app.state, "pipeline", None)
+    if pipeline and not pipeline._running:
+        logger.info("🎙️ Starting Voice Pipeline on first authenticated settings load...")
+        pipeline.start()
+        from app.routers.voice import _pipeline_state
+        _pipeline_state["wake_word_active"] = True
+        
+    if s.get("enable_desktop_overlay", False) and not getattr(request.app.state, "overlay_process", None):
+        import subprocess, os, sys
+        from pathlib import Path
+        _ROOT = Path(__file__).resolve().parent.parent.parent
+        python_exe = os.path.join(str(_ROOT), ".venv", "Scripts", "python.exe")
+        if not os.path.exists(python_exe):
+            python_exe = sys.executable
+        overlay_path = os.path.join(str(_ROOT), "automation", "desktop", "overlay.py")
+        if os.path.exists(overlay_path):
+            request.app.state.overlay_process = subprocess.Popen(
+                [python_exe, overlay_path],
+                creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+            )
+            logger.info("🖥️ Desktop Overlay started dynamically after login")
+            
     return _build_response(s)
 
 

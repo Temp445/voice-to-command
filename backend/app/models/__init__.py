@@ -93,8 +93,8 @@ class UserSettings(Base):
     listen_shortcut: Mapped[str] = mapped_column(String(50), default="Alt+S")
 
     # CRM Integration
-    crm_url: Mapped[str] = mapped_column(String(500), default="https://crm.acesoftcloud.in/")
-    crm_keywords: Mapped[str] = mapped_column(String(500), default="open my crm, open crm, open ace crm")
+    crm_url: Mapped[str] = mapped_column(String(500), default="")
+    crm_keywords: Mapped[str] = mapped_column(String(500), default="")
 
     # LLM / AI Assistant
     llm_enabled: Mapped[bool] = mapped_column(Boolean, default=False)

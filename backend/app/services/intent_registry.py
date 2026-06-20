@@ -19,9 +19,6 @@ async def _get_executor():
 # ── Known Web App URL Mappings ───────────────────────────────────────────────
 # If a desktop app is not found, check this table and open the URL in the browser instead.
 WEB_APP_URLS: dict[str, str] = {
-    "ace crm":       "https://crm.acesoftcloud.in/",
-    "crm":           "https://crm.acesoftcloud.in/",
-    "ace softcloud": "https://crm.acesoftcloud.in/",
     "gmail":         "https://mail.google.com/",
     "google sheets": "https://sheets.google.com/",
     "google docs":   "https://docs.google.com/",

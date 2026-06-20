@@ -105,7 +105,7 @@ async def lifespan(app: FastAPI):
     scanner.load_cache()
 
     # Fetch scan_mode from Supabase before deciding whether to auto-scan
-    _scan_mode = "auto"  # safe default
+    _scan_mode = "manual"  # safe default
     try:
         from app.core.supabase_client import supabase_admin, sb_run
         _sm_res = await sb_run(
@@ -114,7 +114,7 @@ async def lifespan(app: FastAPI):
         if _sm_res.data and _sm_res.data[0].get("scan_mode"):
             _scan_mode = _sm_res.data[0]["scan_mode"]
     except Exception as _e:
-        logger.warning(f"Could not fetch scan_mode from Supabase, defaulting to 'auto': {_e}")
+        logger.warning(f"Could not fetch scan_mode from Supabase, defaulting to 'manual': {_e}")
 
     if _scan_mode == "auto":
         async def _refresh_scan():
@@ -253,13 +253,18 @@ async def lifespan(app: FastAPI):
                 on_transcript=on_transcript,
                 on_command_result=on_command_result,
             )
-            pipeline.start()
             app_state.pipeline = pipeline
-            _pipeline_state["wake_word_active"] = True
-            asyncio.run_coroutine_threadsafe(
-                ws_manager.broadcast("pipeline_state", {"state": "idle", "wake_word_active": True}), running_loop
-            )
-            logger.info("🎙️ Voice pipeline started — wake word listening in background")
+            
+            from app.config import settings as global_settings
+            if getattr(global_settings, "owner_user_id", None):
+                pipeline.start()
+                _pipeline_state["wake_word_active"] = True
+                asyncio.run_coroutine_threadsafe(
+                    ws_manager.broadcast("pipeline_state", {"state": "idle", "wake_word_active": True}), running_loop
+                )
+                logger.info("🎙️ Voice pipeline started — wake word listening in background")
+            else:
+                logger.info("ℹ️ No active user logged in — Voice pipeline paused until auth")
 
         except Exception as e:
             logger.warning(f"⚠️  Voice pipeline failed to start (API will still work): {e}")
@@ -287,7 +292,7 @@ async def lifespan(app: FastAPI):
 
         # ── Desktop Overlay (after pipeline is up) ────────────────────────────
         from app.config import settings as global_settings
-        if getattr(global_settings, "enable_desktop_overlay", False):
+        if getattr(global_settings, "enable_desktop_overlay", False) and getattr(global_settings, "owner_user_id", None):
             import subprocess, os, sys
             from pathlib import Path
             _BACKEND = Path(__file__).resolve().parent.parent

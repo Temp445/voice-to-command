@@ -58,14 +58,23 @@ export default function AuthPage() {
         if (error) throw error;
         router.push("/");
       } else {
-        const { error } = await supabase.auth.signUp({
+        const { data, error } = await supabase.auth.signUp({
           email,
           password,
-          options: { data: { display_name: displayName } },
+          options: { 
+            data: { display_name: displayName },
+            emailRedirectTo: `${window.location.origin}/auth/confirm`
+          },
         });
         if (error) throw error;
-        setSuccess("Account created! Redirecting...");
-        setTimeout(() => router.push("/"), 1500);
+        
+        if (data.session) {
+          setSuccess("Account created! Redirecting...");
+          setTimeout(() => router.push("/"), 1500);
+        } else {
+          setSuccess("Account created! Please check your email to verify your account.");
+          // Don't redirect, stay on the auth page so they can switch to sign in
+        }
       }
     } catch (err: any) {
       setError(err.message || "Authentication failed. Please try again.");

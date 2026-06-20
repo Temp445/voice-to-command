@@ -127,15 +127,21 @@ fn main() {
                 app.path().resolve("../../backend/dist/ace-backend/ace-backend.exe", tauri::path::BaseDirectory::Resource).expect("failed to resolve resource")
             };
 
-            let mut cmd = std::process::Command::new(backend_exe);
-            cmd.env("BACKEND_PORT", port.to_string());
-            
-            if cfg!(debug_assertions) {
-                // Ensure backend runs from project root during dev to find .env file
-                cmd.current_dir("../../");
+            if backend_exe.exists() {
+                let mut cmd = std::process::Command::new(backend_exe);
+                cmd.env("BACKEND_PORT", port.to_string());
+                
+                if cfg!(debug_assertions) {
+                    // Ensure backend runs from project root during dev to find .env file
+                    cmd.current_dir("../../");
+                }
+                
+                if let Err(e) = cmd.spawn() {
+                    eprintln!("Failed to spawn backend sidecar: {}", e);
+                }
+            } else {
+                eprintln!("Backend executable not found at {:?}. Assuming backend is running externally for dev.", backend_exe);
             }
-            
-            cmd.spawn().expect("Failed to spawn backend sidecar");
             
             Ok(())
         })

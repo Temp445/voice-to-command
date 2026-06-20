@@ -6,7 +6,7 @@
 -- ============================================================
 
 ALTER TABLE public.settings
-    ADD COLUMN IF NOT EXISTS scan_mode TEXT DEFAULT 'auto';
+    ADD COLUMN IF NOT EXISTS scan_mode TEXT DEFAULT 'manual';
 
 -- Add a check constraint to enforce valid values
 ALTER TABLE public.settings
@@ -18,5 +18,5 @@ ALTER TABLE public.settings
 
 -- Backfill any existing rows that might have NULL
 UPDATE public.settings
-    SET scan_mode = 'auto'
+    SET scan_mode = 'manual'
     WHERE scan_mode IS NULL;

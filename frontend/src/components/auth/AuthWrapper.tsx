@@ -4,11 +4,15 @@ import { useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { useAuthStore } from "@/store/authStore";
 import { Loader2 } from "lucide-react";
+import { useSupabaseSync } from "@/hooks/useSupabaseSync";
 
 export function AuthWrapper({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const { session, loading, initializeAuth } = useAuthStore();
+
+  // Activate realtime background sync
+  useSupabaseSync();
 
   useEffect(() => {
     initializeAuth();
