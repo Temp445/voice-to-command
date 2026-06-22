@@ -10,14 +10,14 @@ import { useWSStore } from "@/hooks/useWebSocket";
 import { api, getResolvedBaseUrl, resolvedBackendPort } from "@/lib/api";
 import { invoke } from "@tauri-apps/api/core";
 
-const card    = { background: "var(--card)", border: "1px solid var(--border)", borderRadius: "1rem", overflow: "hidden", boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)" };
-const hdr     = { padding: "1.25rem 1.5rem", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: "0.75rem", background: "rgba(255,255,255,0.02)" };
-const body    = { padding: "1.5rem", display: "flex", flexDirection: "column" as const, gap: "1.5rem" };
-const lbl     = { fontSize: "0.8125rem", fontWeight: 600, color: "var(--foreground)", marginBottom: "0.375rem" } as React.CSSProperties;
-const sub     = { fontSize: "0.75rem", color: "var(--muted-foreground)", marginTop: "0.25rem" };
-const inp     = { width: "100%", background: "var(--input)", border: "1px solid var(--border)", borderRadius: "0.5rem", padding: "0.625rem 0.875rem", fontSize: "0.875rem", color: "var(--foreground)", fontFamily: "var(--font-mono)", outline: "none", transition: "border-color 0.2s" } as React.CSSProperties;
-const btnA    = { padding: "0.5rem 1rem", borderRadius: "0.5rem", fontSize: "0.8125rem", fontWeight: 600, cursor: "pointer", border: "1px solid var(--ring)", background: "var(--primary)", color: "var(--primary-foreground)", transition: "all 0.15s", boxShadow: "0 2px 4px rgba(0,0,0,0.1)" } as React.CSSProperties;
-const btnI    = { padding: "0.5rem 1rem", borderRadius: "0.5rem", fontSize: "0.8125rem", fontWeight: 500, cursor: "pointer", border: "1px solid var(--border)", background: "var(--secondary)", color: "var(--muted-foreground)", transition: "all 0.15s" } as React.CSSProperties;
+const card = { background: "var(--card)", border: "1px solid var(--border)", borderRadius: "1rem", overflow: "hidden", boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)" };
+const hdr = { padding: "1.25rem 1.5rem", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: "0.75rem", background: "rgba(255,255,255,0.02)" };
+const body = { padding: "1.5rem", display: "flex", flexDirection: "column" as const, gap: "1.5rem" };
+const lbl = { fontSize: "0.8125rem", fontWeight: 600, color: "var(--foreground)", marginBottom: "0.375rem" } as React.CSSProperties;
+const sub = { fontSize: "0.75rem", color: "var(--muted-foreground)", marginTop: "0.25rem" };
+const inp = { width: "100%", background: "var(--input)", border: "1px solid var(--border)", borderRadius: "0.5rem", padding: "0.625rem 0.875rem", fontSize: "0.875rem", color: "var(--foreground)", fontFamily: "var(--font-mono)", outline: "none", transition: "border-color 0.2s" } as React.CSSProperties;
+const btnA = { padding: "0.5rem 1rem", borderRadius: "0.5rem", fontSize: "0.8125rem", fontWeight: 600, cursor: "pointer", border: "1px solid var(--ring)", background: "var(--primary)", color: "var(--primary-foreground)", transition: "all 0.15s", boxShadow: "0 2px 4px rgba(0,0,0,0.1)" } as React.CSSProperties;
+const btnI = { padding: "0.5rem 1rem", borderRadius: "0.5rem", fontSize: "0.8125rem", fontWeight: 500, cursor: "pointer", border: "1px solid var(--border)", background: "var(--secondary)", color: "var(--muted-foreground)", transition: "all 0.15s" } as React.CSSProperties;
 
 const Toggle = ({ checked, onChange }: { checked: boolean, onChange: () => void }) => (
   <button onClick={onChange}
@@ -50,10 +50,10 @@ export default function SettingsPage() {
   const settings = useSettingsStore();
   const { connected, scanLastAt, scanAppCount } = useWSStore();
   const [activeTab, setActiveTab] = useState("voice");
-  const [saving,  setSaving]  = useState(false);
-  const [saved,   setSaved]   = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
   const [initialLoaded, setInitialLoaded] = useState(false);
-  
+
   // LLM State
   const [providers, setProviders] = useState<{ id: string; name: string; models: string[] }[]>([]);
   const [showApiKey, setShowApiKey] = useState(false);
@@ -105,7 +105,7 @@ export default function SettingsPage() {
 
   useEffect(() => {
     if (!initialLoaded) return;
-    
+
     // Sync the Start on Boot setting with the OS registry
     if (typeof window !== 'undefined' && '__TAURI_IPC__' in window) {
       invoke(settings.startupOnBoot ? "enable_autostart" : "disable_autostart").catch(err => console.error("Autostart sync failed:", err));
@@ -131,7 +131,7 @@ export default function SettingsPage() {
       const res: any = await api.testLLM();
       if (res.ok) setTestResult({ ok: true, msg: `Success! Model replied: ${res.reply}` });
       else setTestResult({ ok: false, msg: res.error || "Connection failed" });
-    } catch (err: any) { setTestResult({ ok: false, msg: err.message || "Request failed" }); } 
+    } catch (err: any) { setTestResult({ ok: false, msg: err.message || "Request failed" }); }
     finally { setTestingLlm(false); }
   };
 
@@ -148,7 +148,7 @@ export default function SettingsPage() {
       const blob = await response.blob();
       const audio = new Audio(URL.createObjectURL(blob));
       audio.play();
-    } catch (err) { console.error("Test TTS failed:", err); } 
+    } catch (err) { console.error("Test TTS failed:", err); }
     finally { setTestingTts(false); }
   };
 
@@ -158,7 +158,7 @@ export default function SettingsPage() {
     setSttTestActive(true);
     try {
       setSttTestText("Connecting to microphone...");
-      const stream = await navigator.mediaDevices.getUserMedia({ 
+      const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           noiseSuppression: true,
           echoCancellation: true,
@@ -170,23 +170,23 @@ export default function SettingsPage() {
         return;
       }
       mediaStreamRef.current = stream;
-      
+
       await getResolvedBaseUrl();
       const host = window.location.hostname === "localhost" ? "127.0.0.1" : window.location.host.split(":")[0];
       const wsUrl = (window.location.protocol === "https:" ? "wss://" : "ws://") + host + ":" + resolvedBackendPort + "/api/voice/ws-test-stt";
       const ws = new WebSocket(wsUrl);
       sttWsRef.current = ws;
-      
+
       ws.onopen = () => {
         setSttTestText("Listening... Speak now.");
-        
+
         const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
         audioContextRef.current = audioContext;
         const source = audioContext.createMediaStreamSource(stream);
-        
+
         const processor = audioContext.createScriptProcessor(4096, 1, 1);
         processorRef.current = processor;
-        
+
         processor.onaudioprocess = (e) => {
           if (ws.readyState !== WebSocket.OPEN) return;
           const inputData = e.inputBuffer.getChannelData(0);
@@ -197,19 +197,19 @@ export default function SettingsPage() {
           }
           ws.send(pcm16.buffer);
         };
-        
+
         source.connect(processor);
         processor.connect(audioContext.destination);
       };
-      
+
       ws.onmessage = (e) => {
         try {
           const data = JSON.parse(e.data);
           if (data.text) setSttTestText(data.text);
           if (data.duration_ms) setSttTestDuration(data.duration_ms);
-        } catch(err) {}
+        } catch (err) { }
       };
-      
+
       ws.onclose = () => { stopSttTest(); };
     } catch (err) {
       console.error(err);
@@ -225,7 +225,7 @@ export default function SettingsPage() {
     setSttTestDuration(null);
     setSttTestText("");
     if (processorRef.current && audioContextRef.current) processorRef.current.disconnect();
-    if (audioContextRef.current) { audioContextRef.current.close().catch(()=>{}); audioContextRef.current = null; }
+    if (audioContextRef.current) { audioContextRef.current.close().catch(() => { }); audioContextRef.current = null; }
     if (mediaStreamRef.current) { mediaStreamRef.current.getTracks().forEach(t => t.stop()); mediaStreamRef.current = null; }
     if (sttWsRef.current) {
       if (sttWsRef.current.readyState === WebSocket.OPEN) sttWsRef.current.send(JSON.stringify({ type: "stop" }));
@@ -278,11 +278,13 @@ export default function SettingsPage() {
             <div style={body}>
               <div>
                 <p style={lbl}>Wake Word</p>
-                <input style={inp} value={settings.wakeWord}
-                  onChange={(e) => settings.update({ wakeWord: e.target.value })}
-                  onFocus={(e) => { (e.target as HTMLInputElement).style.borderColor = "var(--ring)"; }}
-                  onBlur={(e)  => { (e.target as HTMLInputElement).style.borderColor  = "var(--border)"; }}
-                />
+                <select style={inp} value={settings.wakeWord}
+                  onChange={(e) => settings.update({ wakeWord: e.target.value })}>
+                  <option value="alexa">Alexa</option>
+                  <option value="hey_jarvis">Hey Jarvis</option>
+                  <option value="hey_mycroft">Hey Mycroft</option>
+                  <option value="hey_rhasspy">Hey Rhasspy</option>
+                </select>
                 <p style={sub}>Currently: <span style={{ color: "var(--foreground)", fontFamily: "var(--font-mono)" }}>&quot;{settings.wakeWord}&quot;</span></p>
               </div>
               <div>
@@ -290,7 +292,7 @@ export default function SettingsPage() {
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginBottom: "1.5rem" }}>
                   {[
                     { key: "whisper", label: "Whisper", desc: "Private, works offline" },
-                    { key: "gstt",  label: "Google STT", desc: "Highly accurate, requires internet" },
+                    // { key: "gstt", label: "Google STT", desc: "Highly accurate, requires internet" },
                   ].map(({ key, label, desc }) => {
                     const active = settings.sttProvider === key;
                     return (
@@ -320,7 +322,7 @@ export default function SettingsPage() {
                   <p style={sub}>Tiny = fastest · Medium = highly accurate</p>
                 </div>
               )}
-              
+
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "1rem", padding: "1.25rem", background: "var(--secondary)", borderRadius: "0.75rem" }}>
                 <div>
                   <p style={{ fontSize: "0.9375rem", fontWeight: 600, color: "var(--foreground)" }}>Noise Cancellation</p>
@@ -374,7 +376,7 @@ export default function SettingsPage() {
 
               <div style={{ marginTop: "1rem", padding: "1.25rem", background: "var(--secondary)", borderRadius: "0.75rem", border: "1px solid var(--border)" }}>
                 <p style={{ fontSize: "0.9375rem", fontWeight: 600, color: "var(--foreground)", marginBottom: "1rem" }}>Global Keyboard Shortcuts</p>
-                
+
                 <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
                   <div>
                     <p style={{ fontSize: "0.8125rem", fontWeight: 600, color: "var(--foreground)", marginBottom: "0.25rem" }}>Toggle Desktop Overlay</p>
@@ -438,7 +440,7 @@ export default function SettingsPage() {
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
                   {[
                     { key: "piper", label: "Piper TTS", desc: "Fully offline · Fast" },
-                    { key: "gtts",  label: "Google TTS", desc: "High quality · Requires internet" },
+                    { key: "gtts", label: "Google TTS", desc: "High quality · Requires internet" },
                   ].map(({ key, label, desc }) => {
                     const active = settings.ttsProvider === key;
                     return (
@@ -467,11 +469,11 @@ export default function SettingsPage() {
                   </select>
                 </div>
               )}
-              
+
               <div style={{ marginTop: "1.5rem", padding: "1.5rem", background: "var(--secondary)", borderRadius: "0.75rem", border: "1px solid var(--border)" }}>
                 <p style={{ fontSize: "0.9375rem", fontWeight: 600, color: "var(--foreground)", marginBottom: "0.25rem" }}>Test Voice Output</p>
                 <p style={{ fontSize: "0.8125rem", color: "var(--muted-foreground)", marginBottom: "1.25rem" }}>Listen to how the assistant will sound</p>
-                
+
                 <div style={{ display: "flex", gap: "0.75rem" }}>
                   <input style={{ ...inp, flex: 1 }} value={testTtsText} onChange={(e) => setTestTtsText(e.target.value)} placeholder="Enter text to synthesize..." />
                   <button onClick={handleTestTts} disabled={testingTts}
@@ -495,91 +497,91 @@ export default function SettingsPage() {
               </div>
               <Toggle checked={settings.llmEnabled} onChange={() => settings.update({ llmEnabled: !settings.llmEnabled })} />
             </div>
-            
-            {settings.llmEnabled && (() => {
-              const getBillingLink = (p: string) => p==="openai" ? "https://platform.openai.com/account/billing" : p==="groq" ? "https://console.groq.com/settings/billing" : p==="claude" ? "https://console.anthropic.com/settings/billing" : p==="gemini" ? "https://aistudio.google.com/app/billing" : p==="deepseek" ? "https://platform.deepseek.com/usage" : null;
-              return (
-              <div style={body}>
-                {settings.llmSystemError && (
-                  <div style={{ padding: "1rem", borderRadius: "0.5rem", fontSize: "0.875rem", fontWeight: 500, background: "rgba(239,68,68,0.1)", color: "#dc2626", border: "1px solid #ef444430", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                    <span>⚠️ {settings.llmSystemError}</span>
-                    <button onClick={() => settings.update({ llmSystemError: null })} style={{ background: "none", border: "none", color: "#dc2626", cursor: "pointer", fontWeight: 600, padding: "0 0.5rem" }}>×</button>
-                  </div>
-                )}
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1.5rem" }}>
-                  <div>
-                    <p style={lbl}>Provider</p>
-                    <select style={inp} value={settings.llmProvider || ""}
-                      onChange={(e) => {
-                        const prov = e.target.value;
-                        if (!prov) return settings.update({ llmProvider: "", llmModel: "" });
-                        const pObj = providers.find(p => p.id === prov);
-                        settings.update({ llmProvider: prov, llmModel: pObj?.models[0] || "" });
-                      }}>
-                      <option value="">None</option>
-                      {providers.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                    </select>
-                    {settings.llmProvider && getBillingLink(settings.llmProvider) && (
-                      <a href={getBillingLink(settings.llmProvider)!} target="_blank" rel="noreferrer" style={{ fontSize: "0.75rem", color: "var(--primary)", marginTop: "0.5rem", display: "inline-block", textDecoration: "underline" }}>Manage Billing & Quota ↗</a>
-                    )}
-                  </div>
-                  <div>
-                    <p style={lbl}>Model</p>
-                    <select style={inp} value={settings.llmModel || ""} onChange={(e) => settings.update({ llmModel: e.target.value })}>
-                      <option value="">None</option>
-                      {providers.find(p => p.id === settings.llmProvider)?.models.map(m => <option key={m} value={m}>{m}</option>)}
-                    </select>
-                  </div>
-                </div>
 
-                <div>
-                  <p style={lbl}>API Key</p>
-                  <div style={{ position: "relative" }}>
-                    <input type={showApiKey ? "text" : "password"} style={{ ...inp, paddingRight: "3.5rem" }}
-                      placeholder="••••••••••••••••••••••••" value={settings.llmApiKey} onChange={(e) => settings.update({ llmApiKey: e.target.value })} />
-                    <button onClick={() => setShowApiKey(!showApiKey)}
-                      style={{ position: "absolute", right: "1rem", top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "var(--muted-foreground)" }}>
-                      {showApiKey ? <EyeOff size={18} /> : <Eye size={18} />}
+            {settings.llmEnabled && (() => {
+              const getBillingLink = (p: string) => p === "openai" ? "https://platform.openai.com/account/billing" : p === "groq" ? "https://console.groq.com/settings/billing" : p === "claude" ? "https://console.anthropic.com/settings/billing" : p === "gemini" ? "https://aistudio.google.com/app/billing" : p === "deepseek" ? "https://platform.deepseek.com/usage" : null;
+              return (
+                <div style={body}>
+                  {settings.llmSystemError && (
+                    <div style={{ padding: "1rem", borderRadius: "0.5rem", fontSize: "0.875rem", fontWeight: 500, background: "rgba(239,68,68,0.1)", color: "#dc2626", border: "1px solid #ef444430", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                      <span>⚠️ {settings.llmSystemError}</span>
+                      <button onClick={() => settings.update({ llmSystemError: null })} style={{ background: "none", border: "none", color: "#dc2626", cursor: "pointer", fontWeight: 600, padding: "0 0.5rem" }}>×</button>
+                    </div>
+                  )}
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1.5rem" }}>
+                    <div>
+                      <p style={lbl}>Provider</p>
+                      <select style={inp} value={settings.llmProvider || ""}
+                        onChange={(e) => {
+                          const prov = e.target.value;
+                          if (!prov) return settings.update({ llmProvider: "", llmModel: "" });
+                          const pObj = providers.find(p => p.id === prov);
+                          settings.update({ llmProvider: prov, llmModel: pObj?.models[0] || "" });
+                        }}>
+                        <option value="">None</option>
+                        {providers.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                      </select>
+                      {settings.llmProvider && getBillingLink(settings.llmProvider) && (
+                        <a href={getBillingLink(settings.llmProvider)!} target="_blank" rel="noreferrer" style={{ fontSize: "0.75rem", color: "var(--primary)", marginTop: "0.5rem", display: "inline-block", textDecoration: "underline" }}>Manage Billing & Quota ↗</a>
+                      )}
+                    </div>
+                    <div>
+                      <p style={lbl}>Model</p>
+                      <select style={inp} value={settings.llmModel || ""} onChange={(e) => settings.update({ llmModel: e.target.value })}>
+                        <option value="">None</option>
+                        {providers.find(p => p.id === settings.llmProvider)?.models.map(m => <option key={m} value={m}>{m}</option>)}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div>
+                    <p style={lbl}>API Key</p>
+                    <div style={{ position: "relative" }}>
+                      <input type={showApiKey ? "text" : "password"} style={{ ...inp, paddingRight: "3.5rem" }}
+                        placeholder="••••••••••••••••••••••••" value={settings.llmApiKey} onChange={(e) => settings.update({ llmApiKey: e.target.value })} />
+                      <button onClick={() => setShowApiKey(!showApiKey)}
+                        style={{ position: "absolute", right: "1rem", top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "var(--muted-foreground)" }}>
+                        {showApiKey ? <EyeOff size={18} /> : <Eye size={18} />}
+                      </button>
+                    </div>
+                    <p style={sub}>Only required if changing. Saved securely in the database.</p>
+                  </div>
+
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1.5rem" }}>
+                    <div>
+                      <p style={lbl}>Processing Mode</p>
+                      <div style={{ display: "flex", gap: "0.5rem" }}>
+                        <button onClick={() => settings.update({ llmMode: "fallback" })} style={settings.llmMode === "fallback" ? btnA : btnI}>Fallback</button>
+                        <button onClick={() => settings.update({ llmMode: "always_on" })} style={settings.llmMode === "always_on" ? btnA : btnI}>Always-On</button>
+                      </div>
+                      <p style={sub}>{settings.llmMode === "fallback" ? "Low Token Usage: Calls AI only if intent matches fail" : "High Token Usage: Routes every command to AI"}</p>
+                    </div>
+                    <div>
+                      <p style={lbl}>Temperature: {settings.llmTemperature}</p>
+                      <input type="range" min="0" max="1" step="0.1" value={settings.llmTemperature} onChange={(e) => settings.update({ llmTemperature: parseFloat(e.target.value) })} style={{ width: "100%", marginTop: "0.5rem", accentColor: "var(--primary)" }} />
+                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.75rem", color: "var(--muted-foreground)", marginTop: "0.25rem", fontWeight: 500 }}>
+                        <span>Precise</span><span>Creative</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ marginTop: "1rem", padding: "1.25rem", background: "var(--secondary)", borderRadius: "0.75rem", border: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <div>
+                      <p style={{ fontSize: "0.9375rem", fontWeight: 600, color: "var(--foreground)" }}>Test Connection</p>
+                      <p style={{ fontSize: "0.8125rem", color: "var(--muted-foreground)" }}>Verify your API key and model</p>
+                    </div>
+                    <button onClick={handleTestLlm} disabled={testingLlm}
+                      style={{ padding: "0.5rem 1.25rem", borderRadius: "0.5rem", fontSize: "0.875rem", fontWeight: 600, cursor: "pointer", background: "var(--background)", border: "1px solid var(--border)", color: "var(--foreground)", display: "flex", alignItems: "center", gap: "0.5rem", boxShadow: "0 1px 2px rgba(0,0,0,0.05)" }}>
+                      {testingLlm ? <Loader2 size={16} className="animate-spin" /> : <Link2 size={16} />}
+                      Test API
                     </button>
                   </div>
-                  <p style={sub}>Only required if changing. Saved securely in the database.</p>
-                </div>
-
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1.5rem" }}>
-                  <div>
-                    <p style={lbl}>Processing Mode</p>
-                    <div style={{ display: "flex", gap: "0.5rem" }}>
-                      <button onClick={() => settings.update({ llmMode: "fallback" })} style={settings.llmMode === "fallback" ? btnA : btnI}>Fallback</button>
-                      <button onClick={() => settings.update({ llmMode: "always_on" })} style={settings.llmMode === "always_on" ? btnA : btnI}>Always-On</button>
+                  {testResult && (
+                    <div style={{ padding: "1rem", borderRadius: "0.5rem", fontSize: "0.875rem", fontWeight: 500, background: testResult.ok ? "rgba(34,197,94,0.1)" : "rgba(239,68,68,0.1)", color: testResult.ok ? "#16a34a" : "#dc2626", border: `1px solid ${testResult.ok ? "#22c55e30" : "#ef444430"}` }}>
+                      {testResult.msg}
                     </div>
-                    <p style={sub}>{settings.llmMode === "fallback" ? "Low Token Usage: Calls AI only if intent matches fail" : "High Token Usage: Routes every command to AI"}</p>
-                  </div>
-                  <div>
-                    <p style={lbl}>Temperature: {settings.llmTemperature}</p>
-                    <input type="range" min="0" max="1" step="0.1" value={settings.llmTemperature} onChange={(e) => settings.update({ llmTemperature: parseFloat(e.target.value) })} style={{ width: "100%", marginTop: "0.5rem", accentColor: "var(--primary)" }} />
-                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.75rem", color: "var(--muted-foreground)", marginTop: "0.25rem", fontWeight: 500 }}>
-                      <span>Precise</span><span>Creative</span>
-                    </div>
-                  </div>
+                  )}
                 </div>
-
-                <div style={{ marginTop: "1rem", padding: "1.25rem", background: "var(--secondary)", borderRadius: "0.75rem", border: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                  <div>
-                    <p style={{ fontSize: "0.9375rem", fontWeight: 600, color: "var(--foreground)" }}>Test Connection</p>
-                    <p style={{ fontSize: "0.8125rem", color: "var(--muted-foreground)" }}>Verify your API key and model</p>
-                  </div>
-                  <button onClick={handleTestLlm} disabled={testingLlm}
-                    style={{ padding: "0.5rem 1.25rem", borderRadius: "0.5rem", fontSize: "0.875rem", fontWeight: 600, cursor: "pointer", background: "var(--background)", border: "1px solid var(--border)", color: "var(--foreground)", display: "flex", alignItems: "center", gap: "0.5rem", boxShadow: "0 1px 2px rgba(0,0,0,0.05)" }}>
-                    {testingLlm ? <Loader2 size={16} className="animate-spin" /> : <Link2 size={16} />}
-                    Test API
-                  </button>
-                </div>
-                {testResult && (
-                  <div style={{ padding: "1rem", borderRadius: "0.5rem", fontSize: "0.875rem", fontWeight: 500, background: testResult.ok ? "rgba(34,197,94,0.1)" : "rgba(239,68,68,0.1)", color: testResult.ok ? "#16a34a" : "#dc2626", border: `1px solid ${testResult.ok ? "#22c55e30" : "#ef444430"}` }}>
-                    {testResult.msg}
-                  </div>
-                )}
-              </div>
               );
             })()}
           </section>
@@ -604,7 +606,7 @@ export default function SettingsPage() {
                 </div>
                 <p style={sub}>Chromium is highly recommended for stability.</p>
               </div>
-              
+
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "1rem", padding: "1.25rem", background: "var(--secondary)", borderRadius: "0.75rem" }}>
                 <div>
                   <p style={{ fontSize: "0.9375rem", fontWeight: 600, color: "var(--foreground)" }}>Browser Animations</p>
@@ -737,7 +739,7 @@ export default function SettingsPage() {
                 {/* Mode selector */}
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginBottom: "1.25rem" }}>
                   {([
-                    { key: "auto",   label: "Auto",   desc: "Scan on startup and refresh automatically", icon: "🔄" },
+                    { key: "auto", label: "Auto", desc: "Scan on startup and refresh automatically", icon: "🔄" },
                     { key: "manual", label: "Manual", desc: "Only scan when you click the button below", icon: "🖐" },
                   ] as const).map(({ key, label, desc, icon }) => {
                     const active = settings.scanMode === key;
@@ -810,9 +812,9 @@ export default function SettingsPage() {
       <div style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }}>
         <TopBar />
         <main style={{ flex: 1, overflowY: "auto", padding: "2.5rem" }}>
-          
+
           <div style={{ width: "100%", display: "flex", gap: "4rem", position: "relative" }}>
-            
+
             {/* Left Navigation Sidebar */}
             <nav style={{ width: "240px", flexShrink: 0, position: "sticky", top: 0, display: "flex", flexDirection: "column", gap: "0.375rem" }}>
               <div style={{ marginBottom: "2rem" }}>
@@ -820,7 +822,7 @@ export default function SettingsPage() {
                   <Settings style={{ width: "1.75rem", height: "1.75rem", color: "var(--primary)" }} /> Settings
                 </h1>
               </div>
-              
+
               {TABS.map((tab) => {
                 const isActive = activeTab === tab.id;
                 const Icon = tab.icon;

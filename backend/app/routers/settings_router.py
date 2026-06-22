@@ -254,6 +254,27 @@ async def update_settings(
         except ImportError:
             pass
 
+    # Hot-reload Wake Word model if it changed
+    if "wake_word" in body.model_dump(exclude_none=True):
+        pipeline = getattr(request.app.state, "pipeline", None)
+        if pipeline:
+            try:
+                from voice.wake_word.detector import WakeWordDetector
+                from voice.pipeline import PipelineState
+                logger.info(f"Hot-reloading Wake Word model to '{s['wake_word']}'...")
+                
+                pipeline._wake_word.stop()
+                
+                pipeline._wake_word = WakeWordDetector(
+                    wake_word=s["wake_word"],
+                    on_detected=pipeline._on_wake_word
+                )
+                
+                if pipeline._state == PipelineState.IDLE:
+                    pipeline._wake_word.start()
+            except Exception as e:
+                logger.error(f"Failed to hot-reload Wake Word model: {e}")
+
     # Hot-swap Desktop Overlay if it changed
     if "enable_desktop_overlay" in body.model_dump(exclude_none=True):
         overlay_enabled = body.enable_desktop_overlay
