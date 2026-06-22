@@ -463,9 +463,7 @@ export default function SettingsPage() {
                   <select style={{ ...inp, maxWidth: "24rem" }} value={settings.piperVoice} onChange={(e) => settings.update({ piperVoice: e.target.value })}>
                     <option value="en_US-lessac-medium">Lessac (Female)</option>
                     <option value="en_US-ryan-medium">Ryan (Male)</option>
-                    <option value="en_US-hfc_male-medium">HFC Male (Male)</option>
                     <option value="en_US-hfc_female-medium">HFC Female (Female)</option>
-                    <option value="en_US-libritts_r-medium">LibriTTS (Multi-speaker)</option>
                   </select>
                 </div>
               )}

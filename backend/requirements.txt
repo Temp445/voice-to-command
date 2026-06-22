@@ -55,7 +55,7 @@ numpy
 webrtcvad
 pygame
 gTTS
-pyrnnoise
+# pyrnnoise
 psutil
 
 # ============================================================

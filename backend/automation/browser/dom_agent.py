@@ -218,12 +218,14 @@ class DOMAgent:
                 # Heuristic 1: If intent starts with a window control verb, see if exactly one button matches the verb
                 first_word = intent_lower.split()[0] if intent_lower else ""
                 if first_word in ["close", "minimize", "maximize", "open", "toggle", "expand", "collapse"]:
-                    verb_matches = [el for el in elements if el.get('text', '').lower().strip() == first_word or el.get('aria', '').lower().strip() == first_word or first_word in el.get('context', '').lower().split()]
-                    # Filter to only buttons/links for this verb heuristic
-                    verb_matches = [el for el in verb_matches if el.get('tag') in ['button', 'a', 'svg'] or el.get('role') == 'button']
-                    if len(verb_matches) == 1:
-                        logger.info(f"Fast path match: mapped verb '{first_word}' to single element")
-                        return [verb_matches[0]['id']], None, action_type
+                    is_generic_target = not clean_intent or clean_intent in ["it", "that", "this", "the window", "window", "tab", "the tab"]
+                    if is_generic_target:
+                        verb_matches = [el for el in elements if el.get('text', '').lower().strip() == first_word or el.get('aria', '').lower().strip() == first_word or first_word in el.get('context', '').lower().split()]
+                        # Filter to only buttons/links for this verb heuristic
+                        verb_matches = [el for el in verb_matches if el.get('tag') in ['button', 'a', 'svg'] or el.get('role') == 'button']
+                        if len(verb_matches) == 1:
+                            logger.info(f"Fast path match: mapped verb '{first_word}' to single element")
+                            return [verb_matches[0]['id']], None, action_type
                         
                 # Heuristic 2: Substring inclusion & Fuzzy Matching
                 # Rank matches by how closely they match the intent
@@ -350,7 +352,7 @@ Note: The user may be interacting with the Acesoftcloud CRM. Keep CRM terminolog
 IMPORTANT: If the user intends to interact with a form field (like "select product", "enter name"), strongly prioritize elements whose context indicates they are inside a form or creation panel (e.g., context containing 'Create', 'New', 'Add') over elements located in data tables or lists.
 The user might refer to elements that do not have explicit text labels (e.g., "start date" or "end date" might just be calendar icons with type="date" next to each other). Use the 'type' attribute and the element's position (smaller Y coordinate = higher up, adjacent elements = date ranges) to infer their purpose.
 
-CRITICAL POSITIONING: Elements include a 'pos' indicator (e.g. pos:[center], pos:[bottom-right]). Use this to distinguish visually identical buttons! If the user says "close the popup card", choose the button in the 'center' or 'top-center'. If they say "close the floating button" or "chat", choose the button in the 'bottom-right' or 'bottom-left'.
+CRITICAL POSITIONING: Elements include a 'pos' indicator (e.g. pos:[center], pos:[bottom-right]). Use this to distinguish visually identical buttons! If the user says "close the popup card" or "close modal", choose the button in the 'center', 'top-center', 'top-right', or 'center-right'. If they say "close the floating button" or "chat", choose the button in the 'bottom-right' or 'bottom-left'.
 CRITICAL: Do NOT guess or make loose matches if the context contradicts the user's intent. For example, if the user asks for a specific date like "May 20", but the Page Context indicates the current month is "June", do NOT select the "20" button. 
 If the user specifies a serial number (e.g., "S.No 2", "row 2"), you MUST match the exact number at the beginning of the row's context, and do NOT confuse it with an Order ID or Document Number that happens to contain that digit (like "ORD-0002").
 If you cannot be absolutely sure the element matches the user's intent, reply with 'NONE'.
