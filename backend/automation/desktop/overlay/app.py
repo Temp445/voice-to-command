@@ -18,6 +18,7 @@ class OverlayApp(QWidget):
     update_state_signal = pyqtSignal(str)
     show_card_signal = pyqtSignal(str, str)
     update_settings_signal = pyqtSignal(dict)
+    send_command_signal = pyqtSignal(str)
 
     def __init__(self):
         super().__init__()
@@ -388,14 +389,14 @@ class OverlayApp(QWidget):
     def _on_mic_clicked(self):
         if self.current_state == "listening":
             # STOP listening — go idle immediately, backend will confirm
-            asyncio.create_task(send_command("stop_listen"))
+            self.send_command_signal.emit("stop_listen")
             self._on_state("idle")
             self.status_label.setText("Mic stopped")
             self.sub_label.setText("Click mic to start listening")
         elif self.current_state in ("idle", "error"):
             # START listening
             self._on_state("listening")
-            asyncio.create_task(send_command("trigger_listen"))
+            self.send_command_signal.emit("trigger_listen")
         # if processing or speaking, ignore click
 
 
@@ -404,12 +405,12 @@ class OverlayApp(QWidget):
         """Request the backend to replay the last spoken TTS."""
         if self.current_state in ("idle", "error"):
             # The backend `replay` command triggers the TTS.
-            asyncio.create_task(send_command("replay"))
+            self.send_command_signal.emit("replay")
 
     def _on_stop_clicked(self):
         """Request the backend to forcefully stop the current pipeline action."""
         if self.current_state not in ("idle", "error"):
-            asyncio.create_task(send_command("stop"))
+            self.send_command_signal.emit("stop")
 
     def _on_pin_clicked(self):
         self._is_pinned = not self._is_pinned

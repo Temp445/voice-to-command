@@ -12,6 +12,8 @@ import websockets
 import qasync
 from .app import OverlayApp
 
+active_websocket = None
+
 async def websocket_client(overlay: OverlayApp):
     global active_websocket
     import os
@@ -86,6 +88,14 @@ def main():
     asyncio.set_event_loop(loop)
 
     overlay = OverlayApp()
+    
+    def on_send_command(cmd: str):
+        if active_websocket:
+            payload = {"type": cmd}
+            asyncio.create_task(active_websocket.send(json.dumps(payload)))
+            
+    overlay.send_command_signal.connect(on_send_command)
+
     # Start hidden, only show when WebSocket state changes
 
     loop.create_task(websocket_client(overlay))

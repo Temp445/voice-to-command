@@ -310,7 +310,8 @@ async def lifespan(app: FastAPI):
                         pass
 
                 app_state.overlay_process = subprocess.Popen(
-                    [python_exe, overlay_path],
+                    [python_exe, "-m", "automation.desktop.overlay"],
+                    cwd=str(_BACKEND),
                     creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
                 )
                 logger.info("🖥️ Desktop Overlay started invisibly in background on startup")

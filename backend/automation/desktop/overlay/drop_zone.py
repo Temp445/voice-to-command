@@ -10,6 +10,7 @@ from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QPropertyAnimation, QEasingCurv
 from PyQt6.QtGui import QFont, QPixmap, QPainter, QColor, QBrush, QPen, QRadialGradient, QLinearGradient
 import websockets
 import qasync
+from .widgets import make_pixmap
 
 class DropZoneWindow(QWidget):
     def __init__(self):

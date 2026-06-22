@@ -97,8 +97,8 @@ class BrowserEngine:
                                 is_cdp_reconnect = True
                                 logger.info("Successfully reconnected to existing Chrome instance via CDP.")
                             except Exception as e:
-                                logger.error(f"[{__name__}] {type(e).__name__}: {e}")
-                                logger.info("No active CDP session found. Launching new persistent context.")
+                                logger.debug(f"No active CDP session found (expected if browser is closed): {e}")
+                                logger.info("Launching new persistent context.")
                                 self._context = await self._playwright.chromium.launch_persistent_context(
                                     user_data_dir=profile_path,
                                     channel="chrome",  # Use system Chrome to avoid Chromium fingerprint

@@ -157,7 +157,8 @@ async def get_settings(request: Request, user_id: str = Depends(get_current_user
         overlay_path = os.path.join(str(_ROOT), "automation", "desktop", "overlay", "__main__.py")
         if os.path.exists(overlay_path):
             request.app.state.overlay_process = subprocess.Popen(
-                [python_exe, overlay_path],
+                [python_exe, "-m", "automation.desktop.overlay"],
+                cwd=str(_ROOT),
                 creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
             )
             logger.info("🖥️ Desktop Overlay started dynamically after login")
@@ -291,7 +292,8 @@ async def update_settings(
                 overlay_path = os.path.join(str(_ROOT), "automation", "desktop", "overlay", "__main__.py")
                 if os.path.exists(overlay_path):
                     request.app.state.overlay_process = subprocess.Popen(
-                        [python_exe, overlay_path],
+                        [python_exe, "-m", "automation.desktop.overlay"],
+                        cwd=str(_ROOT),
                         creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
                     )
                     logger.info("🖥️ Desktop Overlay dynamically started.")
