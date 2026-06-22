@@ -92,47 +92,9 @@ class CommandService:
         self.last_target_app: str = ""
         self.current_domain: str = "desktop"
 
-        # ── In-memory workflow cache ──────────────────────────────────────────
-        self._workflows_cache: list[dict] = []
-        self._workflows_cache_ts: float = 0.0   # last refresh timestamp
-
         # ── Website shortcuts cache ───────────────────────────────────────────
         self._ws_cache_loaded: bool = False
         self._ws_sites: list[dict] = []
-
-    # ── Workflow Cache ────────────────────────────────────────────────────────
-
-    async def refresh_workflows_cache(self) -> None:
-        """Fetch all workflows from Supabase once and store in memory.
-        Call this at startup and after any workflow create/update/delete.
-        """
-        try:
-            from app.core.supabase_client import supabase_admin, sb_run
-            if supabase_admin is None:
-                return
-            res = await sb_run(lambda: supabase_admin.table("workflows").select("*").execute())
-            self._workflows_cache = res.data or []
-            self._workflows_cache_ts = time.time()
-            logger.info(f"✅ Workflows cache refreshed: {len(self._workflows_cache)} macros ready")
-        except Exception as e:
-            logger.warning(f"⚠️ Could not refresh workflows cache: {e}")
-
-    def refresh_in_background(self) -> None:
-        """Fire-and-forget cache refresh — call after any workflow change."""
-        try:
-            loop = asyncio.get_running_loop()
-            loop.create_task(self.refresh_workflows_cache())
-        except RuntimeError:
-            pass  # No running loop — cache will be refreshed on next request
-
-    def _maybe_refresh_workflows(self) -> None:
-        """Schedule a background TTL refresh if the cache is stale (non-blocking)."""
-        if time.time() - self._workflows_cache_ts > _CACHE_TTL:
-            try:
-                loop = asyncio.get_running_loop()
-                loop.create_task(self.refresh_workflows_cache())
-            except RuntimeError:
-                pass
 
     # ── Website Shortcuts Cache ───────────────────────────────────────────────
 
@@ -216,29 +178,6 @@ class CommandService:
             logger.warning(f"Failed to run spellcheck: {e}")
 
         start = time.perf_counter()
-
-        # Trigger TTL background refresh (non-blocking, fire-and-forget)
-        self._maybe_refresh_workflows()
-
-        # 0. Check for user-defined Macros/Workflows — read from in-memory cache (no DB hit)
-        try:
-            if self._workflows_cache:
-                for wf in self._workflows_cache:
-                    trigger_phrase = wf.get("trigger_phrase")
-                    if trigger_phrase and trigger_phrase.lower() in text.lower():
-                        logger.info(f"Matched workflow macro: {wf.get('name')}")
-                        steps = wf.get("steps", [])
-                        results = await self._execute_workflow_steps(steps)
-                        return {
-                            "intent": "execute_workflow",
-                            "parameters": {"name": wf.get("name")},
-                            "result": f"Executed macro '{wf.get('name')}'. Steps: {len(results)}",
-                            "status": "success",
-                            "duration_ms": (time.perf_counter() - start) * 1000,
-                            "is_fallback": False
-                        }
-        except Exception as e:
-            logger.error(f"Failed to check macros: {e}")
 
         # 1. Check for conversational pending actions
         if hasattr(self, "_pending_action") and self._pending_action:
@@ -346,12 +285,22 @@ class CommandService:
                         pass
                 self._ws_cache_loaded = True
 
-            _text_lower = text.lower()
+            _text_lower = text.lower().strip()
+            _text_lower_no_spaces = _text_lower.replace(" ", "")
+            _nav_verbs = ["open", "launch", "go to", "goto", "navigate to", "start", "visit"]
+            _has_nav_verb = any(_text_lower.startswith(v) for v in _nav_verbs)
+            
             _matched_site_url: str | None = None
             for _site in _sites:
                 _kws = [k.strip().lower() for k in _site.get("keywords", "").split(",") if k.strip()]
-                if any(_kw and _kw in _text_lower for _kw in _kws):
-                    _matched_site_url = _site.get("url", "")
+                for _kw in _kws:
+                    _kw_no_spaces = _kw.replace(" ", "")
+                    # Match if exact (or very close), OR if it has a navigation verb and contains the keyword
+                    if _kw_no_spaces in _text_lower_no_spaces:
+                        if _has_nav_verb or len(_text_lower_no_spaces) <= len(_kw_no_spaces) + 8:
+                            _matched_site_url = _site.get("url", "")
+                            break
+                if _matched_site_url:
                     break
 
             if _matched_site_url:
@@ -523,64 +472,6 @@ class CommandService:
         if locals().get("llm_routed", False):
             res_dict["routed_by_llm"] = True
         return res_dict
-
-    # ── Workflow Step Executor ────────────────────────────────────────────────
-
-    async def _execute_workflow_steps(self, steps: list[dict]) -> list[str]:
-        """
-        Execute workflow macro steps.
-
-        Strategy:
-          - Steps with `delay_ms > 0` act as ordering barriers — everything before
-            the delay runs, then the sleep happens, then the next group runs.
-          - Steps without delay_ms in the same contiguous group run in PARALLEL
-            via asyncio.gather for maximum throughput.
-        """
-        results: list[str] = []
-
-        # Group steps into ordered batches separated by delay barriers
-        # e.g., [A, B, delay(500), C, D] → [[A, B], delay(500), [C, D]]
-        current_group: list[dict] = []
-
-        async def _flush_group(group: list[dict]) -> list[str]:
-            """Run a group of delay-free steps concurrently."""
-            if not group:
-                return []
-            if len(group) == 1:
-                step = group[0]
-                action = step.get("action", "")
-                if action and "macro_loop" not in action:
-                    r = await self.parse_and_execute(action)
-                    return [r.get("result", "")]
-                return []
-            # Multiple steps — gather them
-            async def _run_step(step: dict) -> str:
-                action = step.get("action", "")
-                if action and "macro_loop" not in action:
-                    r = await self.parse_and_execute(action)
-                    return r.get("result", "")
-                return ""
-            return list(await asyncio.gather(*(_run_step(s) for s in group)))
-
-        for step in steps:
-            delay_ms = step.get("delay_ms", 0)
-            if delay_ms:
-                # Flush current group first
-                results.extend(await _flush_group(current_group))
-                current_group = []
-                # Then sleep as the explicit barrier
-                await asyncio.sleep(delay_ms / 1000)
-                # The step that carries the delay also has an action — run it alone after sleep
-                action = step.get("action", "")
-                if action and "macro_loop" not in action:
-                    r = await self.parse_and_execute(action)
-                    results.append(r.get("result", ""))
-            else:
-                current_group.append(step)
-
-        # Flush any remaining steps
-        results.extend(await _flush_group(current_group))
-        return results
 
     # ── Intent Execution ──────────────────────────────────────────────────────
 

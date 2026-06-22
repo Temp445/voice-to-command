@@ -56,7 +56,6 @@ class User(Base):
 
     settings: Mapped["UserSettings"] = relationship("UserSettings", back_populates="user", uselist=False)
     commands: Mapped[list["CommandHistory"]] = relationship("CommandHistory", back_populates="user")
-    workflows: Mapped[list["Workflow"]] = relationship("Workflow", back_populates="user")
 
 
 # ─── UserSettings ────────────────────────────────────────────────────────────
@@ -126,24 +125,6 @@ class CommandHistory(Base):
 
     user: Mapped["User"] = relationship("User", back_populates="commands")
 
-
-# ─── Workflow ────────────────────────────────────────────────────────────────
-
-class Workflow(Base):
-    __tablename__ = "workflows"
-
-    id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True, default=new_uuid)
-    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
-    name: Mapped[str] = mapped_column(String(200), nullable=False)
-    description: Mapped[str | None] = mapped_column(Text, nullable=True)
-    trigger_phrase: Mapped[str | None] = mapped_column(String(200), nullable=True)
-    steps: Mapped[list] = mapped_column(JSON, default=list)
-    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
-    run_count: Mapped[int] = mapped_column(default=0)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
-
-    user: Mapped["User"] = relationship("User", back_populates="workflows")
 
 
 # ─── AutomationLog ───────────────────────────────────────────────────────────

@@ -195,11 +195,6 @@ async def lifespan(app: FastAPI):
             if not llm_service.is_ready:
                 _init_llm_from_env()
 
-        async def _warm_workflows():
-            """Pre-load workflow macros into in-memory cache."""
-            from app.services.command_service import command_service
-            await command_service.refresh_workflows_cache()
-
         async def _warm_shortcuts():
             """Pre-load website shortcuts into in-memory cache (no per-command DB hit)."""
             from app.services.command_service import command_service
@@ -209,7 +204,6 @@ async def lifespan(app: FastAPI):
         await asyncio.gather(
             _restore_settings(),
             _init_llm(),
-            _warm_workflows(),
             _warm_shortcuts(),
             return_exceptions=True,   # One failure must not block others
         )
@@ -272,10 +266,11 @@ async def lifespan(app: FastAPI):
 
         # ── Phase 3: Model pre-warming ────────────────────────────────────────
         # Semantic Router uses ONNX which can deadlock if initialized exactly
-        # concurrently with OpenWakeWord (also ONNX). Small delay prevents this.
+        # concurrently with OpenWakeWord or Piper TTS. Delaying by 15s prevents this.
         async def _prewarm_semantic():
-            await asyncio.sleep(2.0)
+            await asyncio.sleep(15.0)
             try:
+                logger.info("⚡ Background init Phase 3: Semantic Router pre-warm...")
                 from app.services.semantic_router import semantic_router
                 from app.services.command_service import command_service
                 await asyncio.to_thread(semantic_router.initialize, command_service._intents)
@@ -283,12 +278,9 @@ async def lifespan(app: FastAPI):
             except Exception as warm_err:
                 logger.warning(f"⚠️ Could not pre-warm Semantic Router: {warm_err}")
 
-        logger.info("⚡ Background init Phase 3: Semantic Router pre-warm...")
-        await asyncio.gather(
-            _prewarm_semantic(),
-            return_exceptions=True,
-        )
-        logger.info("✅ Background init Phase 3 complete — all systems warm and ready")
+        # Schedule and detach so it doesn't block overlay startup
+        asyncio.create_task(_prewarm_semantic())
+        logger.info("✅ Background init Phase 3 scheduled (delayed 15s) — all systems warm and ready")
 
         # ── Desktop Overlay (after pipeline is up) ────────────────────────────
         from app.config import settings as global_settings
@@ -360,13 +352,12 @@ register_exception_handlers(app)
 
 # ─── Routers ─────────────────────────────────────────────────────────────────
 
-from app.routers import auth, voice, commands, workflows, automation, settings_router  # noqa: E402
+from app.routers import auth, voice, commands, automation, settings_router  # noqa: E402
 from app.routers import llm_router  # noqa: E402
 
 app.include_router(auth.router,          prefix="/api/auth",       tags=["Auth"])
 app.include_router(voice.router,         prefix="/api/voice",      tags=["Voice"])
 app.include_router(commands.router,      prefix="/api/commands",   tags=["Commands"])
-app.include_router(workflows.router,     prefix="/api/workflows",  tags=["Workflows"])
 app.include_router(automation.router,    prefix="/api/automation", tags=["Automation"])
 app.include_router(settings_router.router, prefix="/api/settings", tags=["Settings"])
 app.include_router(llm_router.router,    prefix="/api/llm",        tags=["AI Assistant"])

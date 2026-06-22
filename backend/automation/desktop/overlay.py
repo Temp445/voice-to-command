@@ -25,6 +25,7 @@ _SVGS = {
     "loader": b'<svg xmlns="http://www.w3.org/2000/svg" width="{s}" height="{s}" viewBox="0 0 24 24" fill="none" stroke="{c}" stroke-width="2.5" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>',
     "x": b'<svg xmlns="http://www.w3.org/2000/svg" width="{s}" height="{s}" viewBox="0 0 24 24" fill="none" stroke="{c}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>',
     "stop": b'<svg xmlns="http://www.w3.org/2000/svg" width="{s}" height="{s}" viewBox="0 0 24 24" fill="{c}" stroke="{c}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="2" ry="2"/></svg>',
+    "pin": b'<svg xmlns="http://www.w3.org/2000/svg" width="{s}" height="{s}" viewBox="0 0 24 24" fill="none" stroke="{c}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" x2="12" y1="17" y2="22"/><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"/></svg>',
 }
 
 def make_pixmap(name: str, color: str, size: int = 18, rotation: int = 0) -> QPixmap:
@@ -325,25 +326,54 @@ class DropZoneWindow(QWidget):
     def __init__(self):
         super().__init__(None, Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.Tool)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-        self.setFixedSize(80, 80)
+        self.setFixedSize(180, 180)
+        self._hovered = False
         
         layout = QVBoxLayout(self)
+        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.setSpacing(10)
+        
         self.icon_label = QLabel()
         self.icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
         # Load a big X icon
-        self.idle_pixmap = make_pixmap("x", "#9ca3af", 32)
-        self.hover_pixmap = make_pixmap("x", "#ef4444", 38) # Red and bigger
+        self.idle_pixmap = make_pixmap("x", "#9ca3af", 48)
+        self.hover_pixmap = make_pixmap("x", "#ef4444", 64) # Red and bigger
         
         self.icon_label.setPixmap(self.idle_pixmap)
         layout.addWidget(self.icon_label)
+        
+        self.text_label = QLabel("Drop to Close")
+        self.text_label.setFont(QFont("Segoe UI", 11, QFont.Weight.Bold))
+        self.text_label.setStyleSheet("color: #9ca3af; background: transparent;")
+        self.text_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.text_label)
+        
         self.hide()
         
     def set_hover(self, hovered: bool):
+        self._hovered = hovered
         if hovered:
             self.icon_label.setPixmap(self.hover_pixmap)
+            self.text_label.setStyleSheet("color: #ef4444; background: transparent;")
         else:
             self.icon_label.setPixmap(self.idle_pixmap)
+            self.text_label.setStyleSheet("color: #9ca3af; background: transparent;")
+        self.update()
+
+    def paintEvent(self, event):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        if self._hovered:
+            p.setBrush(QBrush(QColor(239, 68, 68, 60))) # Light red background
+            pen = QPen(QColor(239, 68, 68, 200), 3, Qt.PenStyle.DashLine)
+        else:
+            p.setBrush(QBrush(QColor(24, 24, 32, 220))) # Dark semi-transparent
+            pen = QPen(QColor(156, 163, 175, 150), 2, Qt.PenStyle.DashLine)
+            
+        p.setPen(pen)
+        p.drawRoundedRect(2, 2, self.width() - 4, self.height() - 4, 24, 24)
+        p.end()
 
 
 # ─── Main Overlay Window ──────────────────────────────────────────────────────
@@ -360,6 +390,7 @@ class OverlayApp(QWidget):
         self._drag_pos = None
         self._ws_connected = False
         self._card_mode = None          # "suggestion" | "replay" | None
+        self._is_pinned = False         # If true, auto-hide is disabled
         self._wake_word = "alexa"
         self._card_hide_timer = QTimer(self)
         self._card_hide_timer.setSingleShot(True)
@@ -380,7 +411,7 @@ class OverlayApp(QWidget):
         
         self.drop_zone = DropZoneWindow()
         screen = QApplication.primaryScreen().geometry()
-        self.drop_zone.move(screen.width() // 2 - self.drop_zone.width() // 2, 0)
+        self.drop_zone.move(screen.width() // 2 - self.drop_zone.width() // 2, screen.height() // 2 - self.drop_zone.height() // 2)
         
         self.initUI()
 
@@ -440,6 +471,15 @@ class OverlayApp(QWidget):
         pill_layout.addLayout(text_col)
 
         pill_layout.addStretch(1)
+
+        # Pin: toggles auto-hide
+        self.pin_btn = IconButton(
+            "pin", "Pin to screen (disable auto-hide)",
+            enabled_icon_color="#e5e7eb",
+            disabled_icon_color="#e5e7eb",
+        )
+        self.pin_btn.clicked.connect(self._on_pin_clicked)
+        pill_layout.addWidget(self.pin_btn)
 
 
         # Replay: white when enabled, dim white when disabled
@@ -561,7 +601,7 @@ class OverlayApp(QWidget):
             self._on_state(self.current_state)
 
     def _do_auto_hide(self):
-        if self.current_state in ("idle", "error") and not self._last_transcript and not self._card_mode:
+        if not self._is_pinned and self.current_state in ("idle", "error") and not self._last_transcript and not self._card_mode:
             self.hide()
 
     def _on_state(self, state: str):
@@ -735,6 +775,14 @@ class OverlayApp(QWidget):
         """Request the backend to forcefully stop the current pipeline action."""
         if self.current_state not in ("idle", "error"):
             asyncio.create_task(send_command("stop"))
+
+    def _on_pin_clicked(self):
+        self._is_pinned = not self._is_pinned
+        self.pin_btn.set_active(self._is_pinned)
+        # If unpinned while idle, start auto-hide
+        if not self._is_pinned and self.current_state in ("idle", "error") and not self._last_transcript:
+            if not self._auto_hide_timer.isActive():
+                self._auto_hide_timer.start(3000)
 
     # ── Dragging ──────────────────────────────────────────────────────────────
 

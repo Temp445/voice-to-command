@@ -87,6 +87,23 @@ class DOMAgent:
                         }
                     }
 
+                    // Determine approximate location on screen
+                    const cx = rect.x + (rect.width / 2);
+                    const cy = rect.y + (rect.height / 2);
+                    const ww = window.innerWidth || document.documentElement.clientWidth;
+                    const wh = window.innerHeight || document.documentElement.clientHeight;
+                    
+                    let locX = "center";
+                    if (cx < ww * 0.33) locX = "left";
+                    else if (cx > ww * 0.66) locX = "right";
+                    
+                    let locY = "center";
+                    if (cy < wh * 0.33) locY = "top";
+                    else if (cy > wh * 0.66) locY = "bottom";
+                    
+                    let location = `${locY}-${locX}`;
+                    if (location === "center-center") location = "center";
+                    
                     elements.push({
                         id: index,
                         tag: el.tagName.toLowerCase(),
@@ -94,6 +111,7 @@ class DOMAgent:
                         type: el.type || '',
                         aria: aria,
                         y: Math.round(rect.y),
+                        loc: location,
                         context: parentText
                     });
                     // Tag the element in the DOM so we can click it later
@@ -111,7 +129,7 @@ class DOMAgent:
         for el in raw_elements:
             if not isinstance(el, dict):
                 continue
-            for field in ['text', 'type', 'aria', 'context', 'tag']:
+            for field in ['text', 'type', 'aria', 'context', 'tag', 'loc']:
                 val = el.get(field)
                 if val is None:
                     el[field] = ''
@@ -308,6 +326,9 @@ class DOMAgent:
             if el['type'] and el['type'] not in ['text', 'submit', 'button']:
                 desc += f" type:{el['type']}"
                 
+            if 'loc' in el and el['loc']:
+                desc += f" pos:[{el['loc']}]"
+                
             element_lines.append(desc)
             
         if len(element_lines) > 150:
@@ -329,6 +350,7 @@ Note: The user may be interacting with the Acesoftcloud CRM. Keep CRM terminolog
 IMPORTANT: If the user intends to interact with a form field (like "select product", "enter name"), strongly prioritize elements whose context indicates they are inside a form or creation panel (e.g., context containing 'Create', 'New', 'Add') over elements located in data tables or lists.
 The user might refer to elements that do not have explicit text labels (e.g., "start date" or "end date" might just be calendar icons with type="date" next to each other). Use the 'type' attribute and the element's position (smaller Y coordinate = higher up, adjacent elements = date ranges) to infer their purpose.
 
+CRITICAL POSITIONING: Elements include a 'pos' indicator (e.g. pos:[center], pos:[bottom-right]). Use this to distinguish visually identical buttons! If the user says "close the popup card", choose the button in the 'center' or 'top-center'. If they say "close the floating button" or "chat", choose the button in the 'bottom-right' or 'bottom-left'.
 CRITICAL: Do NOT guess or make loose matches if the context contradicts the user's intent. For example, if the user asks for a specific date like "May 20", but the Page Context indicates the current month is "June", do NOT select the "20" button. 
 If the user specifies a serial number (e.g., "S.No 2", "row 2"), you MUST match the exact number at the beginning of the row's context, and do NOT confuse it with an Order ID or Document Number that happens to contain that digit (like "ORD-0002").
 If you cannot be absolutely sure the element matches the user's intent, reply with 'NONE'.

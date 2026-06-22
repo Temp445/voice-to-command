@@ -111,43 +111,6 @@ class CommandResultResponse(BaseModel):
         from_attributes = True
 
 
-# ─── Workflows ───────────────────────────────────────────────────────────────
-
-class WorkflowStep(BaseModel):
-    action: str
-    parameters: dict[str, Any] = {}
-    delay_ms: int = 0
-
-
-class WorkflowCreate(BaseModel):
-    name: str = Field(min_length=1)
-    description: str | None = None
-    trigger_phrase: str | None = None
-    steps: list[WorkflowStep] = []
-
-
-class WorkflowUpdate(BaseModel):
-    name: str | None = None
-    description: str | None = None
-    trigger_phrase: str | None = None
-    steps: list[WorkflowStep] | None = None
-    is_active: bool | None = None
-
-
-class WorkflowResponse(BaseModel):
-    id: str
-    name: str
-    description: str | None
-    trigger_phrase: str | None
-    steps: list[dict]
-    is_active: bool
-    run_count: int
-    created_at: datetime
-    updated_at: datetime
-
-    class Config:
-        from_attributes = True
-
 
 # ─── Voice ───────────────────────────────────────────────────────────────────
 

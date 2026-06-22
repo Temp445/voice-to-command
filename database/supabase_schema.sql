@@ -66,20 +66,6 @@ CREATE TABLE IF NOT EXISTS public.command_history (
     executed_at     TIMESTAMPTZ DEFAULT NOW()
 );
 
--- ─── Workflows ───────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS public.workflows (
-    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id         UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
-    name            TEXT NOT NULL,
-    description     TEXT,
-    trigger_phrase  TEXT,
-    steps           JSONB DEFAULT '[]',
-    is_active       BOOLEAN DEFAULT TRUE,
-    run_count       INTEGER DEFAULT 0,
-    created_at      TIMESTAMPTZ DEFAULT NOW(),
-    updated_at      TIMESTAMPTZ DEFAULT NOW()
-);
-
 -- ─── Automation Logs ─────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS public.automation_logs (
     id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -120,7 +106,7 @@ CREATE TABLE IF NOT EXISTS public.voice_profiles (
 ALTER TABLE public.users            ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.settings         ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.command_history  ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.workflows        ENABLE ROW LEVEL SECURITY;
+
 ALTER TABLE public.automation_logs  ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.shortcuts        ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.voice_profiles   ENABLE ROW LEVEL SECURITY;
@@ -130,9 +116,6 @@ CREATE POLICY "Users own data" ON public.settings
     FOR ALL USING (auth.uid() = (SELECT supabase_uid FROM public.users WHERE id = user_id));
 
 CREATE POLICY "Users own commands" ON public.command_history
-    FOR ALL USING (auth.uid() = (SELECT supabase_uid FROM public.users WHERE id = user_id));
-
-CREATE POLICY "Users own workflows" ON public.workflows
     FOR ALL USING (auth.uid() = (SELECT supabase_uid FROM public.users WHERE id = user_id));
 
 CREATE POLICY "Users own logs" ON public.automation_logs
@@ -147,7 +130,7 @@ CREATE POLICY "Users own voice profiles" ON public.voice_profiles
 -- ─── Indexes ─────────────────────────────────────────────────
 CREATE INDEX idx_command_history_user   ON public.command_history(user_id, executed_at DESC);
 CREATE INDEX idx_automation_logs_user   ON public.automation_logs(user_id, created_at DESC);
-CREATE INDEX idx_workflows_user         ON public.workflows(user_id);
+
 CREATE INDEX idx_shortcuts_user         ON public.shortcuts(user_id);
 
 -- ─── Updated_at trigger ──────────────────────────────────────
@@ -161,10 +144,6 @@ $$ LANGUAGE plpgsql;
 
 CREATE TRIGGER trg_settings_updated_at
     BEFORE UPDATE ON public.settings
-    FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
-
-CREATE TRIGGER trg_workflows_updated_at
-    BEFORE UPDATE ON public.workflows
     FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
 
 -- ─── Auto-Sync Auth Users to Public Users ────────────────────

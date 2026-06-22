@@ -396,8 +396,13 @@ class VoicePipeline:
                     response_text = result.get("result", "Done")
                     await self._speak(response_text)
                     
-                    if getattr(settings, 'require_wake_word_always', False):
+                    from app.config import get_settings
+                    current_settings = get_settings()
+                    is_required = getattr(current_settings, 'require_wake_word_always', False)
+                    
+                    if is_required:
                         logger.info("Require wake word always is enabled. Exiting Active Mode after single command.")
+                        text = ""  # Clear transcript
                         break
 
                     # Reset deadline after execution to give another full window

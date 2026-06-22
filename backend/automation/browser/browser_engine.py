@@ -38,7 +38,7 @@ class BrowserEngine:
     _playwright = None
     _context: BrowserContext | None = None
     _page: Page | None = None
-    _lock = asyncio.Lock()
+    _lock = None
 
     def __new__(cls):
         if cls._instance is None:
@@ -56,6 +56,8 @@ class BrowserEngine:
 
     async def ensure_browser(self) -> Page:
         async def _do_ensure():
+            if self._lock is None:
+                self._lock = asyncio.Lock()
             async with self._lock:
                 if self._context and not getattr(self._context, 'is_closed', lambda: True)():
                     if not self._page or self._page.is_closed():
@@ -107,7 +109,8 @@ class BrowserEngine:
                                         "--no-first-run",
                                         "--no-default-browser-check",
                                         "--test-type",
-                                        "--remote-debugging-port=9222"
+                                        "--remote-debugging-port=9222",
+                                        "--disable-features=PasswordManager"
                                     ],
                                     ignore_default_args=["--enable-automation"]
                                 )
@@ -133,7 +136,7 @@ class BrowserEngine:
                         else:
                             self._context = await self._playwright.chromium.launch_persistent_context(
                                 user_data_dir=profile_path, channel="chrome", headless=False, no_viewport=True,
-                                args=["--start-maximized", "--disable-blink-features=AutomationControlled", "--no-first-run", "--no-default-browser-check", "--test-type", "--remote-debugging-port=9222"],
+                                args=["--start-maximized", "--disable-blink-features=AutomationControlled", "--no-first-run", "--no-default-browser-check", "--test-type", "--remote-debugging-port=9222", "--disable-features=PasswordManager"],
                                 ignore_default_args=["--enable-automation"]
                             )
                     
@@ -183,6 +186,8 @@ class BrowserEngine:
 
     async def close_browser(self):
         async def _do_close():
+            if self._lock is None:
+                self._lock = asyncio.Lock()
             async with self._lock:
                 if self._context:
                     await self._context.close()

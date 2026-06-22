@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { User, Lock, CheckCircle2, Loader2, Shield, Eye, EyeOff } from "lucide-react";
+import { User, Lock, CheckCircle2, Loader2, Shield, Eye, EyeOff, LogOut } from "lucide-react";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { TopBar } from "@/components/layout/TopBar";
 import { useAuthStore } from "@/store/authStore";
@@ -16,7 +16,7 @@ const inp = { width: "100%", background: "var(--input)", border: "1px solid var(
 const btnA = { padding: "0.625rem 1.25rem", borderRadius: "0.5rem", fontSize: "0.875rem", fontWeight: 600, cursor: "pointer", border: "1px solid var(--ring)", background: "var(--primary)", color: "var(--primary-foreground)", transition: "all 0.15s", boxShadow: "0 2px 4px rgba(0,0,0,0.1)", display: "flex", alignItems: "center", justifyContent: "center", gap: "0.5rem" } as React.CSSProperties;
 
 export default function ProfilePage() {
-  const { user } = useAuthStore();
+  const { user, signOut } = useAuthStore();
   
   // Profile State
   const [displayName, setDisplayName] = useState("");
@@ -203,6 +203,31 @@ export default function ProfilePage() {
                       Update Password
                     </button>
                   </div>
+                </div>
+              </section>
+
+              {/* Danger Zone */}
+              <section style={{ ...card, marginTop: "2rem", border: "1px solid rgba(239, 68, 68, 0.2)" }}>
+                <div style={{ ...hdr, borderBottom: "1px solid rgba(239, 68, 68, 0.1)" }}>
+                  <LogOut style={{ width: "1.25rem", height: "1.25rem", color: "#ef4444" }} />
+                  <span style={{ fontSize: "1rem", fontWeight: 600, color: "var(--foreground)" }}>Account Actions</span>
+                </div>
+                <div style={{ ...body, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+                  <div>
+                    <p style={{ ...lbl, color: "var(--foreground)" }}>Log Out</p>
+                    <p style={{ fontSize: "0.875rem", color: "var(--muted-foreground)", marginTop: "0.25rem" }}>
+                      Securely log out of your ACE account on this device.
+                    </p>
+                  </div>
+                  <button 
+                    onClick={() => signOut()} 
+                    style={{ ...btnA, background: "rgba(239, 68, 68, 0.1)", color: "#ef4444", border: "1px solid rgba(239, 68, 68, 0.2)" }}
+                    onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "rgba(239, 68, 68, 0.2)"; }}
+                    onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "rgba(239, 68, 68, 0.1)"; }}
+                  >
+                    <LogOut size={16} />
+                    Log Out
+                  </button>
                 </div>
               </section>
 
