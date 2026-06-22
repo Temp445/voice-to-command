@@ -54,7 +54,7 @@ def _decode_supabase_jwt_unsafe(token: str) -> dict | None:
         claims = json.loads(base64.urlsafe_b64decode(payload))
         return claims
     except Exception as e:
-        logger.error(f"Error: {e}")
+        logger.error(f"[{__name__}] {type(e).__name__}: {e}")
         return None
 
 

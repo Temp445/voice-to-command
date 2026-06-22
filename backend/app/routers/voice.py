@@ -149,7 +149,7 @@ async def websocket_test_stt(websocket: WebSocket):
                         
                     last_transcribe_time = time.time()
                 except Exception as e:
-                    logger.error(f"Error: {e}")
+                    logger.error(f"[{__name__}] {type(e).__name__}: {e}")
                     pass
 
     transcribe_task = asyncio.create_task(transcribe_loop())
@@ -169,7 +169,7 @@ async def websocket_test_stt(websocket: WebSocket):
                     try:
                         is_speech = vad.is_speech(chunk, 16000)
                     except Exception as e:
-                        logger.error(f"Error: {e}")
+                        logger.error(f"[{__name__}] {type(e).__name__}: {e}")
                         pass
                         
                     if is_speech:
@@ -186,7 +186,7 @@ async def websocket_test_stt(websocket: WebSocket):
                     if data.get("type") == "stop":
                         break
                 except Exception as e:
-                    logger.error(f"Error: {e}")
+                    logger.error(f"[{__name__}] {type(e).__name__}: {e}")
                     pass
     except WebSocketDisconnect:
         pass
@@ -200,10 +200,10 @@ async def websocket_test_stt(websocket: WebSocket):
                 duration_ms = int((time.time() - start_t) * 1000)
                 await websocket.send_json({"text": text, "is_final": True, "duration_ms": duration_ms})
             except Exception as e:
-                logger.error(f"Error: {e}")
+                logger.error(f"[{__name__}] {type(e).__name__}: {e}")
                 pass
         try:
             await websocket.close()
         except Exception as e:
-            logger.error(f"Error: {e}")
+            logger.error(f"[{__name__}] {type(e).__name__}: {e}")
             pass

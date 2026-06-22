@@ -331,7 +331,7 @@ async def lifespan(app: FastAPI):
             app.state.overlay_process.terminate()
             app.state.overlay_process.wait(timeout=3)
         except Exception as e:
-            logger.error(f"Error: {e}")
+            logger.error(f"[{__name__}] {type(e).__name__}: {e}")
             pass
 
 

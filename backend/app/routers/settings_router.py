@@ -199,7 +199,7 @@ async def update_settings(
                 global_settings.crm_url = updates["crm_url"]
                 global_settings.crm_keywords = updates["crm_keywords"]
         except Exception as e:
-            logger.error(f"Error: {e}")
+            logger.error(f"[{__name__}] {type(e).__name__}: {e}")
             pass
 
     if updates:
@@ -240,7 +240,7 @@ async def update_settings(
             command_service._ws_cache_loaded = False
             logger.info("Website shortcut cache invalidated — will reload on next command")
         except Exception as e:
-            logger.error(f"Error: {e}")
+            logger.error(f"[{__name__}] {type(e).__name__}: {e}")
             pass
 
     # Hot-swap LLM provider if LLM settings changed

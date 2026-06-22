@@ -56,31 +56,28 @@ webrtcvad
 pygame
 gTTS
 # pyrnnoise
-psutil
 
 # ============================================================
 # Automation Stack — install separately:
 #   pip install --trusted-host pypi.org ... -r requirements-automation.txt
 # ============================================================
-pywinauto
+pywinauto; sys_platform == 'win32'
 pynput
 psutil
 playwright
 playwright-stealth
 watchfiles
-pystray
+pystray; sys_platform == 'win32'
 Pillow
 mss
 pytesseract
 schedule
-winsdk
-PyQt6
-qasync
+winsdk; sys_platform == 'win32'
+PyQt6; sys_platform == 'win32'
+qasync; sys_platform == 'win32'
 pyperclip
 send2trash
 beautifulsoup4
 lxml
-pycaw
+pycaw; sys_platform == 'win32'
 plyer
-
-pyinstaller

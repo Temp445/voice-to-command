@@ -97,7 +97,7 @@ class BrowserEngine:
                                 is_cdp_reconnect = True
                                 logger.info("Successfully reconnected to existing Chrome instance via CDP.")
                             except Exception as e:
-                                logger.error(f"Error: {e}")
+                                logger.error(f"[{__name__}] {type(e).__name__}: {e}")
                                 logger.info("No active CDP session found. Launching new persistent context.")
                                 self._context = await self._playwright.chromium.launch_persistent_context(
                                     user_data_dir=profile_path,
@@ -667,7 +667,7 @@ class BrowserEngine:
                 # Pressing a harmless key ensures the OS transfers focus to the web view
                 await page.keyboard.press("Control")
             except Exception as e:
-                logger.error(f"Error: {e}")
+                logger.error(f"[{__name__}] {type(e).__name__}: {e}")
                 pass
                 
             await asyncio.sleep(1.0)
@@ -729,7 +729,7 @@ class BrowserEngine:
                 await page.mouse.click(10, 100) # Safe click on the left margin
                 await page.keyboard.press("Control")
             except Exception as e:
-                logger.error(f"Error: {e}")
+                logger.error(f"[{__name__}] {type(e).__name__}: {e}")
                 pass
                 
             await asyncio.sleep(1.0)
@@ -752,7 +752,7 @@ class BrowserEngine:
                 try:
                     await frame.evaluate(script)
                 except Exception as e:
-                    logger.error(f"Error: {e}")
+                    logger.error(f"[{__name__}] {type(e).__name__}: {e}")
                     pass
             return "Toggled playback."
         return await _run_in_playwright(_do())

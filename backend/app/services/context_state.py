@@ -65,7 +65,7 @@ class ContextStateService:
                     return v
             return None
         except Exception as e:
-            logger.error(f"Error: {e}")
+            logger.error(f"[{__name__}] {type(e).__name__}: {e}")
             return None
 
 def get_context() -> ContextStateService:

@@ -111,7 +111,7 @@ class OCRController:
                 try:
                     os.remove(temp_path)
                 except Exception as e:
-                    logger.error(f"Error: {e}")
+                    logger.error(f"[{__name__}] {type(e).__name__}: {e}")
                     pass
 
     def _run_tesseract_ocr(self, target_text_lower: str, original_text: str) -> str:

@@ -168,7 +168,7 @@ class AppController:
                         target_win = win
                         break
                 except Exception as e:
-                    logger.error(f"Error: {e}")
+                    logger.error(f"[{__name__}] {type(e).__name__}: {e}")
                     continue
                     
             if target_win:
@@ -287,7 +287,7 @@ class AppController:
                     if result.returncode == 0:
                         killed.append(exe)
                 except Exception as e:
-                    logger.error(f"Error: {e}")
+                    logger.error(f"[{__name__}] {type(e).__name__}: {e}")
                     pass
         else:
             # 1. Close via native Windows taskkill
@@ -305,7 +305,7 @@ class AppController:
                     if result.returncode == 0 or "SUCCESS" in result.stdout:
                         killed.append(exe)
                 except Exception as e:
-                    logger.error(f"Error: {e}")
+                    logger.error(f"[{__name__}] {type(e).__name__}: {e}")
                     pass
 
         # 2. Pywinauto fallback for graceful close (if taskkill missed it)
@@ -317,7 +317,7 @@ class AppController:
                         win.close()  # Graceful close
                     killed.append(exe)
                 except Exception as e:
-                    logger.error(f"Error: {e}")
+                    logger.error(f"[{__name__}] {type(e).__name__}: {e}")
                     pass
 
         if killed:

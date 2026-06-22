@@ -56,7 +56,7 @@ class ConnectionManager:
             try:
                 await asyncio.wait_for(ws.send_text(payload_str), timeout=_SEND_TIMEOUT)
             except Exception as e:
-                logger.error(f"Error: {e}")
+                logger.error(f"[{__name__}] {type(e).__name__}: {e}")
                 return ws  # Mark as dead
             return None
 

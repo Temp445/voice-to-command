@@ -152,7 +152,7 @@ class FileOperations:
                         if file_name.lower() in f.lower() and os.path.isfile(os.path.join(str(root_dir), f)):
                             results.append({"name": f, "path": os.path.join(str(root_dir), f)})
             except Exception as e:
-                logger.error(f"Error: {e}")
+                logger.error(f"[{__name__}] {type(e).__name__}: {e}")
                 pass
 
         if not results:
@@ -235,7 +235,7 @@ class FileOperations:
                                 "accessed": lnk.stat().st_mtime
                             })
                 except Exception as e:
-                    logger.error(f"Error: {e}")
+                    logger.error(f"[{__name__}] {type(e).__name__}: {e}")
                     continue
                     
             # Sort by accessed time descending

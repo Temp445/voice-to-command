@@ -135,7 +135,7 @@ class CRMMacros:
             try:
                 await page.wait_for_load_state("networkidle", timeout=2000)
             except Exception as e:
-                logger.error(f"Error: {e}")
+                logger.error(f"[{__name__}] {type(e).__name__}: {e}")
                 pass
                 
             if module_name.lower() not in page.url.lower():
@@ -210,7 +210,7 @@ class CRMMacros:
             try:
                 await page.wait_for_load_state("networkidle", timeout=3000)
             except Exception as e:
-                logger.error(f"Error: {e}")
+                logger.error(f"[{__name__}] {type(e).__name__}: {e}")
                 pass
             return f"Searched for '{query}' in {module_name.capitalize()}."
         except PlaywrightTimeoutError:

@@ -77,7 +77,7 @@ def _local_mic_loop():
                             device_name = info.get("name", f"Device {i}")
                             break
                     except Exception as e:
-                        logger.error(f"Error: {e}")
+                        logger.error(f"[{__name__}] {type(e).__name__}: {e}")
                         continue
                 if not stream:
                     raise RuntimeError(f"No working microphone found. Initial error: {first_err}")
@@ -97,12 +97,12 @@ def _local_mic_loop():
                     stream.stop_stream()
                     stream.close()
                 except Exception as e:
-                    logger.error(f"Error: {e}")
+                    logger.error(f"[{__name__}] {type(e).__name__}: {e}")
                     pass
             try:
                 p.terminate()
             except Exception as e:
-                logger.error(f"Error: {e}")
+                logger.error(f"[{__name__}] {type(e).__name__}: {e}")
                 pass
 
 def start_local_mic():

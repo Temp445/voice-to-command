@@ -122,7 +122,7 @@ class CommandService:
                         logger.info(f"✅ Website shortcuts pre-warmed: {len(_sites)} site(s) from in-memory settings")
                         return
                 except Exception as e:
-                    logger.error(f"Error: {e}")
+                    logger.error(f"[{__name__}] {type(e).__name__}: {e}")
                     pass
 
             # Fallback: fetch directly from DB
@@ -139,7 +139,7 @@ class CommandService:
                             self._ws_sites = _db_sites
                             _gs.crm_sites = _db_raw
                     except Exception as e:
-                        logger.error(f"Error: {e}")
+                        logger.error(f"[{__name__}] {type(e).__name__}: {e}")
                         pass
 
             self._ws_cache_loaded = True
@@ -284,7 +284,7 @@ class CommandService:
                         _sites = _json.loads(_sites_raw)
                         self._ws_sites = _sites
                     except Exception as e:
-                        logger.error(f"Error: {e}")
+                        logger.error(f"[{__name__}] {type(e).__name__}: {e}")
                         pass
                 self._ws_cache_loaded = True
 

@@ -889,7 +889,7 @@ async def websocket_client(overlay: OverlayApp):
                         pass
 
         except Exception as e:
-            logger.error(f"Error: {e}")
+            logger.error(f"[{__name__}] {type(e).__name__}: {e}")
             if has_connected:
                 import sys
                 print("Lost connection to backend. Exiting to prevent orphaned process.")

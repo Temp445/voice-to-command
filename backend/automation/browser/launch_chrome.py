@@ -42,7 +42,7 @@ def is_cdp_open(port: int = 9222) -> bool:
         with urllib.request.urlopen(req, timeout=0.5) as response:
             return response.status == 200
     except Exception as e:
-        logger.error(f"Error: {e}")
+        logger.error(f"[{__name__}] {type(e).__name__}: {e}")
         return False
 
 def kill_chrome_processes():
