@@ -154,7 +154,7 @@ async def get_settings(request: Request, user_id: str = Depends(get_current_user
         python_exe = os.path.join(str(_ROOT), ".venv", "Scripts", "python.exe")
         if not os.path.exists(python_exe):
             python_exe = sys.executable
-        overlay_path = os.path.join(str(_ROOT), "automation", "desktop", "overlay.py")
+        overlay_path = os.path.join(str(_ROOT), "automation", "desktop", "overlay", "__main__.py")
         if os.path.exists(overlay_path):
             request.app.state.overlay_process = subprocess.Popen(
                 [python_exe, overlay_path],
@@ -288,7 +288,7 @@ async def update_settings(
                 python_exe = os.path.join(str(_ROOT), ".venv", "Scripts", "python.exe")
                 if not os.path.exists(python_exe):
                     python_exe = sys.executable
-                overlay_path = os.path.join(str(_ROOT), "automation", "desktop", "overlay.py")
+                overlay_path = os.path.join(str(_ROOT), "automation", "desktop", "overlay", "__main__.py")
                 if os.path.exists(overlay_path):
                     request.app.state.overlay_process = subprocess.Popen(
                         [python_exe, overlay_path],

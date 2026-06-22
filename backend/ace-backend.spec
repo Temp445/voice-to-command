@@ -9,7 +9,7 @@
 from PyInstaller.utils.hooks import collect_data_files
 
 datas_list = [
-    ('automation/desktop/overlay.py', 'automation/desktop'),
+    ('automation/desktop/overlay', 'automation/desktop/overlay'),
     ('../voice/tts/models', 'voice/tts/models'),
     ('../.env', '.')
 ]

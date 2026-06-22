@@ -1,0 +1,22 @@
+pywinauto; sys_platform == 'win32'
+pynput
+psutil
+playwright
+playwright-stealth
+watchfiles
+pystray; sys_platform == 'win32'
+Pillow
+mss
+pytesseract
+winsdk; sys_platform == 'win32'
+PyQt6; sys_platform == 'win32'
+qasync; sys_platform == 'win32'
+pyperclip
+send2trash
+beautifulsoup4
+lxml
+pycaw; sys_platform == 'win32'
+plyer
+browser-use
+pyautogui
+fastembed

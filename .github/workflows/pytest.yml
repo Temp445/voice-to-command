@@ -33,3 +33,15 @@ jobs:
       working-directory: ./backend
       run: |
         pytest -v
+
+    - name: Lint
+      working-directory: ./backend
+      run: ruff check ./
+
+    - name: Type check
+      working-directory: ./backend
+      run: mypy app/ --ignore-missing-imports
+
+    - name: Test with coverage
+      working-directory: ./backend
+      run: pytest --cov=app --cov-fail-under=60
