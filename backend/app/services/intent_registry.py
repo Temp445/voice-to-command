@@ -412,7 +412,8 @@ async def handle_crm_clear_search(text: str = "", **_) -> str:
                     await asyncio.sleep(0.4)
                     logger.info("[ClearSearch] Cleared dates via button: %s", sel)
                     return "Date filter cleared."
-            except Exception:
+            except Exception as e:
+                logger.error(f"Error: {e}")
                 pass
 
     # ── Layer 2: Direct clear of the text search input ────────────────────────
@@ -436,7 +437,8 @@ async def handle_crm_clear_search(text: str = "", **_) -> str:
                     await asyncio.sleep(0.4)
                     logger.info("[ClearSearch] Cleared search input via selector: %s", sel)
                     return "Search cleared."
-            except Exception:
+            except Exception as e:
+                logger.error(f"Error: {e}")
                 pass
 
     # ── Layer 3: Look for a general close / clear / reset button ──────────────
@@ -458,7 +460,8 @@ async def handle_crm_clear_search(text: str = "", **_) -> str:
                 await asyncio.sleep(0.4)
                 logger.info("[ClearSearch] Cleared via button: %s", sel)
                 return "Filter cleared."
-        except Exception:
+        except Exception as e:
+            logger.error(f"Error: {e}")
             pass
 
     # ── Layer 4: DOMAgent fallback ────────────────────────────────────────────
@@ -580,7 +583,8 @@ async def handle_browser_paginate(direction: str = "", page_num: str = "", **_) 
                     await asyncio.sleep(0.5)
                     logger.info(f"[Paginate] Clicked {action_desc} via {sel}")
                     return f"Navigated to {action_desc}."
-        except Exception:
+        except Exception as e:
+            logger.error(f"Error: {e}")
             continue
 
     # Layer 2: DOMAgent Fallback
@@ -916,9 +920,11 @@ async def handle_browser_date_filter(start_date: str = "", end_date: str = "", t
                     if box and box["width"] > 0:
                         itype = await h.get_attribute("type") or "text"
                         items.append((box["x"], h, itype))
-                except Exception:
+                except Exception as e:
+                    logger.error(f"Error: {e}")
                     pass
-        except Exception:
+        except Exception as e:
+            logger.error(f"Error: {e}")
             pass
         items.sort(key=lambda t: t[0])
         return [(h, itype) for _, h, itype in items]
@@ -966,7 +972,8 @@ async def handle_browser_date_filter(start_date: str = "", end_date: str = "", t
                             await page.keyboard.press("Tab")
                             logger.info(f"[DateFilter] Layer 1b filled sel={sel} i={i} val={val}")
                             return True
-                except Exception:
+                except Exception as e:
+                    logger.error(f"Error: {e}")
                     pass
         return False
 
@@ -1193,7 +1200,8 @@ async def handle_smart_logout(text: str = "", **_) -> str:
             from automation.browser.crm_workflows import CRMMacros
             crm = CRMMacros(ctrl.engine)
             return await crm.logout()
-    except Exception:
+    except Exception as e:
+        logger.error(f"Error: {e}")
         pass  # If URL check fails, fall through to smart logout
 
     # Generic site — use the 5-layer smart logout handler
@@ -1503,7 +1511,8 @@ async def handle_minimize_app(app: str = "", **_) -> str:
             win_app = pywinauto.Application(backend="uia").connect(path=exe, timeout=1)
             win_app.top_window().minimize()
             return f"Minimized {clean}"
-        except Exception:
+        except Exception as e:
+            logger.error(f"Error: {e}")
             pass
 
     if WindowManager().minimize_by_title(clean):
@@ -1543,7 +1552,8 @@ async def handle_maximize_app(app: str = "", **_) -> str:
             win_app = pywinauto.Application(backend="uia").connect(path=exe, timeout=1)
             win_app.top_window().maximize()
             return f"Maximized {clean}"
-        except Exception:
+        except Exception as e:
+            logger.error(f"Error: {e}")
             pass
 
     if WindowManager().maximize_by_title(clean):
@@ -1605,7 +1615,8 @@ async def handle_type_text(text: str = "", **_) -> str:
             dom_res = await agent.execute_intent(f"type {text}")
             if "couldn't find" not in dom_res.lower() and "failed" not in dom_res.lower():
                 return dom_res
-    except Exception:
+    except Exception as e:
+        logger.error(f"Error: {e}")
         pass
         
     from automation.input.keyboard_controller import KeyboardController
@@ -1681,7 +1692,8 @@ async def handle_scroll_up(**_) -> str:
         if ctrl.engine._playwright is not None:
             await ctrl.scroll("up")
             return "Scrolled up in browser"
-    except Exception:
+    except Exception as e:
+        logger.error(f"Error: {e}")
         pass
         
     from automation.input.mouse_controller import MouseController
@@ -1696,7 +1708,8 @@ async def handle_scroll_down(**_) -> str:
         if ctrl.engine._playwright is not None:
             await ctrl.scroll("down")
             return "Scrolled down in browser"
-    except Exception:
+    except Exception as e:
+        logger.error(f"Error: {e}")
         pass
         
     from automation.input.mouse_controller import MouseController
@@ -1710,7 +1723,8 @@ async def handle_scroll_top(**_) -> str:
         if ctrl.engine._playwright is not None:
             await ctrl.scroll_to_top()
             return "Scrolled to top in browser"
-    except Exception:
+    except Exception as e:
+        logger.error(f"Error: {e}")
         pass
     
     # Fallback to mouse scroll if not in browser (rough approximation)
@@ -1726,7 +1740,8 @@ async def handle_scroll_bottom(**_) -> str:
         if ctrl.engine._playwright is not None:
             await ctrl.scroll_to_bottom()
             return "Scrolled to bottom in browser"
-    except Exception:
+    except Exception as e:
+        logger.error(f"Error: {e}")
         pass
     
     # Fallback to mouse scroll if not in browser (rough approximation)
@@ -1753,7 +1768,8 @@ async def handle_submit(app_name: str = "", **_) -> str:
                 top_win.set_focus()
                 top_win.type_keys("{ENTER}")
                 typed_via_pywinauto = True
-        except Exception:
+        except Exception as e:
+            logger.error(f"Error: {e}")
             pass
             
     if not typed_via_pywinauto:
@@ -1860,7 +1876,8 @@ async def handle_set_filename(text: str = "", app_name: str = "", **_) -> str:
             title = new_top.window_text().lower()
             if "confirm" in title or "already exists" in title or "replace" in title:
                 conflict_found = True
-    except Exception:
+    except Exception as e:
+        logger.error(f"Error: {e}")
         pass
         
     if conflict_found:
@@ -1915,7 +1932,8 @@ async def handle_cancel(app_name: str = "", **_) -> str:
                                 await el.click(timeout=1500)
                                 logger.info(f"[Cancel] Closed overlay via selector: {sel}")
                                 return "Closed the popup."
-                    except Exception:
+                    except Exception as e:
+                        logger.error(f"Error: {e}")
                         pass
 
                 # 1b. Text-based: Cancel / Close / Dismiss buttons
@@ -1930,7 +1948,8 @@ async def handle_cancel(app_name: str = "", **_) -> str:
                                 await btn.click(timeout=1500)
                                 logger.info(f"[Cancel] Clicked '{label}' button on webpage.")
                                 return f"Clicked {label.capitalize()} on webpage."
-                    except Exception:
+                    except Exception as e:
+                        logger.error(f"Error: {e}")
                         pass
 
                 # 1c. DOMAgent Fallback (Before pressing Escape)
@@ -1950,7 +1969,8 @@ async def handle_cancel(app_name: str = "", **_) -> str:
                     await asyncio.sleep(0.3)
                     logger.info("[Cancel] Pressed Escape in browser.")
                     return "Canceled."
-                except Exception:
+                except Exception as e:
+                    logger.error(f"Error: {e}")
                     pass
 
     except Exception as e:
@@ -1977,7 +1997,8 @@ async def handle_cancel(app_name: str = "", **_) -> str:
                 top_win.set_focus()
                 top_win.type_keys("{ESC}")
                 typed_via_pywinauto = True
-    except Exception:
+    except Exception as e:
+        logger.error(f"Error: {e}")
         pass
             
     if not typed_via_pywinauto:

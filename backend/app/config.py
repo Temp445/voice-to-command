@@ -6,7 +6,7 @@ Loads settings from environment variables via pydantic-settings.
 from functools import lru_cache
 from pathlib import Path
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import Field
+from pydantic import Field, model_validator
 
 import sys
 import os
@@ -107,6 +107,12 @@ class Settings(BaseSettings):
     google_api_key: str = ""
     anthropic_api_key: str = ""
     deepseek_api_key: str = ""
+
+    @model_validator(mode="after")
+    def validate_security(self) -> "Settings":
+        if not self.debug and self.secret_key == "ace-voice-controller-default-dev-secret-key-32x":
+            raise ValueError("FATAL: Default secret_key detected in production. You MUST change SECRET_KEY in your .env file.")
+        return self
 
 
 @lru_cache

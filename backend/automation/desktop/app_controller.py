@@ -167,7 +167,8 @@ class AppController:
                     if win.is_visible() and win.window_text() in dialog_titles:
                         target_win = win
                         break
-                except Exception:
+                except Exception as e:
+                    logger.error(f"Error: {e}")
                     continue
                     
             if target_win:
@@ -285,7 +286,8 @@ class AppController:
                     result = subprocess.run(cmd, capture_output=True, text=True)
                     if result.returncode == 0:
                         killed.append(exe)
-                except Exception:
+                except Exception as e:
+                    logger.error(f"Error: {e}")
                     pass
         else:
             # 1. Close via native Windows taskkill
@@ -302,7 +304,8 @@ class AppController:
                     )
                     if result.returncode == 0 or "SUCCESS" in result.stdout:
                         killed.append(exe)
-                except Exception:
+                except Exception as e:
+                    logger.error(f"Error: {e}")
                     pass
 
         # 2. Pywinauto fallback for graceful close (if taskkill missed it)
@@ -313,7 +316,8 @@ class AppController:
                     for win in app.windows():
                         win.close()  # Graceful close
                     killed.append(exe)
-                except Exception:
+                except Exception as e:
+                    logger.error(f"Error: {e}")
                     pass
 
         if killed:

@@ -1,4 +1,6 @@
 """File operations, clipboard, power management."""
+from loguru import logger
+
 
 import os
 import subprocess
@@ -149,7 +151,8 @@ class FileOperations:
                     for f in os.listdir(str(root_dir)):
                         if file_name.lower() in f.lower() and os.path.isfile(os.path.join(str(root_dir), f)):
                             results.append({"name": f, "path": os.path.join(str(root_dir), f)})
-            except Exception:
+            except Exception as e:
+                logger.error(f"Error: {e}")
                 pass
 
         if not results:
@@ -231,7 +234,8 @@ class FileOperations:
                                 "path": target,
                                 "accessed": lnk.stat().st_mtime
                             })
-                except Exception:
+                except Exception as e:
+                    logger.error(f"Error: {e}")
                     continue
                     
             # Sort by accessed time descending

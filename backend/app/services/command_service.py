@@ -121,7 +121,8 @@ class CommandService:
                         self._ws_cache_loaded = True
                         logger.info(f"✅ Website shortcuts pre-warmed: {len(_sites)} site(s) from in-memory settings")
                         return
-                except Exception:
+                except Exception as e:
+                    logger.error(f"Error: {e}")
                     pass
 
             # Fallback: fetch directly from DB
@@ -137,7 +138,8 @@ class CommandService:
                         if _db_sites:
                             self._ws_sites = _db_sites
                             _gs.crm_sites = _db_raw
-                    except Exception:
+                    except Exception as e:
+                        logger.error(f"Error: {e}")
                         pass
 
             self._ws_cache_loaded = True
@@ -281,7 +283,8 @@ class CommandService:
                     try:
                         _sites = _json.loads(_sites_raw)
                         self._ws_sites = _sites
-                    except Exception:
+                    except Exception as e:
+                        logger.error(f"Error: {e}")
                         pass
                 self._ws_cache_loaded = True
 

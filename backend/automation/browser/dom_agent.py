@@ -442,7 +442,8 @@ Reply ONLY with a comma-separated list of integer IDs (e.g., '45' or '26, 27'). 
                 rewrite_prompt = f"User command: '{intent}'. System result: '{fill_result}'. Rewrite this into a very short, conversational confirmation as a helpful voice assistant (e.g. 'Filled in your email and password', 'Entered your details'). Do NOT reveal any credential values. Do NOT use the phrase 'for you'. Keep it under 1 short sentence."
                 friendly = await asyncio.wait_for(llm_service.chat(rewrite_prompt), timeout=5.0)
                 return friendly.strip()
-            except Exception:
+            except Exception as e:
+                logger.error(f"Error: {e}")
                 return fill_result
 
         fast_element_ids, fast_text, resolved_action_type = await self.fast_path_resolve(intent_lower, action_type)
@@ -500,7 +501,8 @@ Reply ONLY with a comma-separated list of integer IDs (e.g., '45' or '26, 27'). 
                         elif tag == "input" and el_type in ["radio", "checkbox"]:
                             logger.info(f"Element {element_id} is a {el_type} but action was 'type'. Converting 'type' to 'click'.")
                             current_action = "click"
-                except Exception:
+                except Exception as e:
+                    logger.error(f"Error: {e}")
                     pass
                 
                 # Show visual feedback
@@ -585,7 +587,8 @@ Reply ONLY with a comma-separated list of integer IDs (e.g., '45' or '26, 27'). 
                         try:
                             await self.page.select_option(selector, label=option_to_select, timeout=3000)
                             results.append(f"Selected '{option_to_select}'.")
-                        except Exception:
+                        except Exception as e:
+                            logger.error(f"Error: {e}")
                             raise Exception(f"Could not find an option matching '{option_to_select}' in the dropdown.")
                 elif current_action == "upload":
                     extract_prompt = f"Extract exactly the filename (with extension if provided) the user wants to upload from this intent: '{intent}'. Reply ONLY with the filename."
@@ -645,7 +648,8 @@ Reply ONLY with a comma-separated list of integer IDs (e.g., '45' or '26, 27'). 
                         is_date = (el_info['type'] == "date")
                         if el_info['tag'] in ["button", "a"] and not el_info['isContentEditable']:
                             is_fillable = False
-                    except Exception:
+                    except Exception as e:
+                        logger.error(f"Error: {e}")
                         pass
                         
                     if not is_fillable:
@@ -810,7 +814,8 @@ Reply ONLY with a comma-separated list of integer IDs (e.g., '45' or '26, 27'). 
                     await self.animate_action(selector, "type")
                     try:
                         await self.page.fill(selector, value, timeout=3000)
-                    except Exception:
+                    except Exception as e:
+                        logger.error(f"Error: {e}")
                         # JS fallback for React-controlled inputs
                         safe_val = value.replace('`', r'\`').replace('\\', '\\\\')
                         await self.page.evaluate(f"""

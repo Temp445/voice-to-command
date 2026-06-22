@@ -1,3 +1,4 @@
+from loguru import logger
 import sys
 import json
 import asyncio
@@ -887,7 +888,8 @@ async def websocket_client(overlay: OverlayApp):
                     except json.JSONDecodeError:
                         pass
 
-        except Exception:
+        except Exception as e:
+            logger.error(f"Error: {e}")
             if has_connected:
                 import sys
                 print("Lost connection to backend. Exiting to prevent orphaned process.")

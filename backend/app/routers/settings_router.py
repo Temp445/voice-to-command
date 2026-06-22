@@ -198,7 +198,8 @@ async def update_settings(
                 from app.config import settings as global_settings
                 global_settings.crm_url = updates["crm_url"]
                 global_settings.crm_keywords = updates["crm_keywords"]
-        except Exception:
+        except Exception as e:
+            logger.error(f"Error: {e}")
             pass
 
     if updates:
@@ -238,7 +239,8 @@ async def update_settings(
             from app.services.command_service import command_service
             command_service._ws_cache_loaded = False
             logger.info("Website shortcut cache invalidated — will reload on next command")
-        except Exception:
+        except Exception as e:
+            logger.error(f"Error: {e}")
             pass
 
     # Hot-swap LLM provider if LLM settings changed

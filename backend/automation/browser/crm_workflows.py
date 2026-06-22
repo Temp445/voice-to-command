@@ -134,7 +134,8 @@ class CRMMacros:
             # Verify if navigation actually succeeded by checking the URL or waiting a moment
             try:
                 await page.wait_for_load_state("networkidle", timeout=2000)
-            except Exception:
+            except Exception as e:
+                logger.error(f"Error: {e}")
                 pass
                 
             if module_name.lower() not in page.url.lower():
@@ -208,7 +209,8 @@ class CRMMacros:
             # Wait for grid to update
             try:
                 await page.wait_for_load_state("networkidle", timeout=3000)
-            except Exception:
+            except Exception as e:
+                logger.error(f"Error: {e}")
                 pass
             return f"Searched for '{query}' in {module_name.capitalize()}."
         except PlaywrightTimeoutError:

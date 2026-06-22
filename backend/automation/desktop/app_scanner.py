@@ -93,7 +93,8 @@ def _resolve_lnk(lnk_path: Path, shell: 'Any') -> Optional[str]:
             p = Path(target)
             if p.suffix.lower() == ".exe" and p.exists():
                 return target
-    except Exception:
+    except Exception as e:
+        logger.error(f"Error: {e}")
         pass
     return None
 
@@ -251,7 +252,8 @@ class AppScanner:
                     if target:
                         self._add(lnk.stem, target, source)
                         count += 1
-                except Exception:
+                except Exception as e:
+                    logger.error(f"Error: {e}")
                     pass
             
             # Explicit teardown to prevent 0xC0000005 access violations
@@ -283,7 +285,8 @@ class AppScanner:
                                             self._add(display_name, str(best), "registry")
                                 except FileNotFoundError:
                                     pass
-                        except Exception:
+                        except Exception as e:
+                            logger.error(f"Error: {e}")
                             pass
                     except OSError:
                         break

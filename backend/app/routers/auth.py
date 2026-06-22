@@ -53,7 +53,8 @@ def _decode_supabase_jwt_unsafe(token: str) -> dict | None:
         payload += "=" * (4 - len(payload) % 4)
         claims = json.loads(base64.urlsafe_b64decode(payload))
         return claims
-    except Exception:
+    except Exception as e:
+        logger.error(f"Error: {e}")
         return None
 
 

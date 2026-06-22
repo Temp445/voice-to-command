@@ -76,7 +76,8 @@ class WindowManager:
                         if win.process_id() in ace_pids:
                             logger.info(f"Found automated browser window matching PID {win.process_id()}: '{win.window_text()}'")
                             return win
-                    except Exception:
+                    except Exception as e:
+                        logger.error(f"Error: {e}")
                         continue
             
             # Second pass: fallback to title substring matching
@@ -87,7 +88,8 @@ class WindowManager:
                     win_text = win.window_text().lower()
                     if win_text and all(word in win_text for word in search_words):
                         return win
-                except Exception:
+                except Exception as e:
+                    logger.error(f"Error: {e}")
                     continue
         except NameError:
             pass
@@ -222,7 +224,8 @@ class WindowManager:
                     if win_text and all(word in win_text for word in search_words):
                         win.close()
                         closed_count += 1
-                except Exception:
+                except Exception as e:
+                    logger.error(f"Error: {e}")
                     continue
         except NameError:
             pass
@@ -260,7 +263,8 @@ class WindowManager:
                     # Close gracefully
                     win.close()
                     closed_count += 1
-                except Exception:
+                except Exception as e:
+                    logger.error(f"Error: {e}")
                     continue
         except NameError:
             pass
@@ -291,9 +295,11 @@ class WindowManager:
                             import ctypes
                             ctypes.windll.user32.ShowWindow(win.handle, 3)
                             ctypes.windll.user32.PostMessageW(win.handle, 0x0112, 0xF030, 0)
-                        except Exception:
+                        except Exception as e:
+                            logger.error(f"Error: {e}")
                             pass
-                except Exception:
+                except Exception as e:
+                    logger.error(f"Error: {e}")
                     pass
             finally:
                 pythoncom.CoUninitialize()
@@ -315,9 +321,11 @@ class WindowManager:
                     top.set_focus()
                     try:
                         top.maximize()
-                    except Exception:
+                    except Exception as e:
+                        logger.error(f"Error: {e}")
                         pass
-                except Exception:
+                except Exception as e:
+                    logger.error(f"Error: {e}")
                     pass
             finally:
                 pythoncom.CoUninitialize()
@@ -336,7 +344,8 @@ class WindowManager:
                             "title": title,
                             "class": win.class_name(),
                         })
-                except Exception:
+                except Exception as e:
+                    logger.error(f"Error: {e}")
                     continue
         except NameError:
             pass

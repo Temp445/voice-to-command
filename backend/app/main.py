@@ -16,7 +16,7 @@ if str(_ROOT) not in sys.path:
     sys.path.append(str(_ROOT))
 
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.responses import JSONResponse
 from loguru import logger
 
@@ -330,7 +330,8 @@ async def lifespan(app: FastAPI):
         try:
             app.state.overlay_process.terminate()
             app.state.overlay_process.wait(timeout=3)
-        except:
+        except Exception as e:
+            logger.error(f"Error: {e}")
             pass
 
 
@@ -369,6 +370,9 @@ app.include_router(llm_router.router,    prefix="/api/llm",        tags=["AI Ass
 @app.get("/api/test/replay", tags=["Dev"])
 async def test_replay_broadcast():
     """Broadcast a mock replay to all connected websocket clients (including overlay)."""
+    if not settings.debug:
+        raise HTTPException(status_code=403, detail="Dev endpoints are disabled in production.")
+    
     text = "The CRM has been opened successfully. You can now navigate to the login page."
     await ws_manager.broadcast("transcript", {
         "text": f"__replay__{text}",

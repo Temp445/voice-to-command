@@ -76,7 +76,8 @@ def _local_mic_loop():
                             stream = p.open(format=pyaudio.paInt16, channels=1, rate=16000, input=True, frames_per_buffer=1280, input_device_index=i)
                             device_name = info.get("name", f"Device {i}")
                             break
-                    except Exception:
+                    except Exception as e:
+                        logger.error(f"Error: {e}")
                         continue
                 if not stream:
                     raise RuntimeError(f"No working microphone found. Initial error: {first_err}")
@@ -95,11 +96,13 @@ def _local_mic_loop():
                 try:
                     stream.stop_stream()
                     stream.close()
-                except Exception:
+                except Exception as e:
+                    logger.error(f"Error: {e}")
                     pass
             try:
                 p.terminate()
-            except Exception:
+            except Exception as e:
+                logger.error(f"Error: {e}")
                 pass
 
 def start_local_mic():

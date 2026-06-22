@@ -161,7 +161,8 @@ class LogoutHandler:
                                 await el.click(timeout=3000)
                                 logger.info(f"[Logout] Layer 1 clicked: role={role}, text='{keyword}'")
                                 return f"Clicked '{keyword}' ({role})"
-                except Exception:
+                except Exception as e:
+                    logger.error(f"Error: {e}")
                     pass
 
             # Fallback: plain text locator
@@ -174,7 +175,8 @@ class LogoutHandler:
                     await locator.click(timeout=3000)
                     logger.info(f"[Logout] Layer 1 clicked (text): '{keyword}'")
                     return f"Clicked '{keyword}'"
-            except Exception:
+            except Exception as e:
+                logger.error(f"Error: {e}")
                 pass
 
         return None
@@ -220,7 +222,8 @@ class LogoutHandler:
 
                     if best_candidate is None or position_score > best_candidate[0]:
                         best_candidate = (position_score, el, selector, box)
-            except Exception:
+            except Exception as e:
+                logger.error(f"Error: {e}")
                 pass
 
         if best_candidate:
@@ -278,7 +281,8 @@ class LogoutHandler:
                             await el.click(timeout=2000)
                             logger.info(f"[Logout] Confirmed dialog: clicked '{keyword}'")
                             return True
-                except Exception:
+                except Exception as e:
+                    logger.error(f"Error: {e}")
                     pass
         return False
 
@@ -289,7 +293,8 @@ class LogoutHandler:
         """
         try:
             await self.page.wait_for_load_state("domcontentloaded", timeout=5000)
-        except Exception:
+        except Exception as e:
+            logger.error(f"Error: {e}")
             pass
 
         current_url = self.page.url.lower()
@@ -300,7 +305,8 @@ class LogoutHandler:
         try:
             body_text = (await self.page.inner_text("body", timeout=3000)).lower()
             page_text_is_login = any(kw in body_text for kw in LOGIN_SIGNAL_KEYWORDS)
-        except Exception:
+        except Exception as e:
+            logger.error(f"Error: {e}")
             pass
 
         if url_is_login or page_text_is_login or self._logout_detected_via_network:

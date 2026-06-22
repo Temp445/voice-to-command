@@ -55,7 +55,8 @@ class ConnectionManager:
         async def _send_one(ws: WebSocket):
             try:
                 await asyncio.wait_for(ws.send_text(payload_str), timeout=_SEND_TIMEOUT)
-            except Exception:
+            except Exception as e:
+                logger.error(f"Error: {e}")
                 return ws  # Mark as dead
             return None
 

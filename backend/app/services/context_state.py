@@ -2,6 +2,8 @@
 ACE Voice Controller - Context State Service
 Maintains active conversational and system context across multiple commands.
 """
+from loguru import logger
+
 
 from typing import Any, Dict, Optional
 import threading
@@ -62,7 +64,8 @@ class ContextStateService:
                 if name in k or k in name:
                     return v
             return None
-        except Exception:
+        except Exception as e:
+            logger.error(f"Error: {e}")
             return None
 
 def get_context() -> ContextStateService:

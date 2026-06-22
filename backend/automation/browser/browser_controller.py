@@ -135,7 +135,8 @@ class BrowserController:
         """
         for frame in page.frames:
             try: await frame.evaluate(script)
-            except: pass
+            except Exception as e:
+                logger.error(f"Error: {e}")
         return "Seeked video"
 
     async def youtube_fullscreen(self):
@@ -150,7 +151,8 @@ class BrowserController:
         """
         for frame in page.frames:
             try: await frame.evaluate(script)
-            except: pass
+            except Exception as e:
+                logger.error(f"Error: {e}")
         return "Toggled fullscreen"
 
     async def youtube_mute(self):
@@ -165,7 +167,8 @@ class BrowserController:
         """
         for frame in page.frames:
             try: await frame.evaluate(script)
-            except: pass
+            except Exception as e:
+                logger.error(f"Error: {e}")
         return "Toggled mute"
 
     async def youtube_next(self):
@@ -221,13 +224,15 @@ class BrowserController:
                 return await self.engine.click(text_or_selector)
             else:
                 return await self.engine.click_text(text_or_selector)
-        except Exception:
+        except Exception as e:
+            logger.error(f"Error: {e}")
             try:
                 if is_selector:
                     return await self.engine.click_text(text_or_selector)
                 else:
                     return await self.engine.click(text_or_selector)
-            except Exception:
+            except Exception as e:
+                logger.error(f"Error: {e}")
                 return "Failed to find element to click"
 
 
@@ -295,7 +300,8 @@ class VoiceBrowserCommands:
                         if await loc.count() > 0:
                             await loc.first.click(timeout=1000)
                             return f"Clicked '{target_text}'"
-                    except Exception:
+                    except Exception as e:
+                        logger.error(f"Error: {e}")
                         pass
 
             # 2. Exact "type <text> into <field>"
@@ -312,7 +318,8 @@ class VoiceBrowserCommands:
                         if await loc.count() > 0:
                             await loc.first.fill(value, timeout=1000)
                             return f"Typed '{value}' into '{field}'"
-                    except Exception:
+                    except Exception as e:
+                        logger.error(f"Error: {e}")
                         pass
         except Exception as e:
             logger.debug(f"Deterministic fallback failed: {e}")
@@ -328,7 +335,8 @@ class VoiceBrowserCommands:
             _matched_url: str | None = None
             try:
                 _all_sites = _json.loads(settings.crm_sites) if settings.crm_sites else []
-            except Exception:
+            except Exception as e:
+                logger.error(f"Error: {e}")
                 _all_sites = []
             if not _all_sites:
                 _all_sites = [{"url": settings.crm_url, "keywords": settings.crm_keywords}]
@@ -392,7 +400,8 @@ class VoiceBrowserCommands:
                                 if await loc.count() > 0:
                                     await loc.first.click(timeout=1000)
                                     return f"Clicked '{btn_text}'"
-                            except Exception:
+                            except Exception as e:
+                                logger.error(f"Error: {e}")
                                 pass
                     # If not found, fall back to DOMAgent clicking the element on this page
                     from automation.browser.dom_agent import DOMAgent

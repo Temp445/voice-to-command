@@ -1,4 +1,6 @@
 """Voice router — TTS synthesis, voice pipeline status."""
+from loguru import logger
+
 
 from fastapi import APIRouter, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import StreamingResponse
@@ -146,7 +148,8 @@ async def websocket_test_stt(websocket: WebSocket):
                         silence_chunks = 0
                         
                     last_transcribe_time = time.time()
-                except Exception:
+                except Exception as e:
+                    logger.error(f"Error: {e}")
                     pass
 
     transcribe_task = asyncio.create_task(transcribe_loop())
@@ -165,7 +168,8 @@ async def websocket_test_stt(websocket: WebSocket):
                     is_speech = False
                     try:
                         is_speech = vad.is_speech(chunk, 16000)
-                    except:
+                    except Exception as e:
+                        logger.error(f"Error: {e}")
                         pass
                         
                     if is_speech:
@@ -181,7 +185,8 @@ async def websocket_test_stt(websocket: WebSocket):
                     data = json.loads(message["text"])
                     if data.get("type") == "stop":
                         break
-                except:
+                except Exception as e:
+                    logger.error(f"Error: {e}")
                     pass
     except WebSocketDisconnect:
         pass
@@ -194,9 +199,11 @@ async def websocket_test_stt(websocket: WebSocket):
                 text = await loop.run_in_executor(None, stt.transcribe, speech_buffer)
                 duration_ms = int((time.time() - start_t) * 1000)
                 await websocket.send_json({"text": text, "is_final": True, "duration_ms": duration_ms})
-            except:
+            except Exception as e:
+                logger.error(f"Error: {e}")
                 pass
         try:
             await websocket.close()
-        except:
+        except Exception as e:
+            logger.error(f"Error: {e}")
             pass

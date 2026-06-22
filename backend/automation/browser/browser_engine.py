@@ -96,7 +96,8 @@ class BrowserEngine:
                                 self._context = browser.contexts[0] if browser.contexts else await browser.new_context()
                                 is_cdp_reconnect = True
                                 logger.info("Successfully reconnected to existing Chrome instance via CDP.")
-                            except Exception:
+                            except Exception as e:
+                                logger.error(f"Error: {e}")
                                 logger.info("No active CDP session found. Launching new persistent context.")
                                 self._context = await self._playwright.chromium.launch_persistent_context(
                                     user_data_dir=profile_path,
@@ -665,7 +666,8 @@ class BrowserEngine:
                 await page.mouse.click(10, 100) # Safe click on the left margin
                 # Pressing a harmless key ensures the OS transfers focus to the web view
                 await page.keyboard.press("Control")
-            except Exception:
+            except Exception as e:
+                logger.error(f"Error: {e}")
                 pass
                 
             await asyncio.sleep(1.0)
@@ -726,7 +728,8 @@ class BrowserEngine:
                 await page.locator("input#search").click(force=True, timeout=3000)
                 await page.mouse.click(10, 100) # Safe click on the left margin
                 await page.keyboard.press("Control")
-            except Exception:
+            except Exception as e:
+                logger.error(f"Error: {e}")
                 pass
                 
             await asyncio.sleep(1.0)
@@ -748,7 +751,8 @@ class BrowserEngine:
             for frame in page.frames:
                 try:
                     await frame.evaluate(script)
-                except Exception:
+                except Exception as e:
+                    logger.error(f"Error: {e}")
                     pass
             return "Toggled playback."
         return await _run_in_playwright(_do())
