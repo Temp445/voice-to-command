@@ -96,9 +96,8 @@ async def execute_command(
     entry_id = body.id or str(uuid.uuid4())
 
     # ── Everything else fires in background — response returns immediately ─────
-    background_tasks.add_task(
-        _save_history_bg, entry_id, user_id, body, result, now
-    )
+    import asyncio
+    asyncio.create_task(_save_history_bg(entry_id, user_id, body, result, now))
 
     if pipeline and body.source != "text":
         from voice.pipeline import PipelineState

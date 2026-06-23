@@ -30,17 +30,23 @@ PROVIDER_REGISTRY: dict[str, dict] = {
 }
 
 # System prompt used when classifying intents
-_INTENT_CLASSIFIER_SYSTEM = """You are a context-aware command router for a desktop voice assistant.
-Your ONLY job is to classify the user's latest command into one of the available intents.
-Crucially, you must use the provided conversation history to resolve any pronouns (like "it", "this", "that") and extract the correct intent parameters.
+_INTENT_CLASSIFIER_SYSTEM = """You are ACE, a zero-latency desktop command router. Your ONLY function is to map
+the user's spoken command to exactly one intent from the provided list and extract
+its parameters. You operate at enterprise speed — every millisecond matters.
 
-Rules:
-- Reply with ONLY a valid JSON object. No markdown formatting, no explanations.
-- Format: {"intent": "<intent_name>", "confidence": <0.0-1.0>, "params": {"<param_name>": "<resolved_value>"}}
-- If the command relies on previous context (e.g., "run it"), use the history to determine what "it" refers to and fill the parameters accordingly.
-- If the user provides a short phrase or noun without a verb (e.g., "ace payroll" or "John Doe") immediately after performing an action (like searching Google, sending an email, etc.), infer that the user wants to repeat that exact same action but with the new parameter.
-- If no intent matches reasonably, return: {"intent": null, "confidence": 0.0, "params": {}}
-- Choose the single best-matching intent.
+RULES (non-negotiable):
+1. Reply ONLY with a valid JSON object on a single line. No markdown. No explanation.
+   Format: {"intent":"<name>","confidence":<0.0–1.0>,"params":{"<key>":"<value>"}}
+2. Resolve pronouns (it/this/that/them) using conversation history before choosing intent.
+3. If the user gives a noun after an action (e.g., "payroll" after opening a site),
+   repeat the last action with the new noun as the parameter.
+4. If the command contains a navigation verb (open/launch/go to/visit/start) followed
+   by a word matching a known site keyword, return intent "open_website_shortcut" with
+   the matched URL as the param — even if not in the formal intent list.
+5. For ambiguous short commands (1–2 words), bias toward the last executed intent's domain.
+6. Confidence < 0.6 → return {"intent":null,"confidence":0.0,"params":{}}
+7. Never guess. Never hallucinate intent names not in the provided list.
+8. max_tokens for your response: 80. Be terse.
 """
 
 # System prompt for general AI chat
@@ -209,16 +215,22 @@ class LLMService:
                 for i in available_intents
             ])
             
-            prompt = f"Available intents:\n{intents_json}\n\nLatest user command: \"{text}\"\n\nBased on the conversation history (if any) and the latest command, which intent matches best, and what are its resolved parameters?"
-            
-            # Inject history for pronoun resolution
+            # Build context injection — injected into the USER message, NOT the system prompt.
+            # Keeping the system prompt (_INTENT_CLASSIFIER_SYSTEM) byte-for-byte identical
+            # across calls lets Gemini's implicit server-side cache activate, cutting
+            # first-token latency by 30–60% on repeated commands.
             from app.services.context_manager import context_manager
-            system_prompt = _INTENT_CLASSIFIER_SYSTEM
             state_injection = context_manager.get_system_prompt_injection()
-            if state_injection:
-                system_prompt += f"\n\n{state_injection}"
-                
-            msgs = [{"role": "system", "content": system_prompt}]
+            context_prefix = f"[Context: {state_injection}]\n\n" if state_injection else ""
+
+            prompt = (
+                f"{context_prefix}"
+                f"Available intents:\n{intents_json}\n\n"
+                f"Latest command: \"{text}\"\n\n"
+                f"Which intent matches best? Reply with JSON only."
+            )
+
+            msgs = [{"role": "system", "content": _INTENT_CLASSIFIER_SYSTEM}]  # static — cacheable
             msgs.extend(self._history)
             msgs.append({"role": "user", "content": prompt})
             
@@ -293,11 +305,11 @@ class LLMService:
             # Strict timeout of 2.0 seconds. Speech synthesis must be fast.
             reply = await asyncio.wait_for(
                 self._provider.chat(msgs, temperature=self._temperature),
-                timeout=5.0
+                timeout=2.0
             )
             return reply.strip()
         except asyncio.TimeoutError:
-            logger.warning("LLM rewrite timed out after 5.0s, falling back to raw result")
+            logger.warning("LLM rewrite timed out after 2.0s, falling back to raw result")
             return raw_result
         except Exception as e:
             logger.warning(f"LLM rewrite failed, falling back to raw result: {e}")
