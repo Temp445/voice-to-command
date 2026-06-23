@@ -5,7 +5,7 @@ import { Sidebar } from "@/components/layout/Sidebar";
 import { TopBar } from "@/components/layout/TopBar";
 import { History, Trash2, Calendar, Clock, Loader2, AlertCircle } from "lucide-react";
 import { motion } from "framer-motion";
-import { getResolvedBaseUrl } from "@/lib/api";
+import { api } from "@/lib/api";
 
 interface CommandHistoryEntry {
   id: string;
@@ -30,12 +30,8 @@ export default function HistoryPage() {
     setLoading(true);
     try {
       // Fetch up to 100 items for the history view
-      const base = await getResolvedBaseUrl();
-      const res = await fetch(`${base}/commands/history?limit=100`);
-      if (res.ok) {
-        const data = await res.json();
-        setHistory(data);
-      }
+      const data = await api.getHistory(100) as CommandHistoryEntry[];
+      setHistory(data);
     } catch (e) {
       console.error("Failed to fetch history:", e);
     } finally {
@@ -49,13 +45,8 @@ export default function HistoryPage() {
 
   const deleteItem = async (id: string) => {
     try {
-      const base = await getResolvedBaseUrl();
-      const res = await fetch(`${base}/commands/history/${id}`, {
-        method: "DELETE"
-      });
-      if (res.ok) {
-        setHistory(history.filter(h => h.id !== id));
-      }
+      await api.deleteHistoryItem(id);
+      setHistory(history.filter(h => h.id !== id));
     } catch (e) {
       console.error("Failed to delete item:", e);
     }
@@ -67,13 +58,8 @@ export default function HistoryPage() {
 
   const confirmClearHistory = async () => {
     try {
-      const base = await getResolvedBaseUrl();
-      const res = await fetch(`${base}/commands/history`, {
-        method: "DELETE"
-      });
-      if (res.ok) {
-        setHistory([]);
-      }
+      await api.clearHistory();
+      setHistory([]);
     } catch (e) {
       console.error("Failed to clear history:", e);
     }

@@ -91,6 +91,8 @@ export const api = {
     }),
 
   getHistory: (limit = 50) => request(`/commands/history?limit=${limit}`),
+  deleteHistoryItem: (id: string) => request(`/commands/history/${id}`, { method: "DELETE" }),
+  clearHistory: () => request("/commands/history", { method: "DELETE" }),
   getIntents:  () => request("/commands/intents"),
 
   // Voice
