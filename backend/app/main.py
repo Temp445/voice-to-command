@@ -218,8 +218,8 @@ async def _background_init(app_state, running_loop: asyncio.AbstractEventLoop):
             await asyncio.sleep(1.0)
             from automation.browser.browser_engine import BrowserEngine
             engine = BrowserEngine()
-            await engine.ensure_browser()
-            logger.info("✅ Browser pre-warmed — first navigation will be instant")
+            await engine.prewarm_profile()
+            logger.info("✅ Browser pre-warmed invisibly — next navigation will be fast")
         except Exception as e:
             logger.warning(f"⚠️  Browser pre-warm failed (non-fatal, will cold-start on first use): {e}")
 

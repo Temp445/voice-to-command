@@ -500,16 +500,40 @@ async def handle_browser_download(**_) -> str:
 async def handle_browser_upload(**_) -> str:
     from automation.browser.dom_agent import DOMAgent
     from automation.browser.browser_controller import BrowserController
+    from loguru import logger
+    import re
     ctrl = BrowserController()
     try:
         page = await ctrl._ensure_page()
-        agent = DOMAgent(page)
-        # Force a click on the file area to open the native OS file dialog for visual browsing
-        # Do NOT use the word "upload" in this string, or DOMAgent will intercept it as an auto-upload action!
-        res = await agent.execute_intent("click the file drop area")
-        if "couldn't find" not in res.lower() and "failed" not in res.lower():
-            return "Opened file upload dialog."
-        return res
+        if not page:
+            return "No active browser page found."
+            
+        # 1. Native Playwright Fast-Path for Uploads
+        locators = [
+            page.locator("input[type='file']:visible"),
+            page.get_by_role("button", name=re.compile(r"upload|choose file|browse", re.IGNORECASE)),
+            page.get_by_role("link", name=re.compile(r"upload|choose file|browse", re.IGNORECASE)),
+            page.locator("text=\"upload\"").filter(has_not=page.locator("body, html, main"))
+        ]
+        for loc in locators:
+            try:
+                if await loc.count() > 0:
+                    await loc.first.click(timeout=1500)
+                    return "Opened file upload dialog."
+            except Exception:
+                pass
+                
+        # 2. DOMAgent Fallback (if implemented)
+        try:
+            agent = DOMAgent(page)
+            res = await agent.execute_intent("click the upload button or file drop area")
+            if "couldn't find" not in res.lower() and "failed" not in res.lower():
+                return "Opened file upload dialog."
+            return res
+        except AttributeError:
+            logger.warning("DOMAgent execute_intent not implemented. Skipping DOMAgent upload.")
+            
+        return "Could not find an upload button on the page."
     except Exception as e:
         return f"Failed to open upload dialog: {e}"
 
@@ -1648,13 +1672,48 @@ async def handle_type_text(text: str = "", **_) -> str:
         from automation.browser.browser_controller import BrowserController
         bc = BrowserController()
         if bc.engine._playwright is not None:
+            # ── Credential-pair shortcut ─────────────────────────────────────────
+            import re as _re
+            _raw_tokens = text.split()
+            _email_cands = [t.strip(',.') for t in _raw_tokens if '@' in t and '.' in t.split('@')[-1]]
+            _stop = {'type','enter','write','fill','and','with','the','into','in','to'}
+            _pass_cands = [
+                t.strip(',.')
+                for t in _raw_tokens
+                if t.strip(',.') not in _email_cands
+                and t.strip(',.').lower() not in _stop
+                and len(t.strip(',.')) > 3
+            ]
+            if _email_cands and _pass_cands:
+                try:
+                    page = await bc._ensure_page()
+                    email_val = _email_cands[0]
+                    pass_val = _pass_cands[-1]
+                    
+                    email_loc = page.locator("input[type='email'], input[name*='email' i], input[placeholder*='email' i]").first
+                    if await email_loc.count() > 0:
+                        await email_loc.fill(email_val)
+                        
+                    pass_loc = page.locator("input[type='password'], input[name*='pass' i], input[placeholder*='pass' i]").first
+                    if await pass_loc.count() > 0:
+                        await pass_loc.fill(pass_val)
+                        await pass_loc.press("Enter")
+                        
+                    return "Filled credentials and submitted."
+                except Exception as _e:
+                    logger.debug(f"Credential shortcut failed in type_text: {_e}")
+            # ── End credential-pair shortcut ─────────────────────────────────────
+
             # Try to type via DOMAgent first
-            from automation.browser.dom_agent import DOMAgent
-            page = await bc.engine.ensure_browser()
-            agent = DOMAgent(page)
-            dom_res = await agent.execute_intent(f"type {text}")
-            if "couldn't find" not in dom_res.lower() and "failed" not in dom_res.lower():
-                return dom_res
+            try:
+                from automation.browser.dom_agent import DOMAgent
+                page = await bc.engine.ensure_browser()
+                agent = DOMAgent(page)
+                dom_res = await agent.execute_intent(f"type {text}")
+                if "couldn't find" not in dom_res.lower() and "failed" not in dom_res.lower():
+                    return dom_res
+            except AttributeError:
+                logger.warning("DOMAgent execute_intent not implemented. Skipping DOMAgent type_text.")
     except Exception as e:
         logger.error(f"[{__name__}] {type(e).__name__}: {e}")
         pass
@@ -1693,24 +1752,48 @@ async def handle_click_text(text: str = "", **_) -> str:
     """
     clean_text = text.strip()
     
-    # ── Priority 1: DOMAgent (Browser-First) ────────────────────────────────
-    # If the browser engine is running (even via CDP reconnect), always try this first.
-    # This guarantees we click the website, not any screen overlay like the command console.
     try:
         from automation.browser.browser_controller import BrowserController
         from automation.browser.dom_agent import DOMAgent
+        import re
         bc = BrowserController()
         # Attempt to get/reconnect to browser. This also tries CDP reconnect.
         page = await bc.engine.ensure_browser()
         if page is not None:
-            agent = DOMAgent(page)
-            dom_res = await agent.execute_intent(f"click {clean_text}")
-            if "couldn't find" not in dom_res.lower() and "failed" not in dom_res.lower():
-                return dom_res
-            # If DOMAgent couldn't find the element, fall through to OCR
-            logger.warning(f"DOMAgent could not find '{clean_text}' on page. Falling back to OCR.")
+            # Native Playwright Fast-Path for exact matches
+            if len(clean_text) > 0 and len(clean_text.split()) <= 4:
+                locators = [
+                    # 1. Exact Matches
+                    page.get_by_role("button", name=re.compile(f"^{re.escape(clean_text)}$", re.IGNORECASE)),
+                    page.get_by_role("link", name=re.compile(f"^{re.escape(clean_text)}$", re.IGNORECASE)),
+                    page.get_by_text(clean_text, exact=True),
+                    # 2. Partial Matches
+                    page.get_by_role("button", name=re.compile(re.escape(clean_text), re.IGNORECASE)),
+                    page.get_by_role("link", name=re.compile(re.escape(clean_text), re.IGNORECASE)),
+                    page.get_by_text(clean_text, exact=False)
+                ]
+                for loc in locators:
+                    try:
+                        count = await loc.count()
+                        for i in range(count):
+                            element = loc.nth(i)
+                            if await element.is_visible():
+                                await element.click(timeout=1000)
+                                return f"Clicked '{clean_text}'"
+                    except Exception as e:
+                        pass
+
+            try:
+                agent = DOMAgent(page)
+                dom_res = await agent.execute_intent(f"click {clean_text}")
+                if "couldn't find" not in dom_res.lower() and "failed" not in dom_res.lower():
+                    return dom_res
+                # If DOMAgent couldn't find the element, fall through to OCR
+                logger.warning(f"DOMAgent could not find '{clean_text}' on page. Falling back to OCR.")
+            except AttributeError:
+                logger.warning("DOMAgent execute_intent not implemented. Skipping DOMAgent click.")
     except Exception as e:
-        logger.warning(f"DOMAgent click failed for '{clean_text}': {e}. Falling back to OCR.")
+        logger.warning(f"Native click failed for '{clean_text}': {e}. Falling back to OCR.")
 
     # ── Last Resort: Desktop OCR ─────────────────────────────────────────────
     # Only reaches here if no browser session is active OR the element was not found in DOM.
@@ -2153,14 +2236,6 @@ def register_all_intents() -> None:
             is_fallback=True
         ),
         # CRM Actions
-        Intent(
-            name="crm_login",
-            domain="browser",
-            patterns=[r"^(?:log\s*in|login|sign\s*in)(?:\s+to\s+(?:the\s+)?crm)?$"],
-            handler=handle_crm_action,
-            description="Log into the ACE CRM system",
-            examples=["log in", "login", "sign in", "login to crm", "authenticate me into the system"],
-        ),
         Intent(
             name="crm_logout",
             domain="browser",
@@ -2685,7 +2760,7 @@ def register_all_intents() -> None:
             name="dismiss_overlay",
             domain="browser",
             patterns=[
-                r"^(?:cancel|escape|close\s+(?:the\s+)?(?:popup|overlay|modal|dialog|video|window|ad|card|box|banner)|dismiss|press\s+escape|close\s+it)(?:\s+.*)?$",
+                r"^(?:cancel|no\s+thanks|not\s+now|never|escape|close\s+(?:the\s+)?(?:popup|overlay|modal|dialog|video|window|ad|card|box|banner)|dismiss|press\s+escape|close\s+it)(?:\s+.*)?$",
             ],
             handler=handle_cancel,
             description="Close a popup, overlay, modal, or dialog by pressing Escape or clicking X",
@@ -2695,7 +2770,7 @@ def register_all_intents() -> None:
             name="crm_workflow",
             patterns=[
                 r"^(?P<action>(?:open|launch|start|go\s+to)\s+(?:my\s+)?(?:ace\s+)?crm)$",
-                r"^(?P<action>log\s*(?:in|into)(?:\s+(?:to\s+)?(?:ace\s+)?crm)?)$",
+                r"^(?P<action>log\s*(?:in|into)\s+(?:to\s+)?(?:ace\s+)?crm)$",
                 r"^(?P<action>(?:create|add|make|generate)(?:\s+(?:a\s+)?(?:new\s+)?)?\s+(?:lead|quote|quotation|contact|customer|account|opportunity|order|product|task)(?:\s+.*)?)$",
                 r"^(?P<action>new\s+(?:lead|quote|quotation|contact|customer|account|opportunity|order|product|task)(?:\s+.*)?)$",
                 r"^(?P<action>(?:go\s+to|open|show)\s+(?:the\s+)?(?:leads|contacts|opportunities|accounts|customers|quotes|quotations|orders|products|dashboard|tasks|reports|home)(?:\s+module|page)?)$",
@@ -2708,7 +2783,7 @@ def register_all_intents() -> None:
             ],
             handler=handle_crm_action,
             description="Automate CRM workflows in the browser",
-            examples=["open my crm", "create a new lead", "open ace crm", "login", "create new quote", "search lead john"],
+            examples=["open my crm", "create a new lead", "open ace crm", "login to crm", "create new quote", "search lead john"],
             param_names=["action"]
         ),
         Intent(
@@ -3081,11 +3156,13 @@ def register_all_intents() -> None:
             name="browser_click_link",
             domain="browser",
             patterns=[
-                r"open\s+(?:the\s+)?(?P<text>.+?)\s+(?:link|tab|button|element)$"
+                r"open\s+(?:the\s+)?(?P<text>.+?)\s+(?:link|tab|button|element)$",
+                r"^(?:click|press|open)\s+(?:on\s+)?(?:the\s+)?(?P<text>.+?)(?:\s+(?:link|tab|button|element|menu|icon))?$",
+                r"^(?P<text>contact\s+us|about\s+us|home|login|logout|dashboard|products|services|blog|pricing|sign\s+up|sign\s+in|register|submit|save|cancel|continue|back|next)$"
             ],
             handler=handle_click_text,
             description="Open or click a specific link/tab in the browser using the DOM Agent",
-            examples=["open the linkedin link", "open the fourth tab"],
+            examples=["open the linkedin link", "open the fourth tab", "click contact us"],
             param_names=["text"],
         ),
     ]

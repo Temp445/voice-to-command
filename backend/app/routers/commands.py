@@ -1,5 +1,6 @@
 """Commands router — Execute and retrieve command history via Supabase client."""
 
+import asyncio
 import uuid
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Request, BackgroundTasks
@@ -43,19 +44,7 @@ async def _save_history_bg(entry_id, user_id, body, result, now):
     except Exception as e:
         logger.warning(f"History insert failed: {e}")
 
-    # WebSocket broadcast (non-blocking)
-    try:
-        await ws_manager.broadcast("command_executed", {
-            "id": entry_id,
-            "raw_text": body.text,
-            "intent": result.get("intent"),
-            "status": result.get("status", "failed"),
-            "result": result_text,
-            "source": body.source,
-            "routed_by_llm": result.get("routed_by_llm", False),
-        })
-    except Exception as e:
-        logger.warning(f"WS broadcast failed: {e}")
+    # WS broadcast fires immediately in execute_command above — skipped here.
 
     # TTS speak (non-blocking — fires after response returned)
     import asyncio
@@ -95,9 +84,25 @@ async def execute_command(
     now = datetime.now(timezone.utc)
     entry_id = body.id or str(uuid.uuid4())
 
+    # ── Broadcast to overlay IMMEDIATELY after execution, before browser opens ─
+    # Previously the overlay received command_executed only after navigate() +
+    # focus + CDP maximize all completed — causing a 10–25s overlay delay.
+    # Now we fire it here so the overlay pops up instantly on command success,
+    # regardless of how long the browser navigation takes afterward.
+    asyncio.create_task(ws_manager.broadcast("command_executed", {
+        "id": entry_id,
+        "raw_text": body.text,
+        "intent": result.get("intent"),
+        "status": result.get("status", "failed"),
+        "result": result.get("result"),
+        "source": body.source,
+        "routed_by_llm": result.get("routed_by_llm", False),
+    }))
+
     # ── Everything else fires in background — response returns immediately ─────
-    import asyncio
-    asyncio.create_task(_save_history_bg(entry_id, user_id, body, result, now))
+    background_tasks.add_task(
+        _save_history_bg, entry_id, user_id, body, result, now
+    )
 
     if pipeline and body.source != "text":
         from voice.pipeline import PipelineState

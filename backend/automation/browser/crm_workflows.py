@@ -13,16 +13,56 @@ class CRMMacros:
         from app.config import settings
         self.base_url = settings.crm_url if settings.crm_url.endswith('/') else settings.crm_url + '/'
 
-    async def open_crm(self, transcript: str = None, target_url: str = None):
+    async def open_crm(self, transcript: str = None, target_url: str = None, dynamic_routes: dict = None):
         """Navigates to the CRM homepage (or a specific site URL if provided)."""
         dest = target_url if target_url else self.base_url
         if dest and not dest.endswith('/'):
             dest += '/'
+        t_lower = transcript.lower() if transcript else ""
+
+        # 1. Check for dynamic routes configured in the database
+        matched_dynamic_route = None
+        if dynamic_routes:
+            for key, route_path in dynamic_routes.items():
+                if key.lower() in t_lower:
+                    matched_dynamic_route = route_path
+                    break
+
+        if matched_dynamic_route:
+            route = dest + matched_dynamic_route.lstrip('/')
+            logger.info(f"Dynamically redirecting to configured route: {route}")
+            await self.engine.navigate(route)
+            return f"Opened website and navigated to {matched_dynamic_route}."
+
+        # 2. Check for implicit login fallback
+        if "login" in t_lower or "log in" in t_lower or "sign in" in t_lower:
+            # If the user specifically targeted the base CRM URL, use the fast/hardcoded login
+            if not target_url or dest.strip('/').lower() == self.base_url.strip('/').lower():
+                logger.info(f"Opening CRM: {dest}")
+                await self.engine.navigate(dest)
+                await self.login()
+                return "Opened CRM and logged in."
+            else:
+                # Use the original DOMAgent workflow as a robust fallback for unknown logins
+                try:
+                    logger.info(f"Opening CRM: {dest}")
+                    await self.engine.navigate(dest)
+                    from automation.browser.dom_agent import DOMAgent
+                    page = await self.engine.ensure_browser()
+                    agent = DOMAgent(page)
+                    await agent.execute_intent("click the login, sign in, or Site Admin link")
+                    return f"Opened website and initiated login."
+                except AttributeError:
+                    logger.warning("DOMAgent execute_intent not implemented. Falling back to direct /login route append.")
+                    route = dest + "login"
+                    await self.engine.navigate(route)
+                    return "Opened website and navigated to login."
+                except Exception as e:
+                    logger.error(f"DOMAgent login failed: {e}")
+                    return f"Opened website, but failed to auto-login."
+
         logger.info(f"Opening CRM: {dest}")
         await self.engine.navigate(dest)
-
-        if not transcript:
-            return "Opened CRM."
 
         words = transcript.strip().split()
         verb = words[0].lower()

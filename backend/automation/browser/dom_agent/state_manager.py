@@ -4,3 +4,4 @@ from app.services.llm.llm_service import llm_service
 from app.config import settings
 
 class StateManagerMixin:
+    pass

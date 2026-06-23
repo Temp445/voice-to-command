@@ -32,6 +32,28 @@ async def _run_in_playwright(coro):
     future = asyncio.run_coroutine_threadsafe(coro, _get_playwright_loop())
     return await asyncio.wrap_future(future)
 
+# Realistic user agent — prevents "HeadlessChrome" fingerprint leaking
+STANDARD_UA = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/126.0.0.0 Safari/537.36"
+)
+
+# Common Chrome launch args that reduce automation fingerprint
+CHROME_ARGS = [
+    "--disable-blink-features=AutomationControlled",
+    "--no-first-run",
+    "--no-default-browser-check",
+    "--test-type",
+    "--remote-debugging-port=9222",
+    "--disable-features=PasswordManager,IsolateOrigins,site-per-process",
+    "--disable-ipc-flooding-protection",
+    "--start-maximized",
+    "--flag-switches-begin",
+    "--flag-switches-end",
+]
+
+
 class BrowserEngine:
     """Singleton engine for isolated, stealthy browser automation."""
     _instance = None
@@ -54,7 +76,75 @@ class BrowserEngine:
         else:
             return os.path.expanduser("~/.config/ace/browser-profile")
 
-    async def ensure_browser(self) -> Page:
+    async def _apply_stealth(self, target):
+        """Apply playwright-stealth to a context or page, handling both API versions."""
+        try:
+            try:
+                from playwright_stealth import stealth_async
+                await stealth_async(target)
+            except ImportError:
+                from playwright_stealth import Stealth
+                stealth_instance = Stealth()
+                await stealth_instance.apply_stealth_async(target)
+        except Exception as e:
+            logger.warning(f"Stealth could not be applied to target: {e}")
+
+    async def _human_mouse_wiggle(self, page: Page):
+        """Simulate natural mouse movement to build interaction entropy before actions."""
+        for _ in range(random.randint(2, 4)):
+            x = random.randint(200, 1200)
+            y = random.randint(100, 600)
+            await page.mouse.move(x, y, steps=random.randint(5, 10))
+            await asyncio.sleep(random.uniform(0.02, 0.08))
+
+    async def prewarm_profile(self):
+        """Prewarm the Chrome profile and Playwright binaries completely invisibly."""
+        async def _do():
+            if not self._playwright:
+                self._playwright = await async_playwright().start()
+
+            profile_path = self._get_profile_path()
+            os.makedirs(profile_path, exist_ok=True)
+
+            # Prevent "Restore pages?" bubble by fixing the Preferences file
+            prefs_path = os.path.join(profile_path, "Default", "Preferences")
+            if os.path.exists(prefs_path):
+                try:
+                    import json
+                    with open(prefs_path, "r", encoding="utf-8") as f:
+                        prefs = json.load(f)
+                    if "profile" in prefs:
+                        prefs["profile"]["exit_type"] = "Normal"
+                        prefs["profile"]["exited_cleanly"] = True
+                    with open(prefs_path, "w", encoding="utf-8") as f:
+                        json.dump(prefs, f)
+                except Exception as e:
+                    logger.debug(f"Failed to patch Chrome preferences: {e}")
+
+            # Launch headless briefly to populate cache and binaries
+            try:
+                temp_ctx = await self._playwright.chromium.launch_persistent_context(
+                    user_data_dir=profile_path,
+                    channel="chrome",
+                    headless=True,
+                    user_agent=STANDARD_UA,
+                    args=[
+                        "--disable-blink-features=AutomationControlled",
+                        "--no-first-run",
+                        "--no-default-browser-check",
+                        "--disable-features=PasswordManager",
+                        "--start-maximized"
+                    ]
+                )
+                await asyncio.sleep(0.5)
+                await temp_ctx.close()
+                logger.info("✅ Headless pre-warm completed successfully.")
+            except Exception as e:
+                logger.debug(f"Headless prewarm skipped/failed: {e}")
+
+        await _run_in_playwright(_do())
+
+    async def ensure_browser(self, background: bool = False) -> Page:
         async def _do_ensure():
             if self._lock is None:
                 self._lock = asyncio.Lock()
@@ -73,9 +163,10 @@ class BrowserEngine:
 
                 logger.info(f"Launching Browser ({settings.browser_type}) in isolated profile: {profile_path}")
                 is_cdp_reconnect = False
+
                 try:
                     b_type = settings.browser_type.lower()
-                    
+
                     try:
                         if b_type == "firefox":
                             self._context = await self._playwright.firefox.launch_persistent_context(
@@ -99,22 +190,18 @@ class BrowserEngine:
                             except Exception as e:
                                 logger.debug(f"No active CDP session found (expected if browser is closed): {e}")
                                 logger.info("Launching new persistent context.")
+
+                                # FIX: user_agent now set on the primary launch path
                                 self._context = await self._playwright.chromium.launch_persistent_context(
                                     user_data_dir=profile_path,
-                                    channel="chrome",  # Use system Chrome to avoid Chromium fingerprint
+                                    channel="chrome",
                                     headless=False,
                                     no_viewport=True,
-                                    args=[
-                                        "--start-maximized",
-                                        "--disable-blink-features=AutomationControlled",
-                                        "--no-first-run",
-                                        "--no-default-browser-check",
-                                        "--test-type",
-                                        "--remote-debugging-port=9222",
-                                        "--disable-features=PasswordManager"
-                                    ],
+                                    user_agent=STANDARD_UA,
+                                    args=CHROME_ARGS,
                                     ignore_default_args=["--enable-automation"]
                                 )
+
                     except Exception as launch_err:
                         logger.warning(f"Browser launch failed, attempting to kill locked processes: {launch_err}")
                         import psutil
@@ -127,56 +214,55 @@ class BrowserEngine:
                                         proc.kill()
                             except (psutil.NoSuchProcess, psutil.AccessDenied):
                                 pass
-                        
+
                         await asyncio.sleep(2.0)
+
                         # Retry once after cleanup
                         if b_type == "firefox":
-                            self._context = await self._playwright.firefox.launch_persistent_context(user_data_dir=profile_path, headless=False, no_viewport=True)
+                            self._context = await self._playwright.firefox.launch_persistent_context(
+                                user_data_dir=profile_path, headless=False, no_viewport=True
+                            )
                         elif b_type == "webkit":
-                            self._context = await self._playwright.webkit.launch_persistent_context(user_data_dir=profile_path, headless=False, no_viewport=True)
+                            self._context = await self._playwright.webkit.launch_persistent_context(
+                                user_data_dir=profile_path, headless=False, no_viewport=True
+                            )
                         else:
                             self._context = await self._playwright.chromium.launch_persistent_context(
-                                user_data_dir=profile_path, channel="chrome", headless=False, no_viewport=True,
-                                args=["--start-maximized", "--disable-blink-features=AutomationControlled", "--no-first-run", "--no-default-browser-check", "--test-type", "--remote-debugging-port=9222", "--disable-features=PasswordManager"],
+                                user_data_dir=profile_path,
+                                channel="chrome",
+                                headless=False,
+                                no_viewport=True,
+                                user_agent=STANDARD_UA,
+                                args=CHROME_ARGS + ["--disable-session-crashed-bubble"],
                                 ignore_default_args=["--enable-automation"]
                             )
-                    
+
                     if not is_cdp_reconnect:
-                        try:
-                            if b_type not in ["firefox", "webkit"]:
-                                try:
-                                    from playwright_stealth import stealth_async
-                                    await stealth_async(self._context)
-                                except ImportError:
-                                    from playwright_stealth import Stealth
-                                    await Stealth().apply_stealth_async(self._context)
-                        except Exception as e:
-                            logger.warning(f"Stealth could not be applied: {e}")
+                        b_type = settings.browser_type.lower()
+                        if b_type not in ["firefox", "webkit"]:
+                            # Apply stealth to the context
+                            await self._apply_stealth(self._context)
+                            # Apply stealth to any already-open pages
+                            for p in self._context.pages:
+                                await self._apply_stealth(p)
+                            # FIX: let stealth JS patches settle before any navigation
+                            await asyncio.sleep(0.3)
 
                     pages = self._context.pages
-                    
-                    # Intelligently find the active/relevant page, filtering out extensions, blanks, and the command console itself
+
+                    # Intelligently find the active/relevant page,
+                    # filtering out extensions, blanks, and the command console
                     active_page = None
-                    for p in reversed(pages): # Iterate backwards to get the most recently opened tab
+                    for p in reversed(pages):
                         url = p.url.lower()
-                        if not url.startswith('chrome-extension://') and url != 'about:blank' and 'localhost:3000' not in url and '127.0.0.1:3000' not in url:
+                        if (not url.startswith('chrome-extension://')
+                                and url != 'about:blank'
+                                and 'localhost:3000' not in url
+                                and '127.0.0.1:3000' not in url):
                             active_page = p
                             break
-                            
-                    self._page = active_page if active_page else (pages[-1] if pages else await self._context.new_page())
-                    
-                    if not is_cdp_reconnect:
-                        try:
-                            client = await self._context.new_cdp_session(self._page)
-                            window = await client.send('Browser.getWindowForTarget')
-                            await client.send('Browser.setWindowBounds', {
-                                'windowId': window['windowId'], 
-                                'bounds': {'windowState': 'maximized'}
-                            })
-                            await client.detach()
-                        except Exception as e:
-                            logger.warning(f"Could not auto-maximize window via CDP: {e}")
 
+                    self._page = active_page if active_page else (pages[-1] if pages else await self._context.new_page())
                     return self._page
 
                 except Exception as e:
@@ -209,34 +295,60 @@ class BrowserEngine:
         async def _do_nav():
             page = await self.ensure_browser()
             target = f"https://{url}" if not url.startswith(("http://", "https://")) else url
+
+            # Bring to front and maximize BEFORE goto() to avoid main-thread block
+            try:
+                cdp = await page.context.new_cdp_session(page)
+                res = await cdp.send("Browser.getWindowForTarget")
+                window_id = res.get("windowId")
+                if window_id:
+                    await cdp.send("Browser.setWindowBounds", {
+                        "windowId": window_id,
+                        "bounds": {"windowState": "maximized"}
+                    })
+            except Exception as e:
+                logger.debug(f"CDP maximize skipped: {e}")
+
+            # Windows Focus Stealing Bypass
+            try:
+                import uuid
+                import ctypes
+                import pygetwindow as gw
+
+                unique_title = str(uuid.uuid4())
+                original_title = await page.evaluate("document.title")
+                await page.evaluate(f"document.title = '{unique_title}'")
+                await asyncio.sleep(0.1)
+
+                wins = gw.getWindowsWithTitle(unique_title)
+                if wins:
+                    win = wins[0]
+                    ctypes.windll.user32.keybd_event(0x12, 0, 0, 0)  # ALT down
+                    ctypes.windll.user32.keybd_event(0x12, 0, 2, 0)  # ALT up
+                    if win.isMinimized:
+                        win.restore()
+                    win.maximize()
+                    ctypes.windll.user32.SetForegroundWindow(win._hWnd)
+
+                await page.evaluate(f"document.title = '{original_title}'")
+            except Exception as e:
+                logger.debug(f"Focus bypass skipped: {e}")
+
             from playwright.async_api import TimeoutError as PlaywrightTimeoutError
             try:
-                await page.goto(target, wait_until="domcontentloaded", timeout=30000)
+                await page.goto(target, wait_until="commit", timeout=20000)
             except PlaywrightTimeoutError:
-                logger.warning(f"Timeout navigating to {target}, retrying...")
+                logger.warning(f"Timeout (commit) navigating to {target}, retrying...")
                 try:
-                    await page.reload(timeout=30000)
+                    await page.goto(target, wait_until="domcontentloaded", timeout=20000)
                 except PlaywrightTimeoutError:
-                    return f"Failed to fully load {target} due to network timeout."
-            
-            # Restore and focus the browser window
+                    return f"Failed to load {target} — network timeout."
+
             try:
-                from automation.desktop.window_manager import WindowManager
-                from app.config import settings
-                wm = WindowManager()
-                
-                # Fetch active page title for precise window matching
-                page_title = await page.title()
-                target_title = page_title if page_title and page_title.lower() != "about:blank" else ""
-                
-                if not target_title:
-                    b_type = settings.browser_type.lower()
-                    target_title = "chrome" if b_type == "chromium" else b_type
-                
-                wm.force_focus_by_title(target_title)
+                await page.bring_to_front()
             except Exception as e:
-                logger.warning(f"Failed to focus browser window after navigation: {e}")
-                
+                logger.debug(f"bring_to_front skipped: {e}")
+
             return f"Navigated to {target}"
         return await _run_in_playwright(_do_nav())
 
@@ -272,6 +384,8 @@ class BrowserEngine:
         async def _do():
             await self.ensure_browser()
             self._page = await self._context.new_page()
+            # FIX: apply stealth to every new tab immediately
+            await self._apply_stealth(self._page)
             if url:
                 target = f"https://{url}" if not url.startswith(("http://", "https://")) else url
                 await self._page.goto(target)
@@ -294,8 +408,6 @@ class BrowserEngine:
             pages = list(self._context.pages)
             for p in pages:
                 await p.close()
-            # Closing all tabs usually kills the browser or context in playwright.
-            # We must ensure there is at least one tab left.
             self._page = await self._context.new_page()
             return "All tabs closed."
         return await _run_in_playwright(_do())
@@ -357,26 +469,37 @@ class BrowserEngine:
     async def click_search_result(self, index: int = 0) -> str:
         async def _do():
             page = await self.ensure_browser()
-            # General heuristic for Google/Bing search results or generic main links
-            locators = [
-                "ytd-video-renderer a#video-title", # YouTube specific
-                "div.g h3", # Google specific
-                "h3", 
-                "a h3", 
-                ".g a", 
-                "div.search-result a"
-            ]
-            for loc in locators:
-                elements = await page.locator(loc).all()
-                visible_elements = []
-                for el in elements:
-                    if await el.is_visible():
-                        visible_elements.append(el)
-                        
-                if len(visible_elements) > index:
-                    await visible_elements[index].click()
-                    return f"Clicked search result {index + 1} via '{loc}'."
-            return f"Could not find search result {index + 1}."
+            url = page.url
+
+            if "google.com/search" in url:
+                elements = await page.locator("div#search h3").all()
+                if not elements:
+                    elements = await page.locator("div.g a").all()
+                if 0 <= index < len(elements):
+                    text = await elements[index].inner_text()
+                    await elements[index].click()
+                    return f"Clicked Google result: {text}"
+                return f"Could not find result at index {index + 1} (Found {len(elements)})"
+
+            elif "youtube.com/results" in url:
+                elements = await page.locator("ytd-video-renderer a#video-title").all()
+                if 0 <= index < len(elements):
+                    text = await elements[index].inner_text()
+                    await elements[index].click()
+                    return f"Clicked YouTube result: {text}"
+                return f"Could not find video at index {index + 1} (Found {len(elements)})"
+
+            else:
+                # Generic fallback
+                locators = ["h3", "a h3", ".g a", "div.search-result a"]
+                for loc in locators:
+                    elements = await page.locator(loc).all()
+                    visible = [el for el in elements if await el.is_visible()]
+                    if len(visible) > index:
+                        await visible[index].click()
+                        return f"Clicked search result {index + 1} via '{loc}'."
+                return f"Could not find search result {index + 1}."
+
         return await _run_in_playwright(_do())
 
     async def double_click(self, selector: str = None) -> str:
@@ -411,7 +534,7 @@ class BrowserEngine:
             page = await self.ensure_browser()
             if human_like:
                 await page.locator(selector).first.click()
-                await page.keyboard.type(text, delay=random.randint(40, 100))
+                await page.keyboard.type(text, delay=random.randint(20, 60))
             else:
                 await page.fill(selector, text)
             return f"Typed text into {selector}."
@@ -500,33 +623,23 @@ class BrowserEngine:
         return await _run_in_playwright(_do())
 
     async def extract_clean_text(self) -> str:
-        """Extract clean text from the current page using BeautifulSoup4 (bypasses Playwright's inner_text slowness)."""
+        """Extract clean text using BeautifulSoup4 (bypasses Playwright's inner_text slowness)."""
         async def _do():
             page = await self.ensure_browser()
             html_content = await page.content()
             try:
                 from bs4 import BeautifulSoup
-                # Parse with lxml for speed
                 soup = BeautifulSoup(html_content, "lxml")
-                
-                # Remove unwanted tags
                 for element in soup(["script", "style", "noscript", "header", "footer", "nav", "svg", "img"]):
                     element.decompose()
-                    
-                # Extract text
                 text = soup.get_text(separator=' ', strip=True)
-                
-                # Clean up multiple spaces and newlines
                 import re
-                clean_text = re.sub(r'\s+', ' ', text).strip()
-                return clean_text
+                return re.sub(r'\s+', ' ', text).strip()
             except Exception as e:
                 logger.error(f"BeautifulSoup parsing failed: {e}")
-                # Fallback to Playwright
                 text = await page.inner_text("body")
                 import re
                 return re.sub(r'\n+', '\n', text).strip()
-                
         return await _run_in_playwright(_do())
 
     # --- Screenshots & Visuals ---
@@ -543,8 +656,6 @@ class BrowserEngine:
         async def _do():
             path = await self.screenshot("analysis.png")
             from app.services.vision_service import VisionService
-            # In a real impl, we'd pass the local image path to VisionService.
-            # Assuming VisionService has a method that takes a path.
             return await VisionService.describe_image(path, query)
         return await _run_in_playwright(_do())
 
@@ -594,13 +705,11 @@ class BrowserEngine:
 
     # --- Window & Advanced ---
     async def set_window_state(self, state: str) -> str:
-        # Manipulates the actual OS window using pygetwindow
         try:
             import pygetwindow as gw
             windows = gw.getWindowsWithTitle('Chrome')
             if not windows:
                 windows = gw.getWindowsWithTitle('Google Chrome')
-            
             if windows:
                 win = windows[0]
                 if state == "minimize":
@@ -621,118 +730,121 @@ class BrowserEngine:
     async def wait_for(self, description: str) -> str:
         async def _do():
             page = await self.ensure_browser()
-            # If it's a direct CSS selector
             if description.startswith((".", "#", "[")):
                 await page.wait_for_selector(description)
                 return f"Element '{description}' is now ready."
-                
-            # If natural language, we use a generic wait for network or leverage DOMAgent
-            # For simplicity, if it's natural text, wait for network idle as a fallback.
             await page.wait_for_load_state("networkidle", timeout=10000)
             return f"Waited for network idle related to: {description}"
         return await _run_in_playwright(_do())
 
     async def download_file(self) -> str:
-        # A generic placeholder. A true voice-driven download requires knowing WHAT to click.
-        # This just sets up the handler.
         return "Download handlers configured. Click a link to download."
 
     async def upload_file(self, file_path: str = None) -> str:
-        # A generic placeholder for uploading.
         return "Upload handlers configured. Trigger a file chooser to upload."
 
     # --- Human-like Search (Anti-Bot) ---
     async def search_google(self, query: str) -> str:
+        """
+        FIX: Navigate to google.com homepage first, then type the query like a human.
+        Going directly to /search?q= is a major bot detection signal.
+        """
         async def _do():
             page = await self.ensure_browser()
-            logger.info(f"[search_google] Current URL: {page.url} — navigating directly to Google search for query: '{query}'")
-            import urllib.parse
-            encoded_query = urllib.parse.quote_plus(query)
-            search_url = f"https://www.google.com/search?q={encoded_query}"
-            
+            logger.info(f"[search_google] Navigating to Google homepage then typing query: '{query}'")
+
             from playwright.async_api import TimeoutError as PlaywrightTimeoutError
+
+            # Step 1: Go to the homepage, not the search URL directly
             try:
-                await page.goto(search_url, wait_until="domcontentloaded", timeout=30000)
+                await page.goto("https://www.google.com", wait_until="domcontentloaded", timeout=30000)
             except PlaywrightTimeoutError:
-                logger.warning(f"Timeout navigating to Google search, retrying...")
+                logger.warning("Timeout loading Google homepage, retrying...")
                 try:
                     await page.reload(timeout=30000)
                 except PlaywrightTimeoutError:
-                    return f"Network timeout while trying to search Google for '{query}'"
-            
+                    return "Network timeout while loading Google homepage."
+
+            # Step 2: Human-like pause after page load
+            await asyncio.sleep(random.uniform(0.3, 0.7))
+
+            # Step 3: Wiggle mouse to build interaction entropy
+            await self._human_mouse_wiggle(page)
+
+            # Step 4: Click the search box (textarea on modern Google, input on older)
             try:
-                # Defocus the URL bar by physically clicking the page's search box
-                await page.locator("[name='q']").click(force=True, timeout=3000)
-                await page.mouse.click(10, 100) # Safe click on the left margin
-                # Pressing a harmless key ensures the OS transfers focus to the web view
-                await page.keyboard.press("Control")
+                search_box = page.locator('textarea[name="q"], input[name="q"]').first
+                await search_box.wait_for(state="visible", timeout=5000)
+                await search_box.click()
+                await asyncio.sleep(random.uniform(0.3, 0.7))
             except Exception as e:
-                logger.error(f"[{__name__}] {type(e).__name__}: {e}")
-                pass
-                
-            await asyncio.sleep(1.0)
+                logger.warning(f"Could not locate Google search box: {e}")
+                return f"Could not find Google search box: {e}"
+
+            # Step 5: Type the query with human-like delays
+            await page.keyboard.type(query, delay=random.randint(30, 75))
+            await asyncio.sleep(random.uniform(0.1, 0.4))
+
+            # Step 6: Submit with Enter
+            await page.keyboard.press("Enter")
+
+            try:
+                await page.wait_for_load_state("domcontentloaded", timeout=30000)
+            except PlaywrightTimeoutError:
+                logger.warning("Timeout waiting for Google results page to load.")
+
             return f"Searched Google for '{query}'"
         return await _run_in_playwright(_do())
 
-    async def click_search_result(self, index: int = 0) -> str:
-        async def _do():
-            page = await self.ensure_browser()
-            url = page.url
-            
-            if "google.com/search" in url:
-                # Target the h3 headings which contain the links
-                elements = await page.locator("div#search h3").all()
-                if not elements:
-                    # Fallback to general links in results
-                    elements = await page.locator("div.g a").all()
-                    
-                if 0 <= index < len(elements):
-                    text = await elements[index].inner_text()
-                    await elements[index].click()
-                    return f"Clicked Google result: {text}"
-                return f"Could not find result at index {index+1} (Found {len(elements)})"
-                
-            elif "youtube.com/results" in url:
-                elements = await page.locator("ytd-video-renderer a#video-title").all()
-                if 0 <= index < len(elements):
-                    text = await elements[index].inner_text()
-                    await elements[index].click()
-                    return f"Clicked YouTube result: {text}"
-                return f"Could not find video at index {index+1} (Found {len(elements)})"
-                
-            else:
-                return "Not on a recognized search results page."
-                
-        return await _run_in_playwright(_do())
-
     async def search_youtube(self, query: str) -> str:
+        """
+        FIX: Navigate to YouTube homepage first, then type into the search box
+        instead of going directly to the search results URL.
+        """
         async def _do():
             page = await self.ensure_browser()
-            logger.info(f"[search_youtube] Current URL: {page.url} — navigating directly to YouTube search for query: '{query}'")
-            import urllib.parse
-            encoded_query = urllib.parse.quote_plus(query)
-            search_url = f"https://www.youtube.com/results?search_query={encoded_query}"
-            
+            logger.info(f"[search_youtube] Navigating to YouTube homepage then typing query: '{query}'")
+
             from playwright.async_api import TimeoutError as PlaywrightTimeoutError
+
+            # Step 1: Go to YouTube homepage
             try:
-                await page.goto(search_url, wait_until="domcontentloaded", timeout=30000)
+                await page.goto("https://www.youtube.com", wait_until="domcontentloaded", timeout=30000)
             except PlaywrightTimeoutError:
-                logger.warning(f"Timeout navigating to YouTube search, retrying...")
+                logger.warning("Timeout loading YouTube homepage, retrying...")
                 try:
                     await page.reload(timeout=30000)
                 except PlaywrightTimeoutError:
-                    return f"Network timeout while trying to search YouTube for '{query}'"
-            
+                    return "Network timeout while loading YouTube homepage."
+
+            # Step 2: Human-like pause
+            await asyncio.sleep(random.uniform(0.3, 0.7))
+
+            # Step 3: Wiggle mouse
+            await self._human_mouse_wiggle(page)
+
+            # Step 4: Click the search box
             try:
-                # Defocus the URL bar by physically clicking the page's search box
-                await page.locator("input#search").click(force=True, timeout=3000)
-                await page.mouse.click(10, 100) # Safe click on the left margin
-                await page.keyboard.press("Control")
+                search_box = page.locator('input#search').first
+                await search_box.wait_for(state="visible", timeout=5000)
+                await search_box.click()
+                await asyncio.sleep(random.uniform(0.3, 0.6))
             except Exception as e:
-                logger.error(f"[{__name__}] {type(e).__name__}: {e}")
-                pass
-                
-            await asyncio.sleep(1.0)
+                logger.warning(f"Could not locate YouTube search box: {e}")
+                return f"Could not find YouTube search box: {e}"
+
+            # Step 5: Type the query with human-like delays
+            await page.keyboard.type(query, delay=random.randint(30, 75))
+            await asyncio.sleep(random.uniform(0.1, 0.4))
+
+            # Step 6: Submit
+            await page.keyboard.press("Enter")
+
+            try:
+                await page.wait_for_load_state("domcontentloaded", timeout=30000)
+            except PlaywrightTimeoutError:
+                logger.warning("Timeout waiting for YouTube results page to load.")
+
             return f"Searched YouTube for '{query}'"
         return await _run_in_playwright(_do())
 

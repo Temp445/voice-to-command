@@ -270,11 +270,23 @@ class VoiceBrowserCommands:
         _cred_action_verbs = _re.search(r'\b(login|log in|log into|sign in|sign into|authenticate)\b', transcript_lower)
         if _email_cands and _pass_cands and not _cred_action_verbs:
             try:
-                from automation.browser.dom_agent import DOMAgent
                 page = await self.ctrl._ensure_page()
-                agent = DOMAgent(page)
-                result = await agent.fill_form(transcript)
-                return result
+                email_val = _email_cands[0]
+                pass_val = _pass_cands[-1]
+                
+                # Fill Email
+                email_loc = page.locator("input[type='email'], input[name*='email' i], input[placeholder*='email' i]").first
+                if await email_loc.count() > 0:
+                    await email_loc.fill(email_val)
+                    
+                # Fill Password
+                pass_loc = page.locator("input[type='password'], input[name*='pass' i], input[placeholder*='pass' i]").first
+                if await pass_loc.count() > 0:
+                    await pass_loc.fill(pass_val)
+                    # Attempt to press enter to submit
+                    await pass_loc.press("Enter")
+                    
+                return "Filled credentials and submitted."
             except Exception as _e:
                 logger.debug(f"Credential shortcut failed, continuing: {_e}")
         # ── End credential-pair shortcut ─────────────────────────────────────
@@ -291,15 +303,23 @@ class VoiceBrowserCommands:
                 
             if len(target_text) > 0 and len(target_text.split()) <= 4:
                 locators = [
+                    # 1. Exact Matches
                     page.get_by_role("button", name=re.compile(f"^{re.escape(target_text)}$", re.IGNORECASE)),
                     page.get_by_role("link", name=re.compile(f"^{re.escape(target_text)}$", re.IGNORECASE)),
-                    page.locator(f"text=\"{target_text}\"").filter(has_not=page.locator("body, html, main"))
+                    page.get_by_text(target_text, exact=True),
+                    # 2. Partial Matches
+                    page.get_by_role("button", name=re.compile(re.escape(target_text), re.IGNORECASE)),
+                    page.get_by_role("link", name=re.compile(re.escape(target_text), re.IGNORECASE)),
+                    page.get_by_text(target_text, exact=False)
                 ]
                 for loc in locators:
                     try:
-                        if await loc.count() > 0:
-                            await loc.first.click(timeout=1000)
-                            return f"Clicked '{target_text}'"
+                        count = await loc.count()
+                        for i in range(count):
+                            element = loc.nth(i)
+                            if await element.is_visible():
+                                await element.click(timeout=1000)
+                                return f"Clicked '{target_text}'"
                     except Exception as e:
                         logger.error(f"[{__name__}] {type(e).__name__}: {e}")
                         pass

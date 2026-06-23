@@ -5,3 +5,4 @@ from app.config import settings
 import asyncio
 
 class ActionExecutorMixin:
+    pass

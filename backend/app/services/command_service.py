@@ -277,19 +277,18 @@ class CommandService:
             import json as _json
             from app.config import settings as _gs
 
-            # Use pre-warmed cache; lazy-load only if startup warm didn't run yet
-            _sites = self._ws_sites
-            if not _sites and not self._ws_cache_loaded:
-                # One-time lazy fallback (in case warm_website_shortcuts wasn't called)
+            # Reload cache if it was invalidated or never loaded
+            if not self._ws_cache_loaded:
                 _sites_raw = getattr(_gs, "crm_sites", None)
                 if _sites_raw:
                     try:
-                        _sites = _json.loads(_sites_raw)
-                        self._ws_sites = _sites
+                        self._ws_sites = _json.loads(_sites_raw)
                     except Exception as e:
                         logger.error(f"[{__name__}] {type(e).__name__}: {e}")
                         pass
                 self._ws_cache_loaded = True
+                
+            _sites = self._ws_sites
 
             _text_lower = text.lower().strip()
             _text_lower_no_spaces = _text_lower.replace(" ", "")
@@ -297,6 +296,7 @@ class CommandService:
             _has_nav_verb = any(_text_lower.startswith(v) for v in _nav_verbs)
             
             _matched_site_url: str | None = None
+            _matched_routes: dict | None = None
             for _site in _sites:
                 _kws = [k.strip().lower() for k in _site.get("keywords", "").split(",") if k.strip()]
                 for _kw in _kws:
@@ -305,6 +305,7 @@ class CommandService:
                     if _kw_no_spaces in _text_lower_no_spaces:
                         if _has_nav_verb or len(_text_lower_no_spaces) <= len(_kw_no_spaces) + 8:
                             _matched_site_url = _site.get("url", "")
+                            _matched_routes = _site.get("routes", {})
                             break
                 if _matched_site_url:
                     break
@@ -314,7 +315,7 @@ class CommandService:
                 from automation.browser.crm_workflows import CRMMacros
                 from automation.browser.browser_engine import BrowserEngine
                 _mac = CRMMacros(BrowserEngine())
-                _nav_result = await _mac.open_crm(text, target_url=_matched_site_url)
+                _nav_result = await _mac.open_crm(text, target_url=_matched_site_url, dynamic_routes=_matched_routes)
                 return {
                     "intent": "open_website_shortcut",
                     "parameters": {"url": _matched_site_url},
@@ -389,8 +390,177 @@ class CommandService:
             params = {}
             llm_routed = False
 
+            # Layer 0.9: Implicit Web Click Intercept
+            # Prioritize active screen context. If a short phrase exactly or partially
+            # matches a visible button/link on the page, click it INSTANTLY.
+            if not intent_name and len(text.split()) <= 5:
+                try:
+                    from automation.browser.browser_controller import BrowserController
+                    bc = BrowserController()
+                    if bc.engine._context is not None:
+                        page = await bc._ensure_page()
+                        if page:
+                            import re as _re
+                            _locators = [
+                                # 1. Exact Matches
+                                page.get_by_role("button", name=_re.compile(f"^{_re.escape(text)}$", _re.IGNORECASE)),
+                                page.get_by_role("link", name=_re.compile(f"^{_re.escape(text)}$", _re.IGNORECASE)),
+                                page.get_by_text(text, exact=True),
+                                # 2. Partial Matches
+                                page.get_by_role("button", name=_re.compile(_re.escape(text), _re.IGNORECASE)),
+                                page.get_by_role("link", name=_re.compile(_re.escape(text), _re.IGNORECASE)),
+                                page.get_by_text(text, exact=False)
+                            ]
+                            for _loc in _locators:
+                                try:
+                                    count = await _loc.count()
+                                    for i in range(count):
+                                        element = _loc.nth(i)
+                                        if await element.is_visible():
+                                            await element.click(timeout=1000)
+                                            return {
+                                                "intent": "implicit_browser_click",
+                                                "parameters": {"text": text},
+                                                "status": "success",
+                                                "result": f"Clicked '{text}' on webpage.",
+                                                "duration_ms": int((time.perf_counter() - start) * 1000),
+                                                "is_fallback": True,
+                                            }
+                                except Exception as _e:
+                                    logger.debug(f"Implicit click locator failed, trying next: {_e}")
+                            
+                            # 3. JavaScript Fuzzy Token Match (for colloquial terms like "nov 25 excel" -> "NOVEMBER_2025")
+                            _stop_words = {"open", "click", "press", "hit", "the", "a", "an", "on", "file", "app", "link", "button", "document", "excel", "word", "powerpoint", "go", "to", "my", "show", "me", "move", "switch", "navigate", "change", "tab"}
+                            _target_words = [w.lower() for w in text.split() if w.lower() not in _stop_words]
+                            if _target_words:
+                                _js_script = """
+                                (targetWords) => {
+                                    const elements = Array.from(document.querySelectorAll("a, button, [role='button'], [role='link'], [role='menuitem'], [role='row'], [role='tab']"));
+                                    let bestEl = null;
+                                    let bestScore = 0;
+                                    for (const el of elements) {
+                                        const style = window.getComputedStyle(el);
+                                        if (style.display === 'none' || style.visibility === 'hidden' || el.offsetWidth === 0) continue;
+                                        
+                                        const text = el.innerText ? el.innerText.toLowerCase() : '';
+                                        if (!text) continue;
+                                        
+                                        let score = 0;
+                                        for (const w of targetWords) {
+                                            if (text.includes(w)) score++;
+                                        }
+                                        if (score > bestScore) {
+                                            bestScore = score;
+                                            bestEl = el;
+                                        }
+                                    }
+                                    if (bestEl && bestScore >= Math.max(1, targetWords.length - 1)) {
+                                        bestEl.click();
+                                        return true;
+                                    }
+                                    return false;
+                                }
+                                """
+                                try:
+                                    _clicked = False
+                                    for _frame in page.frames:
+                                        try:
+                                            if await _frame.evaluate(_js_script, _target_words):
+                                                _clicked = True
+                                                break
+                                        except Exception:
+                                            pass
+                                            
+                                    if _clicked:
+                                        return {
+                                            "intent": "implicit_browser_click",
+                                            "parameters": {"text": text},
+                                            "status": "success",
+                                            "result": f"Clicked closest match for '{text}' via fuzzy logic.",
+                                            "duration_ms": int((time.perf_counter() - start) * 1000),
+                                            "is_fallback": True,
+                                        }
+                                except Exception as _e:
+                                    logger.debug(f"Implicit click JS fuzzy match failed: {_e}")
+                            
+                            # Explicitly fail generic commands if not found, to prevent LLM hallucinations
+                            _lower = text.lower()
+                            if _lower in ["sign in", "login", "log in", "log out", "logout", "sign out", "submit"] or _lower.startswith("sign in") or _lower.startswith("log in"):
+                                return {
+                                    "intent": "implicit_browser_click",
+                                    "parameters": {"text": text},
+                                    "status": "failed",
+                                    "result": f"Unable to find '{text}' on the current webpage.",
+                                    "duration_ms": int((time.perf_counter() - start) * 1000),
+                                    "is_fallback": True,
+                                }
+                except Exception as _e:
+                    logger.debug(f"Implicit web click intercept failed: {_e}")
+
+            # Layer 0.95: Implicit Web Type Intercept (Single Credential)
+            if not intent_name:
+                import re as _re
+                _cred_match = _re.match(r"^(email|username|password)\s+(.+)$", text, _re.IGNORECASE)
+                if _cred_match:
+                    try:
+                        from automation.browser.browser_controller import BrowserController
+                        bc = BrowserController()
+                        if bc.engine._context is not None:
+                            page = await bc._ensure_page()
+                            if page:
+                                _field_type = _cred_match.group(1).lower()
+                                _val = _cred_match.group(2).strip()
+                                
+                                if _field_type in ["email", "username"]:
+                                    _loc = page.locator("input[type='email'], input[name*='email' i], input[placeholder*='email' i], input[name*='user' i]").first
+                                else:
+                                    _loc = page.locator("input[type='password'], input[name*='pass' i], input[placeholder*='pass' i]").first
+                                
+                                if await _loc.count() > 0:
+                                    await _loc.fill(_val)
+                                    await _loc.press("Enter")
+                                    return {
+                                        "intent": "implicit_browser_type",
+                                        "parameters": {"field": _field_type, "value": _val},
+                                        "status": "success",
+                                        "result": f"Filled {_field_type} and submitted.",
+                                        "duration_ms": int((time.perf_counter() - start) * 1000),
+                                        "is_fallback": True,
+                                    }
+                    except Exception as _e:
+                        logger.debug(f"Implicit web type intercept failed: {_e}")
+
+            # Layer 0.96: Implicit Web Type Intercept (Pure Numbers / OTP)
+            if not intent_name:
+                _digits_only = text.replace(" ", "").replace("-", "")
+                if _digits_only.isdigit() and len(_digits_only) >= 4:
+                    try:
+                        from automation.browser.browser_controller import BrowserController
+                        bc = BrowserController()
+                        if bc.engine._context is not None:
+                            page = await bc._ensure_page()
+                            if page:
+                                # Playwright types into the active DOM element, ignoring OS focus.
+                                # Delay added to allow React/Angular inputs to auto-advance focus.
+                                await page.keyboard.type(_digits_only, delay=50)
+                                return {
+                                    "intent": "implicit_browser_type_otp",
+                                    "parameters": {"value": _digits_only},
+                                    "status": "success",
+                                    "result": f"Typed numeric code '{_digits_only}' into active field.",
+                                    "duration_ms": int((time.perf_counter() - start) * 1000),
+                                    "is_fallback": True,
+                                }
+                    except Exception as _e:
+                        logger.debug(f"Implicit web type OTP intercept failed: {_e}")
+                    
+                    # If browser fails or is not active, route to desktop type_text
+                    intent_name = "type_text"
+                    params = {"text": _digits_only}
+
             # Layer 1: Native regex matching (uses pre-indexed buckets)
-            intent_name, params = self._regex_match(text)
+            if not intent_name:
+                intent_name, params = self._regex_match(text)
 
             # Layer 1.5: Fuzzy fallback
             if not intent_name:
