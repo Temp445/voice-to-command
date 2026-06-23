@@ -599,7 +599,47 @@ async def handle_browser_paginate(direction: str = "", page_num: str = "", **_) 
 
     return f"Could not find or click the {action_desc} button. It might be disabled or hidden."        
 
-async def handle_crm_action(text: str = "", **_) -> str:
+async def handle_crm_action(text: str = "", module: str = "", entity: str = "", action: str = "", **_) -> str:
+    from automation.browser.browser_controller import BrowserController
+    from automation.browser.crm_workflows import CRMMacros
+    import re
+    from loguru import logger
+    
+    ctrl = BrowserController()
+    crm = CRMMacros(ctrl.engine)
+    
+    text_lower = text.lower()
+    
+    # 1. Check explicit params from intent regex groups
+    if module:
+        return await crm.navigate_to_module(module)
+    if entity:
+        return await crm.create_entity(entity)
+        
+    # 2. Check login directly from text (for crm_login intent)
+    if re.match(r"^(?:log\s*in|login|sign\s*in)", text_lower):
+        return await crm.login()
+        
+    # 3. Match against the action param from crm_workflow fallback intent
+    if action:
+        action_lower = action.lower()
+        if re.match(r"^(?:open|launch|start|go\s+to)\s+(?:my\s+)?(?:ace\s+)?crm$", action_lower):
+            return await crm.open_crm(transcript=text)
+        elif re.match(r"^(?:log\s*in|login|sign\s*in)", action_lower):
+            return await crm.login()
+        elif m := re.match(r"^(?:create|add|make|generate|new)\s+(?:a\s+)?(?:new\s+)?(lead|quote|quotation|contact|customer|account|opportunity|order|product|task)", action_lower):
+            return await crm.create_entity(m.group(1))
+        elif m := re.match(r"^(?:go\s+to|open|show)\s+(?:the\s+)?(leads|contacts|opportunities|accounts|customers|quotes|quotations|orders|products|dashboard|tasks|reports|home)", action_lower):
+            return await crm.navigate_to_module(m.group(1))
+        elif m := re.match(r"^(leads|contacts|opportunities|accounts|customers|quotes|quotations|orders|products|dashboard|tasks|reports|home)$", action_lower):
+            return await crm.navigate_to_module(m.group(1))
+        elif m := re.match(r"^search\s+(lead|opportunity|customer|order|quote|task|account|contact)\s+(.+)$", action_lower):
+            return await crm.search_record(m.group(1), m.group(2))
+        elif re.match(r"^(?:open|select|click)\s+(?:first|top)", action_lower):
+            return await crm.open_first_record()
+
+    # 4. Ultimate Fallback: LLM/DOM Agent navigation
+    logger.info("No fast path matched in handle_crm_action, falling back to VoiceBrowserCommands...")
     from automation.browser.browser_controller import VoiceBrowserCommands
     cmd = VoiceBrowserCommands()
     return await cmd.execute(text)

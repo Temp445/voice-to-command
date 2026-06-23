@@ -14,6 +14,63 @@ from app.routers.settings_router import get_current_user_id
 router = APIRouter()
 
 
+async def _save_history_bg(entry_id, user_id, body, result, now):
+    """Non-blocking background task: persist history + LLM rewrite + WS broadcast."""
+    # LLM rewrite (fires after response is already sent to caller)
+    from app.services.llm.llm_service import llm_service
+    result_text = result.get("result")
+    if llm_service.is_ready and result.get("status") == "success" and result_text:
+        try:
+            result_text = await llm_service.rewrite_for_speech(result_text, body.text)
+        except Exception as e:
+            logger.warning(f"LLM rewrite failed in background: {e}")
+
+    # Supabase insert (non-blocking — response already sent)
+    row = {
+        "id": entry_id,
+        "user_id": user_id,
+        "raw_text": body.text,
+        "intent": result.get("intent"),
+        "parameters": result.get("parameters"),
+        "status": result.get("status", "failed"),
+        "result": result_text,
+        "source": body.source,
+        "executed_at": now.isoformat(),
+        "duration_ms": result.get("duration_ms"),
+    }
+    try:
+        await sb_run(lambda: supabase_admin.table("command_history").insert(row).execute())
+    except Exception as e:
+        logger.warning(f"History insert failed: {e}")
+
+    # WebSocket broadcast (non-blocking)
+    try:
+        await ws_manager.broadcast("command_executed", {
+            "id": entry_id,
+            "raw_text": body.text,
+            "intent": result.get("intent"),
+            "status": result.get("status", "failed"),
+            "result": result_text,
+            "source": body.source,
+            "routed_by_llm": result.get("routed_by_llm", False),
+        })
+    except Exception as e:
+        logger.warning(f"WS broadcast failed: {e}")
+
+    # TTS speak (non-blocking — fires after response returned)
+    import asyncio
+    from app.main import app as _app  # noqa: circular import is fine here
+    pipeline = getattr(_app.state, "pipeline", None)
+    if pipeline and body.source == "text" and result.get("status") == "success" and result_text:
+        from voice.pipeline import PipelineState
+        try:
+            await pipeline._speak(result_text)
+            pipeline._set_state(PipelineState.IDLE)
+        except Exception as e:
+            logger.warning(f"TTS speak failed in background: {e}")
+            pipeline._set_state(PipelineState.IDLE)
+
+
 @router.post("/execute", response_model=CommandResultResponse)
 async def execute_command(
     request: Request,
@@ -21,7 +78,7 @@ async def execute_command(
     background_tasks: BackgroundTasks,
     user_id: str = Depends(get_current_user_id),
 ):
-    """Parse and execute a text or voice command."""
+    """Parse and execute a text or voice command. Returns instantly after execution."""
     logger.info(f"Executing command [{body.source}]: '{body.text}'")
 
     pipeline = getattr(request.app.state, "pipeline", None)
@@ -30,63 +87,23 @@ async def execute_command(
         pipeline._set_state(PipelineState.PROCESSING)
 
     if body.source == "text":
-        logger.info(f"Broadcasting text transcript to overlay: {body.text}")
         await ws_manager.broadcast("transcript", {"text": body.text, "is_final": True})
 
+    # ── Core execution — this is the only thing blocking the response ──────────
     result = await command_service.parse_and_execute(body.text)
-    
-    # Intercept and rewrite using LLM for natural language (if enabled)
-    from app.services.llm.llm_service import llm_service
-    if llm_service.is_ready and result.get("status") == "success" and result.get("result"):
-        raw_res = result.get("result")
-        natural_res = await llm_service.rewrite_for_speech(raw_res, body.text)
-        result["result"] = natural_res
 
     now = datetime.now(timezone.utc)
     entry_id = body.id or str(uuid.uuid4())
-    row = {
-        "id": entry_id,
-        "user_id": user_id,
-        "raw_text": body.text,
-        "intent": result.get("intent"),
-        "parameters": result.get("parameters"),
-        "status": result.get("status", "failed"),
-        "result": result.get("result"),
-        "source": body.source,
-        "executed_at": now.isoformat(),
-        "duration_ms": result.get("duration_ms"),
-    }
 
-    await sb_run(lambda: supabase_admin.table("command_history").insert(row).execute())
+    # ── Everything else fires in background — response returns immediately ─────
+    background_tasks.add_task(
+        _save_history_bg, entry_id, user_id, body, result, now
+    )
 
-    # Broadcast real-time event to UI
-    await ws_manager.broadcast("command_executed", {
-        "id": entry_id,
-        "raw_text": body.text,
-        "intent": result.get("intent"),
-        "status": result.get("status", "failed"),
-        "result": result.get("result"),
-        "source": body.source,
-        "routed_by_llm": result.get("routed_by_llm", False),
-    })
-
-    # Speak the response using TTS (if triggered via text/console)
-    if pipeline:
+    if pipeline and body.source != "text":
         from voice.pipeline import PipelineState
-        if body.source == "text" and result.get("status") == "success" and result.get("result"):
-            try:
-                import asyncio
-                async def _speak_and_reset():
-                    await pipeline._speak(result.get("result"))
-                    pipeline._set_state(PipelineState.IDLE)
-                asyncio.create_task(_speak_and_reset())
-            except Exception as e:
-                logger.warning(f"Failed to play TTS for text command: {e}")
-                pipeline._set_state(PipelineState.IDLE)
-        else:
-            pipeline._set_state(PipelineState.IDLE)
+        pipeline._set_state(PipelineState.IDLE)
 
-    # Return the row as a CommandResultResponse
     return CommandResultResponse(
         id=entry_id,
         raw_text=body.text,

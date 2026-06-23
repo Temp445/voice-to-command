@@ -77,7 +77,7 @@ class WindowManager:
                             logger.info(f"Found automated browser window matching PID {win.process_id()}: '{win.window_text()}'")
                             return win
                     except Exception as e:
-                        logger.error(f"[{__name__}] {type(e).__name__}: {e}")
+                        logger.debug(f"[{__name__}] {type(e).__name__}: {e}")
                         continue
             
             # Second pass: fallback to title substring matching
@@ -89,7 +89,7 @@ class WindowManager:
                     if win_text and all(word in win_text for word in search_words):
                         return win
                 except Exception as e:
-                    logger.error(f"[{__name__}] {type(e).__name__}: {e}")
+                    logger.debug(f"[{__name__}] {type(e).__name__}: {e}")
                     continue
         except NameError:
             pass
@@ -225,7 +225,7 @@ class WindowManager:
                         win.close()
                         closed_count += 1
                 except Exception as e:
-                    logger.error(f"[{__name__}] {type(e).__name__}: {e}")
+                    logger.debug(f"[{__name__}] {type(e).__name__}: {e}")
                     continue
         except NameError:
             pass
@@ -264,7 +264,7 @@ class WindowManager:
                     win.close()
                     closed_count += 1
                 except Exception as e:
-                    logger.error(f"[{__name__}] {type(e).__name__}: {e}")
+                    logger.debug(f"[{__name__}] {type(e).__name__}: {e}")
                     continue
         except NameError:
             pass
@@ -296,10 +296,10 @@ class WindowManager:
                             ctypes.windll.user32.ShowWindow(win.handle, 3)
                             ctypes.windll.user32.PostMessageW(win.handle, 0x0112, 0xF030, 0)
                         except Exception as e:
-                            logger.error(f"[{__name__}] {type(e).__name__}: {e}")
+                            logger.debug(f"[{__name__}] {type(e).__name__}: {e}")
                             pass
                 except Exception as e:
-                    logger.error(f"[{__name__}] {type(e).__name__}: {e}")
+                    logger.debug(f"[{__name__}] {type(e).__name__}: {e}")
                     pass
             finally:
                 pythoncom.CoUninitialize()
@@ -322,10 +322,10 @@ class WindowManager:
                     try:
                         top.maximize()
                     except Exception as e:
-                        logger.error(f"[{__name__}] {type(e).__name__}: {e}")
+                        logger.debug(f"[{__name__}] {type(e).__name__}: {e}")
                         pass
                 except Exception as e:
-                    logger.error(f"[{__name__}] {type(e).__name__}: {e}")
+                    logger.debug(f"[{__name__}] {type(e).__name__}: {e}")
                     pass
             finally:
                 pythoncom.CoUninitialize()
@@ -345,7 +345,7 @@ class WindowManager:
                             "class": win.class_name(),
                         })
                 except Exception as e:
-                    logger.error(f"[{__name__}] {type(e).__name__}: {e}")
+                    logger.debug(f"[{__name__}] {type(e).__name__}: {e}")
                     continue
         except NameError:
             pass

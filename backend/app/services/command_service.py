@@ -169,15 +169,18 @@ class CommandService:
         """
         text = text.strip()
 
-        # Apply spelling correction off the event loop (SymSpell is CPU-bound)
-        try:
-            from app.services.spelling_service import spelling_corrector
-            corrected_text = await asyncio.to_thread(spelling_corrector.correct, text)
-            if corrected_text != text.lower():
-                logger.info(f"Spellcheck: corrected '{text}' -> '{corrected_text}'")
-                text = corrected_text
-        except Exception as e:
-            logger.warning(f"Failed to run spellcheck: {e}")
+        # Apply spelling correction off the event loop (SymSpell is CPU-bound).
+        # Skip for short commands (≤3 words): app names and simple commands like
+        # "open acesoft" are rarely misspelled and spellcheck adds 200–500ms.
+        if len(text.split()) > 3:
+            try:
+                from app.services.spelling_service import spelling_corrector
+                corrected_text = await asyncio.to_thread(spelling_corrector.correct, text)
+                if corrected_text != text.lower():
+                    logger.info(f"Spellcheck: corrected '{text}' -> '{corrected_text}'")
+                    text = corrected_text
+            except Exception as e:
+                logger.warning(f"Failed to run spellcheck: {e}")
 
         start = time.perf_counter()
 

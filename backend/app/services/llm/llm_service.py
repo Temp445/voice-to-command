@@ -293,11 +293,11 @@ class LLMService:
             # Strict timeout of 2.0 seconds. Speech synthesis must be fast.
             reply = await asyncio.wait_for(
                 self._provider.chat(msgs, temperature=self._temperature),
-                timeout=2.0
+                timeout=5.0
             )
             return reply.strip()
         except asyncio.TimeoutError:
-            logger.warning("LLM rewrite timed out after 2.0s, falling back to raw result")
+            logger.warning("LLM rewrite timed out after 5.0s, falling back to raw result")
             return raw_result
         except Exception as e:
             logger.warning(f"LLM rewrite failed, falling back to raw result: {e}")
