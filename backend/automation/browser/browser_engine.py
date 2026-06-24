@@ -231,142 +231,88 @@ class BrowserEngine:
 
         await _run_in_playwright(_do())
 
+    async def get_active_page(self) -> Page:
+        """Return the tab the user is currently looking at.
+
+        Three-layer detection — each layer is tried in order:
+          1. document.visibilityState == "visible"  → the OS-foreground tab
+          2. document.hasFocus()                    → fallback when visibility API is blocked
+          3. Most-recently opened non-extension tab → final fallback
+
+        This replaces the old self._page cache as the source-of-truth for every
+        automation command. self._page is now only used to track the tab that ACE
+        itself navigated to (so voice navigate commands still work), but every
+        click/type/fill resolves the real active tab at call time.
+        """
+        async def _do_get_active():
+            if not self._context or getattr(self._context, 'is_closed', lambda: True)():
+                return await self.ensure_browser()
+
+            pages = [
+                p for p in self._context.pages
+                if not p.is_closed()
+                and not p.url.lower().startswith("chrome-extension://")
+                and p.url.lower() not in ("about:blank", "")
+                and "localhost:3000" not in p.url
+                and "127.0.0.1:3000" not in p.url
+            ]
+
+            if not pages:
+                # No real pages — return whatever ensure_browser gives us
+                return await self.ensure_browser()
+
+            if len(pages) == 1:
+                self._page = pages[0]
+                return self._page
+
+            # Layer 1: visibilityState — most reliable; only the OS-foreground tab
+            # returns "visible". Hidden tabs (background, minimised) return "hidden".
+            for p in pages:
+                try:
+                    state = await p.evaluate("document.visibilityState")
+                    if state == "visible":
+                        if self._page != p:
+                            logger.debug(f"Active tab (visibilityState): {p.url}")
+                        self._page = p
+                        return p
+                except Exception:
+                    continue
+
+            # Layer 2: hasFocus — fires when the document has keyboard focus
+            for p in pages:
+                try:
+                    focused = await p.evaluate("document.hasFocus()")
+                    if focused:
+                        if self._page != p:
+                            logger.debug(f"Active tab (hasFocus): {p.url}")
+                        self._page = p
+                        return p
+                except Exception:
+                    continue
+
+            # Layer 3: Most recently opened non-system tab (pages list is creation-order)
+            fallback = pages[-1]
+            if self._page != fallback:
+                logger.debug(f"Active tab (fallback most-recent): {fallback.url}")
+            self._page = fallback
+            return fallback
+
+        return await _run_in_playwright(_do_get_active())
+
     async def ensure_browser(self, background: bool = False) -> Page:
         """
         Connect to an already-running detached Chrome via CDP.
         If Chrome is not running yet, launch it as a detached subprocess first.
-
-        Always resolves to the tab the user is **currently looking at**
-        (document.visibilityState === 'visible'), so voice commands target
-        the right page even after the user manually switches tabs.
         """
         async def _do_ensure():
             if self._lock is None:
                 self._lock = asyncio.Lock()
             async with self._lock:
-
-                async def _resolve_active_page() -> Page:
-                    """
-                    Resolve the currently active browser tab.
-
-                    Optimized:
-                    1. Fetch targets from Chrome's http://localhost:9222/json REST API.
-                       This is a fast HTTP call (takes <5ms, no persistent connections).
-                    2. Check if the set of tabs has changed. If they match the pages we currently
-                       track in `self._context`, we just evaluate visibilityState on our existing pages (fast, <2ms).
-                    3. If there is a mismatch (new tab opened manually, closed, etc.),
-                       we cleanly close the old connection and reconnect once.
-                    """
-                    import urllib.request
-                    import json as _json
-
-                    _SKIP = ('chrome-extension://', 'chrome://', 'about:blank', 'devtools://')
-                    _SKIP_HOSTS = ('localhost:3000', '127.0.0.1:3000')
-
-                    def _is_valid(url: str) -> bool:
-                        u = url.lower()
-                        return (
-                            not any(u.startswith(s) for s in _SKIP)
-                            and not any(h in u for h in _SKIP_HOSTS)
-                        )
-
-                    # 1. Fetch live Chrome tabs from local REST API
-                    try:
-                        def _fetch():
-                            with urllib.request.urlopen("http://localhost:9222/json", timeout=1.0) as resp:
-                                return _json.loads(resp.read())
-                        targets = await asyncio.to_thread(_fetch)
-                    except Exception as e:
-                        logger.debug(f"_resolve_active_page: CDP /json fetch failed: {e}")
-                        targets = []
-
-                    live_urls = {
-                        t.get("url", "") for t in targets
-                        if t.get("type") == "page" and _is_valid(t.get("url", ""))
-                    }
-
-                    # Compare with our current context pages
-                    reconnect_needed = False
-                    if not self._browser or not self._context:
-                        reconnect_needed = True
-                    else:
-                        try:
-                            ctx_pages = [p for p in self._context.pages if not p.is_closed()]
-                            ctx_urls = {p.url for p in ctx_pages if _is_valid(p.url)}
-                            if not live_urls.issubset(ctx_urls) or len(live_urls) != len(ctx_urls):
-                                reconnect_needed = True
-                        except Exception:
-                            reconnect_needed = True
-
-                    if reconnect_needed:
-                        logger.info("🔄 Tab change detected or initial connection — reconnecting CDP to refresh pages...")
-                        try:
-                            # Safely close old browser connection to prevent resource/WS leaks
-                            if self._browser:
-                                try:
-                                    await self._browser.close()
-                                except Exception:
-                                    pass
-                                self._browser = None
-                                self._context = None
-
-                            self._browser = await self._playwright.chromium.connect_over_cdp(
-                                "http://localhost:9222"
-                            )
-                            self._context = self._browser.contexts[0] if self._browser.contexts else await self._browser.new_context()
-                        except Exception as e:
-                            logger.error(f"_resolve_active_page: Reconnection failed: {e}")
-
-                    # Find the active tab in self._context
-                    if self._context:
-                        candidates = [
-                            p for p in self._context.pages
-                            if not p.is_closed() and _is_valid(p.url)
-                        ]
-                        for p in candidates:
-                            try:
-                                # Check if this is the active visible tab in Chrome
-                                if await p.evaluate("document.visibilityState === 'visible'"):
-                                    if p.url != getattr(self._page, "url", ""):
-                                        logger.info(f"🔀 Active tab switched → {p.url}")
-                                    return p
-                            except Exception:
-                                continue
-
-                        # visibilityState check failed for all tabs — Chrome window is backgrounded
-                        # while the user speaks (ACE overlay/mic grabbed focus).
-                        # Prefer self._page (last explicitly-visited tab) over an arbitrary list position.
-                        if self._page and not self._page.is_closed() and self._page in candidates:
-                            logger.debug(
-                                f"All tabs hidden (Chrome backgrounded) — reusing last known active tab: {self._page.url}"
-                            )
-                            return self._page
-
-                        # Last resort: newest valid tab
-                        if candidates:
-                            return candidates[-1]
-
-                    # Ultimate fallback
-                    if self._page and not self._page.is_closed():
-                        return self._page
-                    if self._context:
+                if self._context and not getattr(self._context, 'is_closed', lambda: True)():
+                    if not self._page or self._page.is_closed():
                         pages = self._context.pages
-                        return pages[-1] if pages else await self._context.new_page()
+                        self._page = pages[0] if pages else await self._context.new_page()
                     return self._page
-
-                # ── Fast path: context still valid ───────────────────────────
-                if self._context:
-                    try:
-                        # Liveness check: .pages raises if the CDP connection is dead
-                        _ = self._context.pages
-                        # Always sync to whichever tab the user is currently viewing
-                        self._page = await _resolve_active_page()
-                        return self._page
-                    except Exception:
-                        # Context is dead (server reloaded while Chrome was open)
-                        logger.debug("Cached context is stale — will reconnect via CDP.")
-                        self._context = None
-                        self._page = None
 
                 if not self._playwright:
                     self._playwright = await async_playwright().start()
@@ -414,11 +360,11 @@ class BrowserEngine:
                         raise
 
                 # ── Page selection (cold start) ────────────────────────────
-                self._page = await _resolve_active_page()
+                pages = self._context.pages
+                self._page = pages[0] if pages else await self._context.new_page()
                 return self._page
 
         return await _run_in_playwright(_do_ensure())
-
 
     async def close_browser(self):
         """
@@ -491,7 +437,7 @@ class BrowserEngine:
                 await self._apply_stealth(self._page)
                 page = self._page
             else:
-                page = await self.ensure_browser()
+                page = await self.get_active_page()
             target = f"https://{url}" if not url.startswith(("http://", "https://")) else url
 
             # Bring to front and maximize BEFORE goto() to avoid main-thread block
@@ -552,28 +498,28 @@ class BrowserEngine:
 
     async def go_back(self) -> str:
         async def _do():
-            page = await self.ensure_browser()
+            page = await self.get_active_page()
             await page.go_back()
             return "Navigated back."
         return await _run_in_playwright(_do())
 
     async def go_forward(self) -> str:
         async def _do():
-            page = await self.ensure_browser()
+            page = await self.get_active_page()
             await page.go_forward()
             return "Navigated forward."
         return await _run_in_playwright(_do())
 
     async def refresh(self) -> str:
         async def _do():
-            page = await self.ensure_browser()
+            page = await self.get_active_page()
             await page.reload()
             return "Page refreshed."
         return await _run_in_playwright(_do())
 
     async def get_url(self) -> str:
         async def _do():
-            page = await self.ensure_browser()
+            page = await self.get_active_page()
             return page.url
         return await _run_in_playwright(_do())
 
@@ -592,7 +538,7 @@ class BrowserEngine:
 
     async def close_tab(self) -> str:
         async def _do():
-            page = await self.ensure_browser()
+            page = await self.get_active_page()
             await page.close()
             pages = self._context.pages
             if pages:
@@ -684,21 +630,21 @@ class BrowserEngine:
     # --- Clicking & Interaction ---
     async def click(self, selector: str) -> str:
         async def _do():
-            page = await self.ensure_browser()
+            page = await self.get_active_page()
             await page.click(selector)
             return f"Clicked {selector}."
         return await _run_in_playwright(_do())
 
     async def click_text(self, text: str) -> str:
         async def _do():
-            page = await self.ensure_browser()
+            page = await self.get_active_page()
             await page.get_by_text(text).first.click()
             return f"Clicked text '{text}'."
         return await _run_in_playwright(_do())
 
     async def click_search_result(self, index: int = 0) -> str:
         async def _do():
-            page = await self.ensure_browser()
+            page = await self.get_active_page()
             url = page.url
 
             if "google.com/search" in url:
@@ -734,7 +680,7 @@ class BrowserEngine:
 
     async def double_click(self, selector: str = None) -> str:
         async def _do():
-            page = await self.ensure_browser()
+            page = await self.get_active_page()
             if selector:
                 await page.dblclick(selector)
             else:
@@ -744,7 +690,7 @@ class BrowserEngine:
 
     async def right_click(self, selector: str = None) -> str:
         async def _do():
-            page = await self.ensure_browser()
+            page = await self.get_active_page()
             if selector:
                 await page.click(selector, button="right")
             else:
@@ -754,14 +700,14 @@ class BrowserEngine:
 
     async def hover(self, selector: str) -> str:
         async def _do():
-            page = await self.ensure_browser()
+            page = await self.get_active_page()
             await page.hover(selector)
             return f"Hovered over {selector}."
         return await _run_in_playwright(_do())
 
     async def type_text(self, selector: str, text: str, human_like: bool = True) -> str:
         async def _do():
-            page = await self.ensure_browser()
+            page = await self.get_active_page()
             if human_like:
                 await page.locator(selector).first.click()
                 await page.keyboard.type(text, delay=random.randint(20, 60))
@@ -772,7 +718,7 @@ class BrowserEngine:
 
     async def press_key(self, key: str) -> str:
         async def _do():
-            page = await self.ensure_browser()
+            page = await self.get_active_page()
             await page.keyboard.press(key)
             return f"Pressed {key}."
         return await _run_in_playwright(_do())
@@ -780,7 +726,7 @@ class BrowserEngine:
     # --- Clipboard ---
     async def clipboard_select_all(self) -> str:
         async def _do():
-            page = await self.ensure_browser()
+            page = await self.get_active_page()
             key = "Meta+A" if sys.platform == "darwin" else "Control+A"
             await page.keyboard.press(key)
             return "Selected all text."
@@ -788,7 +734,7 @@ class BrowserEngine:
 
     async def clipboard_copy(self) -> str:
         async def _do():
-            page = await self.ensure_browser()
+            page = await self.get_active_page()
             key = "Meta+C" if sys.platform == "darwin" else "Control+C"
             await page.keyboard.press(key)
             return "Copied text."
@@ -796,7 +742,7 @@ class BrowserEngine:
 
     async def clipboard_cut(self) -> str:
         async def _do():
-            page = await self.ensure_browser()
+            page = await self.get_active_page()
             key = "Meta+X" if sys.platform == "darwin" else "Control+X"
             await page.keyboard.press(key)
             return "Cut text."
@@ -804,7 +750,7 @@ class BrowserEngine:
 
     async def clipboard_paste(self) -> str:
         async def _do():
-            page = await self.ensure_browser()
+            page = await self.get_active_page()
             key = "Meta+V" if sys.platform == "darwin" else "Control+V"
             await page.keyboard.press(key)
             return "Pasted text."
@@ -813,7 +759,7 @@ class BrowserEngine:
     # --- Scrolling ---
     async def scroll(self, direction: str, amount: int = 500) -> str:
         async def _do():
-            page = await self.ensure_browser()
+            page = await self.get_active_page()
             sign = 1 if direction == "down" else -1
             await page.mouse.wheel(0, sign * amount)
             return f"Scrolled {direction}."
@@ -825,14 +771,14 @@ class BrowserEngine:
 
     async def scroll_to_top(self) -> str:
         async def _do():
-            page = await self.ensure_browser()
+            page = await self.get_active_page()
             await page.evaluate("window.scrollTo(0, 0)")
             return "Scrolled to top."
         return await _run_in_playwright(_do())
 
     async def scroll_to_bottom(self) -> str:
         async def _do():
-            page = await self.ensure_browser()
+            page = await self.get_active_page()
             await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
             return "Scrolled to bottom."
         return await _run_in_playwright(_do())
@@ -840,13 +786,13 @@ class BrowserEngine:
     # --- Reading & Information ---
     async def get_page_title(self) -> str:
         async def _do():
-            page = await self.ensure_browser()
+            page = await self.get_active_page()
             return await page.title()
         return await _run_in_playwright(_do())
 
     async def extract_page_content(self) -> str:
         async def _do():
-            page = await self.ensure_browser()
+            page = await self.get_active_page()
             import re
             text = await page.inner_text("body")
             return re.sub(r'\n+', '\n', text).strip()
@@ -855,7 +801,7 @@ class BrowserEngine:
     async def extract_clean_text(self) -> str:
         """Extract clean text using BeautifulSoup4 (bypasses Playwright's inner_text slowness)."""
         async def _do():
-            page = await self.ensure_browser()
+            page = await self.get_active_page()
             html_content = await page.content()
             try:
                 from bs4 import BeautifulSoup
@@ -875,7 +821,7 @@ class BrowserEngine:
     # --- Screenshots & Visuals ---
     async def screenshot(self, filename: str = "screenshot.png", full_page: bool = False) -> str:
         async def _do():
-            page = await self.ensure_browser()
+            page = await self.get_active_page()
             path = os.path.join(self._get_profile_path(), "screenshots", filename)
             os.makedirs(os.path.dirname(path), exist_ok=True)
             await page.screenshot(path=path, full_page=full_page)
@@ -891,7 +837,7 @@ class BrowserEngine:
 
     async def mark_elements(self) -> str:
         async def _do():
-            page = await self.ensure_browser()
+            page = await self.get_active_page()
             script = """
             () => {
                 let id = 0;
@@ -918,7 +864,7 @@ class BrowserEngine:
 
     async def clear_marks(self) -> str:
         async def _do():
-            page = await self.ensure_browser()
+            page = await self.get_active_page()
             script = """
             () => {
                 document.querySelectorAll('[data-ace-mark-id]').forEach(el => {
@@ -959,7 +905,7 @@ class BrowserEngine:
 
     async def wait_for(self, description: str) -> str:
         async def _do():
-            page = await self.ensure_browser()
+            page = await self.get_active_page()
             if description.startswith((".", "#", "[")):
                 await page.wait_for_selector(description)
                 return f"Element '{description}' is now ready."
@@ -988,7 +934,7 @@ class BrowserEngine:
                 await self._apply_stealth(self._page)
                 page = self._page
             else:
-                page = await self.ensure_browser()
+                page = await self.get_active_page()
             logger.info(f"[search_google] Navigating to Google homepage then typing query: '{query}'")
 
             from playwright.async_api import TimeoutError as PlaywrightTimeoutError
@@ -1048,7 +994,7 @@ class BrowserEngine:
                 await self._apply_stealth(self._page)
                 page = self._page
             else:
-                page = await self.ensure_browser()
+                page = await self.get_active_page()
             logger.info(f"[search_youtube] Navigating to YouTube homepage then typing query: '{query}'")
 
             from playwright.async_api import TimeoutError as PlaywrightTimeoutError
@@ -1097,7 +1043,7 @@ class BrowserEngine:
     # --- Media ---
     async def play_pause(self) -> str:
         async def _do():
-            page = await self.ensure_browser()
+            page = await self.get_active_page()
             script = """
                 let v = document.querySelector('video');
                 if (v) { v.paused ? v.play() : v.pause(); }

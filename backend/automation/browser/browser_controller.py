@@ -34,7 +34,7 @@ class BrowserController:
         await self.engine.close_browser()
 
     async def _ensure_page(self):
-        return await self.engine.ensure_browser()
+        return await self.engine.get_active_page()
 
     # --- Tab Management ---
     async def get_all_tabs(self):
