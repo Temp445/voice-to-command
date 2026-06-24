@@ -75,10 +75,13 @@ class AudioCapture:
         import time
         from collections import deque
 
-        # Buffer the last ~300ms of audio BEFORE speech is detected.
+        # Buffer the last ~90ms of audio BEFORE speech is detected.
         # This prevents the VAD from cutting off the very first consonant/vowel of a word.
-        # 10 chunks of 1024 bytes (512 samples) @ 16kHz = ~320ms.
-        pre_roll_buffer = deque(maxlen=10)
+        # Pre-roll: 3 chunks × 30ms = 90ms — enough to catch plosive onset (/k/, /p/, /t/)
+        # without prepending 300ms of ambient noise to every command.
+        # The original maxlen=10 (300ms) caused Whisper to receive 300ms of room hum
+        # BEFORE the word, making /k/ in "crm" sound like fricative /s/ → "serum".
+        pre_roll_buffer = deque(maxlen=3)
         was_speech = False
 
         try:

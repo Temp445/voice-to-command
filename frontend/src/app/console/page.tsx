@@ -3,11 +3,13 @@
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Send, Terminal, Trash2, CheckCircle2, XCircle, Loader2, Mic } from "lucide-react";
+import { api } from "@/lib/api";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { TopBar } from "@/components/layout/TopBar";
 import { useVoice } from "@/hooks/useVoice";
 import { useCommandStore, CommandEntry } from "@/store/commandStore";
 import { useWebSocket, useWSStore } from "@/hooks/useWebSocket";
+import { useSettingsStore } from "@/store/settingsStore";
 import { format } from "date-fns";
 
 export default function ConsolePage() {
@@ -18,11 +20,21 @@ export default function ConsolePage() {
   const endRef = useRef<HTMLDivElement>(null);
   useWebSocket();
   const { connected } = useWSStore();
+  const { wakeWord } = useSettingsStore();
 
   useEffect(() => { 
     setMounted(true);
     endRef.current?.scrollIntoView({ behavior: "smooth" }); 
   }, [history]);
+
+  // Sync with backend database on mount
+  useEffect(() => {
+    api.getHistory(50).then((data: any) => {
+      if (data && Array.isArray(data)) {
+        useCommandStore.setState({ history: data });
+      }
+    }).catch(console.error);
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -46,7 +58,7 @@ export default function ConsolePage() {
               </h1>
               <p style={{ color: "var(--muted-foreground)", fontSize: "0.875rem", marginTop: "0.25rem" }}>Type commands to control your desktop</p>
             </div>
-            <button onClick={clear}
+            <button onClick={async () => { clear(); await api.clearHistory(); }}
               style={{ display: "flex", alignItems: "center", gap: "0.375rem", padding: "0.4rem 0.875rem", borderRadius: "0.5rem", border: "1px solid var(--border)", background: "var(--secondary)", color: "var(--muted-foreground)", fontSize: "0.8125rem", cursor: "pointer", transition: "all 0.15s" }}
               onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.color = "#ef4444"; (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(239,68,68,0.3)"; }}
               onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.color = "var(--muted-foreground)"; (e.currentTarget as HTMLButtonElement).style.borderColor = "var(--border)"; }}
@@ -75,7 +87,7 @@ export default function ConsolePage() {
                 <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "0.625rem", color: "var(--muted-foreground)" }}>
                   <Terminal style={{ width: "2rem", height: "2rem", opacity: 0.3 }} />
                   <p>No commands yet. Start typing below.</p>
-                  <p style={{ fontSize: "0.75rem" }}>Or say <span style={{ color: "var(--foreground)" }}>&quot;alexa&quot;</span> to use voice</p>
+                  <p style={{ fontSize: "0.75rem" }}>Or say <span style={{ color: "var(--foreground)" }}>&quot;{wakeWord}&quot;</span> to use voice</p>
                 </div>
               ) : (
                 <AnimatePresence>
@@ -124,6 +136,14 @@ function CommandRow({ entry }: { entry: CommandEntry }) {
         <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", paddingLeft: "1.25rem", color: "#f59e0b" }}>
           <Loader2 style={{ width: "0.75rem", height: "0.75rem", animation: "spin 1s linear infinite" }} />
           <span style={{ fontSize: "0.75rem" }}>Processing…</span>
+          <button 
+            onClick={() => useCommandStore.getState().updateEntry(entry.id, { status: "failed", result: "Cancelled by user" })}
+            style={{ marginLeft: "0.5rem", padding: "0.1rem 0.4rem", fontSize: "0.7rem", background: "rgba(239, 68, 68, 0.1)", color: "#ef4444", border: "1px solid rgba(239, 68, 68, 0.3)", borderRadius: "0.25rem", cursor: "pointer", transition: "all 0.15s" }}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "rgba(239, 68, 68, 0.2)"; }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "rgba(239, 68, 68, 0.1)"; }}
+          >
+            Cancel
+          </button>
         </div>
       ) : entry.result ? (
         <div style={{ display: "flex", alignItems: "flex-start", gap: "0.5rem", paddingLeft: "1.25rem" }}>
@@ -136,7 +156,7 @@ function CommandRow({ entry }: { entry: CommandEntry }) {
       ) : null}
       {entry.intent && (
         <p style={{ paddingLeft: "1.25rem", fontSize: "0.7rem", color: "var(--muted-foreground)" }}>
-          intent: {entry.intent}{entry.duration_ms ? ` · ${entry.duration_ms}ms` : ""}{entry.executed_at ? ` · ${format(new Date(entry.executed_at), "HH:mm:ss")}` : ""}{entry.routed_by_llm ? ` · 🤖 Routed by LLM` : ""}
+          intent: {entry.intent}{entry.duration_ms ? ` · ${(entry.duration_ms / 1000).toFixed(2)}s` : ""}{entry.executed_at ? ` · ${format(new Date(entry.executed_at), "HH:mm:ss")}` : ""}{entry.routed_by_llm ? ` · 🤖 Routed by LLM` : ""}
         </p>
       )}
     </motion.div>

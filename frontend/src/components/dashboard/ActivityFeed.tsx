@@ -65,7 +65,7 @@ export function ActivityFeed() {
                     {cmd.executed_at ? format(new Date(cmd.executed_at), "HH:mm:ss") : "—"}
                   </p>
                   {cmd.duration_ms !== undefined && (
-                    <p style={{ fontSize: "0.7rem", color: "var(--border)", marginTop: "0.125rem" }}>{cmd.duration_ms}ms</p>
+                    <p style={{ fontSize: "0.7rem", color: "var(--border)", marginTop: "0.125rem" }}>{(cmd.duration_ms / 1000).toFixed(2)}s</p>
                   )}
                 </div>
               </motion.div>

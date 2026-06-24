@@ -87,9 +87,7 @@ def main():
 
     print("\n🐍 Installing Python dependencies...")
     req_files = [
-        ROOT / "backend" / "requirements.txt",
-        ROOT / "backend" / "requirements-automation.in",
-        ROOT / "backend" / "requirements-voice.in"
+        ROOT / "backend" / "requirements.txt"
     ]
     
     any_failed = False

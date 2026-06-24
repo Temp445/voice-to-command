@@ -41,7 +41,15 @@ export const useCommandStore = create<CommandStore>()(
 
       updateEntry: (id, patch) =>
         set((s) => ({
-          history: s.history.map((e) => (e.id === id ? { ...e, ...patch } : e)),
+          history: s.history.map((e) => {
+            if (e.id === id) {
+              if (e.status === "failed" && e.result === "Cancelled by user") {
+                return e;
+              }
+              return { ...e, ...patch };
+            }
+            return e;
+          }),
         })),
 
       setPending: (text) => set({ pending: text }),

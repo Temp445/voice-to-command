@@ -297,6 +297,14 @@ class CommandService:
             
             _matched_site_url: str | None = None
             _matched_routes: dict | None = None
+            
+            _target_noun = _text_lower
+            for _v in sorted(_nav_verbs, key=len, reverse=True):
+                if _text_lower.startswith(_v):
+                    _target_noun = _text_lower[len(_v):].strip()
+                    break
+            _target_noun_ns = _target_noun.replace(" ", "")
+
             for _site in _sites:
                 _kws = [k.strip().lower() for k in _site.get("keywords", "").split(",") if k.strip()]
                 for _kw in _kws:
@@ -309,6 +317,42 @@ class CommandService:
                             break
                 if _matched_site_url:
                     break
+
+            # Fuzzy rescue — catches Whisper mishearing like "crm" → "serum", "payroll" → "pay role"
+            # Only runs if exact match failed AND a nav verb was present.
+            if not _matched_site_url and _has_nav_verb and _target_noun_ns:
+                _all_kws: list[tuple[str, str, dict]] = []  # (kw_no_spaces, url, routes)
+                for _site in _sites:
+                    for _kw in _site.get("keywords", "").split(","):
+                        _kw = _kw.strip().lower()
+                        if _kw:
+                            _all_kws.append((_kw.replace(" ", ""), _site.get("url", ""), _site.get("routes", {})))
+                
+                if _all_kws:
+                    _kw_strings = [k[0] for k in _all_kws]
+                    _matched_kw = None
+                    
+                    if _RAPIDFUZZ_AVAILABLE:
+                        # RapidFuzz is highly resilient to phonetic typos like "serum" vs "crm"
+                        _res = process.extractOne(_target_noun_ns, _kw_strings, scorer=fuzz.WRatio)
+                        if _res and _res[1] >= 65:  # 65+ is a good fuzzy threshold for misheard single words
+                            _matched_kw = _res[0]
+                    else:
+                        import difflib as _dl
+                        _close = _dl.get_close_matches(_target_noun_ns, _kw_strings, n=1, cutoff=0.55)
+                        if _close:
+                            _matched_kw = _close[0]
+                            
+                    if _matched_kw:
+                        for _k, _u, _r in _all_kws:
+                            if _k == _matched_kw:
+                                _matched_site_url = _u
+                                _matched_routes = _r
+                                break
+                        logger.info(
+                            f"Fuzzy shortcut rescue: '{text}' noun='{_target_noun}' "
+                            f"→ matched keyword '{_matched_kw}' → {_matched_site_url}"
+                        )
 
             if _matched_site_url:
                 logger.info(f"Website shortcut matched: '{text}' → {_matched_site_url}")

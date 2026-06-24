@@ -20,3 +20,5 @@ plyer
 browser-use
 pyautogui
 fastembed
+langchain-groq
+langchain-openai

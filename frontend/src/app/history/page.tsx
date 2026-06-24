@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { TopBar } from "@/components/layout/TopBar";
-import { History, Trash2, Calendar, Clock, Loader2, AlertCircle } from "lucide-react";
+import { History, Trash2, Calendar, Clock, Loader2, AlertCircle, RefreshCw } from "lucide-react";
 import { motion } from "framer-motion";
 import { api } from "@/lib/api";
 
@@ -148,6 +148,18 @@ export default function HistoryPage() {
             </div>
             
             <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
+              <button 
+                onClick={fetchHistory}
+                disabled={loading}
+                style={{ display: "flex", alignItems: "center", gap: "0.375rem", padding: "0.45rem 1rem", borderRadius: "0.5rem", border: "1px solid var(--border)", background: "var(--background)", color: "var(--foreground)", fontSize: "0.875rem", fontWeight: 500, cursor: loading ? "not-allowed" : "pointer", transition: "all 0.15s", opacity: loading ? 0.7 : 1 }}
+                onMouseEnter={(e) => { if (!loading) (e.currentTarget as HTMLButtonElement).style.background = "var(--secondary)"; }}
+                onMouseLeave={(e) => { if (!loading) (e.currentTarget as HTMLButtonElement).style.background = "var(--background)"; }}
+                title="Refresh History"
+              >
+                <RefreshCw style={{ width: "1rem", height: "1rem", animation: loading ? "spin 1s linear infinite" : "none" }} />
+                Refresh
+              </button>
+
               <select 
                 value={filterStatus}
                 onChange={(e) => setFilterStatus(e.target.value)}

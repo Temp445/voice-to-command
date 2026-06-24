@@ -66,15 +66,49 @@ class Transcriber:
         # Convert raw bytes → float32 numpy array
         audio_np = np.frombuffer(audio_bytes, dtype=np.int16).astype(np.float32) / 32768.0
 
-        # Sentence-style prompt — establishes command register and tone WITHOUT
-        # enumerating specific app names. The original noun-list prompt caused Whisper
-        # to force free speech into predefined command words (e.g. "take a note" → "Notepad").
-        # A sentence-style prompt teaches Whisper the grammatical style of voice commands
-        # without creating vocabulary bias against general speech or unknown app names.
+        # Trim leading silence from the audio segment.
+        # Even with the reduced pre-roll (3 chunks = 90ms), the first few frames
+        # can be near-silent. Leading silence confuses Whisper into hallucinating
+        # a fricative onset (/s/) for plosive words like "crm" → "serum".
+        # Trim any leading frames below RMS threshold before feeding Whisper.
+        rms_threshold = 0.01  # ~-40dB — below this is effective silence
+        frame_size = int(16000 * 0.02)  # 20ms frames for trimming
+        trim_start = 0
+        for i in range(0, len(audio_np) - frame_size, frame_size):
+            frame_rms = float(np.sqrt(np.mean(audio_np[i:i+frame_size] ** 2)))
+            if frame_rms > rms_threshold:
+                trim_start = max(0, i - frame_size)  # keep one frame before onset
+                break
+        if trim_start > 0:
+            audio_np = audio_np[trim_start:]
+
+        # Build initial_prompt with known shortcut/app names from settings.
+        # Whisper uses this as a strong lexical prior — listing "CRM, payroll, acesoft"
+        # makes those tokens far more likely to be selected over phonetically similar
+        # common words ("serum", "pay roll", "ace soft").
+        shortcut_names = ""
+        try:
+            from app.config import settings as _gs
+            import json as _json
+            _sites_raw = getattr(_gs, "crm_sites", None)
+            if _sites_raw:
+                _sites = _json.loads(_sites_raw) if isinstance(_sites_raw, str) else _sites_raw
+                names = []
+                for s in _sites:
+                    # Pull the first keyword as the display name (most concise)
+                    kws = [k.strip() for k in s.get("keywords", "").split(",") if k.strip()]
+                    if kws:
+                        names.append(kws[0])
+                if names:
+                    shortcut_names = " Known shortcuts: " + ", ".join(names) + "."
+        except Exception:
+            pass
+
         initial_prompt = (
-            "The following is a voice command for a desktop automation assistant. "
-            "Commands include opening applications, navigating websites, typing text, "
-            "clicking buttons, and controlling media playback."
+            "The following is a short voice command for a desktop automation assistant."
+            " Commands include opening applications, navigating websites, typing text,"
+            " clicking buttons, and controlling media playback."
+            + shortcut_names
         )
 
         _transcribe_kwargs = dict(
