@@ -182,36 +182,109 @@ async def handle_browser_new_tab(**_) -> str:
 
 async def handle_browser_switch_tab(tab_identifier: str = "last", **_) -> str:
     from automation.browser.browser_controller import BrowserController
+    from automation.browser.browser_engine import BrowserEngine
     import re
     ctrl = BrowserController()
-    
+    engine = BrowserEngine()
+
     tid = tab_identifier.lower().strip()
+
+    # Strip accidental "to " prefix captured by the wildcard pattern
+    # e.g. "switch to crm tab" → tab_identifier="to crm" → strip to "crm"
+    if tid.startswith("to "):
+        tid = tid[3:].strip()
+
+    # Ordinal / positional mapping
+    mapping = {
+        "first": 0,  "1st": 0,  "1": 0,
+        "second": 1, "2nd": 1,  "2": 1,
+        "third": 2,  "3rd": 2,  "3": 2,
+        "fourth": 3, "4th": 3,  "4": 3,
+        "fifth": 4,  "5th": 4,  "5": 4,
+        "sixth": 5,  "6th": 5,  "6": 5,
+        "seventh": 6,"7th": 6,  "7": 6,
+        "eighth": 7, "8th": 7,  "8": 7,
+        "ninth": 8,  "9th": 8,  "9": 8,
+        "tenth": 9,  "10th": 9, "10": 9,
+    }
+
+    # "last" → most recently opened tab
     if tid == "last":
         return await ctrl.switch_to_last_tab()
-        
-    mapping = {
-        "first": 0, "1st": 0, "1": 0,
-        "second": 1, "2nd": 1, "2": 1,
-        "third": 2, "3rd": 2, "3": 2,
-        "fourth": 3, "4th": 3, "4": 3,
-        "fifth": 4, "5th": 4, "5": 4,
-        "sixth": 5, "6th": 5, "6": 5,
-        "seventh": 6, "7th": 6, "7": 6,
-        "eighth": 7, "8th": 7, "8": 7,
-        "ninth": 8, "9th": 8, "9": 8,
-        "tenth": 9, "10th": 9, "10": 9
-    }
-    
+
+    # "next" → tab to the right of the current one
+    if tid == "next":
+        async def _next():
+            pages = engine._context.pages if engine._context else []
+            real = [p for p in pages if not p.is_closed()
+                    and not p.url.startswith("chrome-extension://")
+                    and p.url not in ("about:blank", "")]
+            if not real:
+                return "No tabs to switch to."
+            cur = engine._page
+            idx = real.index(cur) if cur in real else -1
+            nxt = real[(idx + 1) % len(real)]
+            engine._page = nxt
+            await nxt.bring_to_front()
+            return f"Switched to next tab: {nxt.url}"
+        return await engine._run_if_ready(_next)
+
+    # "previous" / "prev" / "back" → tab to the left
+    if tid in ("previous", "prev", "back"):
+        async def _prev():
+            pages = engine._context.pages if engine._context else []
+            real = [p for p in pages if not p.is_closed()
+                    and not p.url.startswith("chrome-extension://")
+                    and p.url not in ("about:blank", "")]
+            if not real:
+                return "No tabs to switch to."
+            cur = engine._page
+            idx = real.index(cur) if cur in real else 1
+            prv = real[(idx - 1) % len(real)]
+            engine._page = prv
+            await prv.bring_to_front()
+            return f"Switched to previous tab: {prv.url}"
+        return await engine._run_if_ready(_prev)
+
+    # Numeric string (e.g. "3", "2nd")
     m = re.match(r'^(\d+)', tid)
     if m:
         idx = int(m.group(1)) - 1
-    else:
-        idx = mapping.get(tid)
-        
+        return await ctrl.engine.switch_tab(idx)
+
+    idx = mapping.get(tid)
     if idx is not None:
         return await ctrl.engine.switch_tab(idx)
-        
-    return f"Could not determine which tab to switch to from '{tab_identifier}'"
+
+    # Name / URL-based: "switch to crm tab", "switch to payroll tab"
+    # Try matching tid against tab titles and URLs
+    result = await ctrl.engine.switch_tab_by_url(tid)
+    if "No tab found" not in result:
+        return result
+
+    # Also try matching against page titles
+    async def _by_title():
+        if not engine._context:
+            return None
+        for p in engine._context.pages:
+            if p.is_closed():
+                continue
+            try:
+                title = await p.title()
+                if tid in title.lower() or tid in p.url.lower():
+                    engine._page = p
+                    await p.bring_to_front()
+                    return f"Switched to tab: {title or p.url}"
+            except Exception:
+                continue
+        return None
+
+    from automation.browser.browser_engine import _run_in_playwright
+    title_result = await _run_in_playwright(_by_title())
+    if title_result:
+        return title_result
+
+    return f"No tab found matching '{tid}'. Open tabs: use 'switch to first/second/last tab'."
 
 async def handle_browser_close_all_tabs(**_) -> str:
     from automation.browser.browser_controller import BrowserController
@@ -2460,13 +2533,21 @@ def register_all_intents() -> None:
             name="browser_switch_tab",
             domain="browser",
             patterns=[
-                r"^(?:switch|go)\s+to\s+(?:the\s+)?(?P<tab_identifier>first|second|third|fourth|fifth|last|next|previous|\d+(?:st|nd|rd|th)?)\s+tab$",
+                r"^(?:switch|go)\s+to\s+(?:the\s+)?(?P<tab_identifier>first|second|third|fourth|fifth|last|next|previous|prev|\d+(?:st|nd|rd|th)?)\s+tab$",
                 r"^(?:switch|go)\s+to\s+tab\s+(?P<tab_identifier>\d+)$",
-                r"^switch\s+(?P<tab_identifier>.+)\s+tab$"
+                r"^switch\s+(?:to\s+)?(?P<tab_identifier>.+)\s+tab$",
+                r"^(?:switch|go)\s+to\s+(?:the\s+)?(?P<tab_identifier>previous|prev|next|last)\s+tab$",
+                r"^(?P<tab_identifier>previous|next)\s+tab$",
+                r"^(?:switch|go)\s+(?:back|to\s+previous)\s+tab$",
+                r"^(?:switch|change)\s+tab\s+to\s+(?P<tab_identifier>.+)$",
             ],
             handler=handle_browser_switch_tab,
-            description="Switch to a specific browser tab by number or position",
-            examples=["switch to the first tab", "switch to tab 2", "switch last tab", "switch next tab"],
+            description="Switch to a specific browser tab by number, position, name or URL keyword",
+            examples=[
+                "switch to the first tab", "switch to tab 2", "switch last tab",
+                "switch to next tab", "switch to previous tab", "previous tab",
+                "switch to crm tab", "switch to payroll tab",
+            ],
             param_names=["tab_identifier"]
         ),
         Intent(

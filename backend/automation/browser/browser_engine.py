@@ -275,7 +275,8 @@ class BrowserEngine:
                             logger.debug(f"Active tab (visibilityState): {p.url}")
                         self._page = p
                         return p
-                except Exception:
+                except Exception as e:
+                    logger.debug(f"visibilityState eval failed for {p.url}: {e}")
                     continue
 
             # Layer 2: hasFocus — fires when the document has keyboard focus
@@ -287,10 +288,38 @@ class BrowserEngine:
                             logger.debug(f"Active tab (hasFocus): {p.url}")
                         self._page = p
                         return p
-                except Exception:
+                except Exception as e:
+                    logger.debug(f"hasFocus eval failed for {p.url}: {e}")
                     continue
 
-            # Layer 3: Most recently opened non-system tab (pages list is creation-order)
+            # Layer 3: Ask Chrome's CDP REST endpoint which tab is frontmost.
+            # The first "page" entry in /json is the tab Chrome has in focus.
+            # This works even when the ACE overlay steals OS focus.
+            try:
+                import urllib.request, json as _json
+                def _fetch_targets():
+                    with urllib.request.urlopen("http://localhost:9222/json", timeout=0.5) as r:
+                        return _json.loads(r.read())
+                targets = await asyncio.to_thread(_fetch_targets)
+                for t in targets:
+                    t_url = t.get("url", "")
+                    if (
+                        t.get("type") == "page"
+                        and not t_url.lower().startswith(("chrome-extension://", "devtools://"))
+                        and t_url.lower() not in ("about:blank", "")
+                        and "localhost:3000" not in t_url
+                    ):
+                        for p in pages:
+                            if p.url.rstrip("/") == t_url.rstrip("/"):
+                                if self._page != p:
+                                    logger.debug(f"Active tab (CDP REST): {p.url}")
+                                self._page = p
+                                return p
+                        break  # first matching target is frontmost — stop
+            except Exception as e:
+                logger.debug(f"CDP REST target lookup failed: {e}")
+
+            # Layer 4: Last resort — most recently created non-system tab
             fallback = pages[-1]
             if self._page != fallback:
                 logger.debug(f"Active tab (fallback most-recent): {fallback.url}")

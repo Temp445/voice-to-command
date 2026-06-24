@@ -214,10 +214,12 @@ class VoicePipeline:
         except Exception:
             pass
         
-        # If we are not in IDLE, the _listen_and_process loop is running.
-        # It will catch _manually_stopped and naturally clean up via its finally block.
-        if self._state == PipelineState.IDLE:
-            self._wake_word.start()
+        # Force UI update immediately so user knows cancellation succeeded
+        self._set_state(PipelineState.IDLE)
+        if self.on_transcript:
+            self.on_transcript("Cancelled", True)
+            
+        self._wake_word.start()
 
     # ─── Processing Pipeline ─────────────────────────────────────────────────
 
@@ -392,6 +394,11 @@ class VoicePipeline:
                         self._save_history(clean_text, result),
                         loop=self._loop,
                     )
+
+                    if self._manually_stopped:
+                        logger.debug("Manually stopped during command execution — skipping response")
+                        self._manually_stopped = False
+                        break
 
                     response_text = result.get("result", "Done")
                     await self._speak(response_text)
