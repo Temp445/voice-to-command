@@ -102,3 +102,66 @@ async def run_browser_tests():
     
     result = await runner.run_test(test)
     return result
+
+
+@router.get("/browser/test_tabs", summary="Verify multi-tab navigation, switching, closing and active tab tracking")
+async def test_browser_tabs():
+    from automation.browser.browser_engine import BrowserEngine
+    from app.services.command_service import command_service
+    import asyncio
+    
+    logs = []
+    
+    try:
+        engine = BrowserEngine()
+        
+        # Step 1: Open acesoft
+        logs.append("Step 1: Executing command 'open acesoft'...")
+        res1 = await command_service.parse_and_execute("open acesoft")
+        logs.append(f"Result status: {res1.get('status')}, result: {res1.get('result')}")
+        
+        await asyncio.sleep(2)
+        
+        # Step 2: Open google in new tab
+        logs.append("Step 2: Executing command 'search google.com in the new tab'...")
+        res2 = await command_service.parse_and_execute("search google.com in the new tab")
+        logs.append(f"Result status: {res2.get('status')}, result: {res2.get('result')}")
+        
+        await asyncio.sleep(2)
+        
+        # Check active tab URL - should be google.com
+        active_page = await engine.ensure_browser()
+        logs.append(f"Currently active tab URL: {active_page.url}")
+        
+        # Step 3: Switch to previous tab
+        logs.append("Step 3: Executing command 'switch to previous tab'...")
+        res3 = await command_service.parse_and_execute("switch to previous tab")
+        logs.append(f"Result status: {res3.get('status')}, result: {res3.get('result')}")
+        
+        await asyncio.sleep(2)
+        active_page = await engine.ensure_browser()
+        logs.append(f"After 'switch to previous tab', active tab URL: {active_page.url}")
+        
+        # Step 4: Switch to next tab
+        logs.append("Step 4: Executing command 'go to next tab'...")
+        res4 = await command_service.parse_and_execute("go to next tab")
+        logs.append(f"Result status: {res4.get('status')}, result: {res4.get('result')}")
+        
+        await asyncio.sleep(2)
+        active_page = await engine.ensure_browser()
+        logs.append(f"After 'go to next tab', active tab URL: {active_page.url}")
+        
+        # Step 5: Switch to first tab
+        logs.append("Step 5: Executing command 'switch to first tab'...")
+        res5 = await command_service.parse_and_execute("switch to first tab")
+        logs.append(f"Result status: {res5.get('status')}, result: {res5.get('result')}")
+        
+        await asyncio.sleep(2)
+        active_page = await engine.ensure_browser()
+        logs.append(f"After 'switch to first tab', active tab URL: {active_page.url}")
+        
+        return {"status": "success", "logs": logs}
+    except Exception as e:
+        import traceback
+        return {"status": "error", "message": str(e), "traceback": traceback.format_exc(), "logs": logs}
+

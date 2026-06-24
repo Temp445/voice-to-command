@@ -46,6 +46,12 @@ class BrowserController:
     async def switch_to_last_tab(self):
         return await self.engine.switch_tab_last()
 
+    async def switch_to_next_tab(self):
+        return await self.engine.switch_tab_next()
+
+    async def switch_to_prev_tab(self):
+        return await self.engine.switch_tab_prev()
+
     async def close_all_tabs(self):
         return await self.engine.close_all_tabs()
 
@@ -55,9 +61,8 @@ class BrowserController:
     async def new_tab(self, url: str = None):
         return await self.engine.new_tab(url)
 
-    # --- Navigation ---
-    async def navigate(self, url: str):
-        return await self.engine.navigate(url)
+    async def navigate(self, url: str, new_tab: bool = False):
+        return await self.engine.navigate(url, new_tab=new_tab)
 
     async def go_back(self):
         return await self.engine.go_back()
@@ -115,11 +120,11 @@ class BrowserController:
         elif action == "select_all": return await self.engine.clipboard_select_all()
         return "Unknown clipboard action"
 
-    async def search_google(self, query: str):
-        return await self.engine.search_google(query)
+    async def search_google(self, query: str, new_tab: bool = False):
+        return await self.engine.search_google(query, new_tab=new_tab)
 
-    async def search_youtube(self, query: str):
-        return await self.engine.search_youtube(query)
+    async def search_youtube(self, query: str, new_tab: bool = False):
+        return await self.engine.search_youtube(query, new_tab=new_tab)
 
     # --- Media ---
     async def play_pause(self):

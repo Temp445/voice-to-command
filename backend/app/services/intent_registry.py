@@ -95,22 +95,21 @@ async def handle_search_google(query: str = "", browser: str | None = None, text
     ctrl = BrowserController()
     query = query.strip()
     
+    # Detect "in a/the new tab" from either the extracted query or the full transcript
     tab_match = re.search(r'(?:\s+)?in\s+(?:a\s+|the\s+)?new\s+tab$', query, re.IGNORECASE)
     text_tab_match = re.search(r'in\s+(?:a\s+|the\s+)?new\s+tab', text, re.IGNORECASE)
+    new_tab = bool(tab_match or text_tab_match)
+    if tab_match:
+        query = query[:tab_match.start()].strip()
     
-    if tab_match or text_tab_match:
-        if tab_match:
-            query = query[:tab_match.start()].strip()
-        await ctrl.new_tab()
-    
-    # If the user says "search [URL]", just navigate to it directly
+    # If the user says "search [URL]", navigate directly — pass new_tab so a fresh page is created
     if re.match(r"^(?:https?://)?[\w\-\.]+\.\w{2,}(?:/\S*)?$", query):
         url = query if query.startswith("http") else f"https://{query}"
         logger.info(f"Query looks like a URL, navigating directly to: {url}")
-        return await BrowserEngine().navigate(url)
+        return await BrowserEngine().navigate(url, new_tab=new_tab)
         
     logger.info(f"Searching Google for: '{query}'")
-    return await ctrl.search_google(query)
+    return await ctrl.search_google(query, new_tab=new_tab)
 
 
 async def handle_search_youtube(query: str = "", text: str = "", **_) -> str:
@@ -119,26 +118,30 @@ async def handle_search_youtube(query: str = "", text: str = "", **_) -> str:
     ctrl = BrowserController()
     query = query.strip()
     
+    # Detect "in a/the new tab" from either the extracted query or the full transcript
     tab_match = re.search(r'(?:\s+)?in\s+(?:a\s+|the\s+)?new\s+tab$', query, re.IGNORECASE)
     text_tab_match = re.search(r'in\s+(?:a\s+|the\s+)?new\s+tab', text, re.IGNORECASE)
-    
-    if tab_match or text_tab_match:
-        if tab_match:
-            query = query[:tab_match.start()].strip()
-        await ctrl.new_tab()
+    new_tab = bool(tab_match or text_tab_match)
+    if tab_match:
+        query = query[:tab_match.start()].strip()
         
     logger.info(f"Searching YouTube for: '{query}'")
-    return await ctrl.search_youtube(query)
+    return await ctrl.search_youtube(query, new_tab=new_tab)
 
 
-async def handle_open_website(url: str = "", **_) -> str:
+async def handle_open_website(url: str = "", text: str = "", **_) -> str:
     from automation.browser.browser_engine import BrowserEngine
     url = url.strip()
     if not url:
         return "Please specify a website to open."
     if "." not in url and not url.startswith("http"):
         url = url + ".com"
-    return await BrowserEngine().navigate(url)
+    new_tab = False
+    if text:
+        t_lower = text.lower()
+        if "new tab" in t_lower or "another tab" in t_lower:
+            new_tab = True
+    return await BrowserEngine().navigate(url, new_tab=new_tab)
 
 async def handle_browser_play_pause(**_) -> str:
     from automation.browser.browser_engine import BrowserEngine
@@ -186,9 +189,16 @@ async def handle_browser_switch_tab(tab_identifier: str = "last", **_) -> str:
     ctrl = BrowserController()
     
     tid = tab_identifier.lower().strip()
-    if tid == "last":
+
+    # Relative navigation
+    if tid in ("next",):
+        return await ctrl.switch_to_next_tab()
+    if tid in ("previous", "prev", "back", "prior", "last visited"):
+        return await ctrl.switch_to_prev_tab()
+    if tid in ("last",):
         return await ctrl.switch_to_last_tab()
-        
+
+    # Ordinal / numeric navigation
     mapping = {
         "first": 0, "1st": 0, "1": 0,
         "second": 1, "2nd": 1, "2": 1,
@@ -199,7 +209,7 @@ async def handle_browser_switch_tab(tab_identifier: str = "last", **_) -> str:
         "seventh": 6, "7th": 6, "7": 6,
         "eighth": 7, "8th": 7, "8": 7,
         "ninth": 8, "9th": 8, "9": 8,
-        "tenth": 9, "10th": 9, "10": 9
+        "tenth": 9, "10th": 9, "10": 9,
     }
     
     m = re.match(r'^(\d+)', tid)
@@ -2176,6 +2186,133 @@ async def handle_delete_file(target: str = "", **_) -> str:
     from automation.desktop.file_operations import FileOperations
     return FileOperations().delete_target(target.strip())
 
+async def handle_find_and_replace(find_text: str = "", replace_text: str = "", **_) -> str:
+    from automation.input.keyboard_controller import KeyboardController
+    from pynput.keyboard import Key
+    import asyncio
+    
+    kb = KeyboardController()
+    kb.press(Key.ctrl, 'h')
+    await asyncio.sleep(0.5)
+    
+    kb.type_text(find_text)
+    await asyncio.sleep(0.2)
+    
+    kb.press(Key.tab)
+    await asyncio.sleep(0.2)
+    
+    kb.type_text(replace_text)
+    await asyncio.sleep(0.2)
+    
+    kb.press(Key.alt, 'a')
+    return f"Triggered find and replace: '{find_text}' with '{replace_text}'."
+
+
+async def handle_go_to_cell(cell: str = "", **_) -> str:
+    from automation.browser.browser_engine import BrowserEngine
+    from automation.input.keyboard_controller import KeyboardController
+    from pynput.keyboard import Key
+    import asyncio
+    
+    cell = cell.upper().strip()
+    if not cell:
+        return "Please specify a cell."
+        
+    engine = BrowserEngine()
+    is_sheets = False
+    is_excel_online = False
+    
+    try:
+        page = await engine.ensure_browser()
+        url = await engine.get_url()
+        title = await engine.get_page_title()
+        
+        if url:
+            if "docs.google.com/spreadsheets" in url:
+                is_sheets = True
+            elif "excel.office.com" in url or "onedrive.live.com" in url or "sharepoint.com" in url or "excel" in url.lower():
+                is_excel_online = True
+        if not is_sheets and not is_excel_online and title:
+            if "Google Sheets" in title or "sheet" in title.lower():
+                is_sheets = True
+            elif "excel" in title.lower():
+                is_excel_online = True
+    except Exception as e:
+        logger.debug(f"Could not verify active page: {e}")
+        
+    kb = KeyboardController()
+    if is_sheets:
+        kb.press(Key.ctrl, 'j')
+        await asyncio.sleep(0.2)
+        kb.type_text(cell)
+        await asyncio.sleep(0.1)
+        kb.press_enter()
+        return f"Navigated to cell {cell} in Google Sheets."
+    elif is_excel_online:
+        kb.press(Key.ctrl, 'g')
+        await asyncio.sleep(0.3)
+        kb.type_text(cell)
+        await asyncio.sleep(0.1)
+        kb.press_enter()
+        return f"Navigated to cell {cell} in Excel Online."
+    else:
+        kb.press(Key.ctrl, 'g')
+        await asyncio.sleep(0.3)
+        kb.type_text(cell)
+        await asyncio.sleep(0.1)
+        kb.press_enter()
+        return f"Sent select cell {cell} command."
+
+
+async def handle_copy_selection(scope: str = "", **_) -> str:
+    from automation.input.keyboard_controller import KeyboardController
+    from automation.input.mouse_controller import MouseController
+    from pynput.keyboard import Key
+    import asyncio
+    
+    scope = scope.lower().strip()
+    kb = KeyboardController()
+    
+    if scope == "word":
+        kb.press(Key.ctrl, Key.shift, Key.right)
+        await asyncio.sleep(0.1)
+        kb.copy()
+        return "Copied word to clipboard."
+    elif scope == "line":
+        kb.press(Key.home)
+        await asyncio.sleep(0.1)
+        kb.press(Key.shift, Key.end)
+        await asyncio.sleep(0.1)
+        kb.copy()
+        return "Copied line to clipboard."
+    elif scope == "paragraph":
+        MouseController().triple_click()
+        await asyncio.sleep(0.2)
+        kb.copy()
+        return "Copied paragraph to clipboard."
+    elif scope == "selection" or not scope:
+        kb.copy()
+        return "Copied selection to clipboard."
+    else:
+        return f"Unsupported copy scope: {scope}"
+
+
+async def handle_cell_type(cell: str = "", text: str = "", **_) -> str:
+    from automation.input.keyboard_controller import KeyboardController
+    import asyncio
+    
+    if not cell or not text:
+        return "Please specify both a cell and the text to type."
+        
+    await handle_go_to_cell(cell=cell)
+    await asyncio.sleep(0.4)
+    
+    kb = KeyboardController()
+    kb.type_text(text)
+    await asyncio.sleep(0.1)
+    kb.press_enter()
+    return f"Typed '{text}' into cell {cell}."
+
 async def handle_clipboard_copy(text: str = "", **_) -> str:
     from automation.system.clipboard import ClipboardManager
     return ClipboardManager().write_text(text)
@@ -2224,6 +2361,53 @@ def register_all_intents() -> None:
     command_service._intents.clear()
     
     intents = [
+        # Specific Productivity & Spreadsheet Intents (High Priority)
+        Intent(
+            name="find_and_replace",
+            domain="global",
+            patterns=[
+                r"^(?:find\s+)?(?P<find_text>.+?)\s+and\s+replace\s+(?:it\s+)?with\s+(?P<replace_text>.+)$",
+                r"^replace\s+(?P<find_text>.+?)\s+with\s+(?P<replace_text>.+)$"
+            ],
+            handler=handle_find_and_replace,
+            description="Trigger the Find & Replace interface and replace text",
+            examples=["find payroll and replace with salary", "replace foo with bar"],
+            param_names=["find_text", "replace_text"]
+        ),
+        Intent(
+            name="go_to_cell",
+            domain="browser",
+            patterns=[
+                r"^(?:go\s+to|select|navigate\s+to)\s+(?:cell\s+)?(?P<cell>[A-Za-z]+\d+)$",
+                r"^(?P<cell>[A-Za-z]+\d+)$"
+            ],
+            handler=handle_go_to_cell,
+            description="Navigate to a specific cell in a spreadsheet",
+            examples=["go to cell B5", "select C3", "navigate to B5"],
+            param_names=["cell"]
+        ),
+        Intent(
+            name="copy_selection",
+            domain="global",
+            patterns=[
+                r"^copy\s+(?:this\s+)?(?P<scope>word|line|paragraph|selection)$"
+            ],
+            handler=handle_copy_selection,
+            description="Copy word, line, or paragraph at cursor to clipboard",
+            examples=["copy this line", "copy word", "copy paragraph"],
+            param_names=["scope"]
+        ),
+        Intent(
+            name="cell_type",
+            domain="browser",
+            patterns=[
+                r"^(?:type|enter|write)\s+(?P<text>.+?)\s+(?:in|into)\s+(?:cell\s+)?(?P<cell>[A-Za-z]+\d+)$"
+            ],
+            handler=handle_cell_type,
+            description="Go to a specific cell and type text",
+            examples=["type 5000 in cell C3", "enter John in cell A1"],
+            param_names=["text", "cell"]
+        ),
         # Browser Autonomous Action (Fallback to LLM agent)
         Intent(
             name="browser_autonomous_action",
@@ -2573,13 +2757,18 @@ def register_all_intents() -> None:
             name="browser_switch_tab",
             domain="browser",
             patterns=[
-                r"^(?:switch|go)\s+to\s+(?:the\s+)?(?P<tab_identifier>first|second|third|fourth|fifth|last|next|previous|\d+(?:st|nd|rd|th)?)\s+tab$",
+                # "go to / switch to [the] <identifier> tab"
+                r"^(?:switch|go)\s+to\s+(?:the\s+)?(?P<tab_identifier>first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|last|next|previous|prev|back|\d+(?:st|nd|rd|th)?)\s+tab$",
+                # "switch tab <number>"
                 r"^(?:switch|go)\s+to\s+tab\s+(?P<tab_identifier>\d+)$",
-                r"^switch\s+(?P<tab_identifier>.+)\s+tab$"
+                # "switch <identifier> tab"
+                r"^switch\s+(?P<tab_identifier>(?:the\s+)?(?:first|second|third|fourth|fifth|last|next|previous|prev|back|\d+(?:st|nd|rd|th)?))\s+tab$",
+                # bare "previous tab", "next tab", "first tab"
+                r"^(?P<tab_identifier>first|second|third|fourth|fifth|last|next|previous|prev|back)\s+tab$",
             ],
             handler=handle_browser_switch_tab,
             description="Switch to a specific browser tab by number or position",
-            examples=["switch to the first tab", "switch to tab 2", "switch last tab", "switch next tab"],
+            examples=["switch to the first tab", "go to next tab", "go to previous tab", "switch to tab 2", "previous tab"],
             param_names=["tab_identifier"]
         ),
         Intent(
@@ -3004,9 +3193,9 @@ def register_all_intents() -> None:
             name="type_text",
             domain="desktop",
             patterns=[
-                r"type\s+(?:the\s+)?(?:text\s+)?(?P<text>.+)",
-                r"write\s+(?P<text>.+)",
-                r"enter\s+(?P<text>.+)",
+                r"^type\s+(?:the\s+)?(?:text\s+)?(?P<text>.+)",
+                r"^write\s+(?P<text>.+)",
+                r"^enter\s+(?P<text>.+)",
             ],
             handler=handle_type_text,
             description="Type specific text using the keyboard or browser DOM",
@@ -3025,8 +3214,8 @@ def register_all_intents() -> None:
             name="click_text",
             domain="browser",
             patterns=[
-                r"(?:click|tap)\s+(?:on\s+)?(?P<text>.+)",
-                r"(?:go\s+to|navigate\s+to)\s+(?P<text>[^\.]+)$"
+                r"^(?:click|tap)\s+(?:on\s+)?(?P<text>.+)",
+                r"^(?:go\s+to|navigate\s+to)\s+(?P<text>[^\.]+)$"
             ],
             handler=handle_click_text,
             description="Click on specific text on the screen using OCR",
@@ -3156,7 +3345,8 @@ def register_all_intents() -> None:
             name="browser_click_link",
             domain="browser",
             patterns=[
-                r"open\s+(?:the\s+)?(?P<text>.+?)\s+(?:link|tab|button|element)$",
+                r"^(?:select|set|change)?\s*(?:report\s+type|view\s+mode)\s+(?:is|to|as)?\s*(?P<text>.+)$",
+                r"^open\s+(?:the\s+)?(?P<text>.+?)\s+(?:link|tab|button|element)$",
                 r"^(?:click|press|open)\s+(?:on\s+)?(?:the\s+)?(?P<text>.+?)(?:\s+(?:link|tab|button|element|menu|icon))?$",
                 r"^(?P<text>contact\s+us|about\s+us|home|login|logout|dashboard|products|services|blog|pricing|sign\s+up|sign\s+in|register|submit|save|cancel|continue|back|next)$"
             ],

@@ -20,6 +20,11 @@ class CRMMacros:
             dest += '/'
         t_lower = transcript.lower() if transcript else ""
 
+        # Check for new tab request in the transcript
+        new_tab = False
+        if "new tab" in t_lower or "another tab" in t_lower:
+            new_tab = True
+
         # 1. Check for dynamic routes configured in the database
         matched_dynamic_route = None
         if dynamic_routes:
@@ -31,7 +36,7 @@ class CRMMacros:
         if matched_dynamic_route:
             route = dest + matched_dynamic_route.lstrip('/')
             logger.info(f"Dynamically redirecting to configured route: {route}")
-            await self.engine.navigate(route)
+            await self.engine.navigate(route, new_tab=new_tab)
             return f"Opened website and navigated to {matched_dynamic_route}."
 
         # 2. Check for implicit login fallback
@@ -39,14 +44,14 @@ class CRMMacros:
             # If the user specifically targeted the base CRM URL, use the fast/hardcoded login
             if not target_url or dest.strip('/').lower() == self.base_url.strip('/').lower():
                 logger.info(f"Opening CRM: {dest}")
-                await self.engine.navigate(dest)
+                await self.engine.navigate(dest, new_tab=new_tab)
                 await self.login()
                 return "Opened CRM and logged in."
             else:
                 # Use the original DOMAgent workflow as a robust fallback for unknown logins
                 try:
                     logger.info(f"Opening CRM: {dest}")
-                    await self.engine.navigate(dest)
+                    await self.engine.navigate(dest, new_tab=new_tab)
                     from automation.browser.dom_agent import DOMAgent
                     page = await self.engine.ensure_browser()
                     agent = DOMAgent(page)
@@ -55,14 +60,14 @@ class CRMMacros:
                 except AttributeError:
                     logger.warning("DOMAgent execute_intent not implemented. Falling back to direct /login route append.")
                     route = dest + "login"
-                    await self.engine.navigate(route)
+                    await self.engine.navigate(route, new_tab=new_tab)
                     return "Opened website and navigated to login."
                 except Exception as e:
                     logger.error(f"DOMAgent login failed: {e}")
                     return f"Opened website, but failed to auto-login."
 
         logger.info(f"Opening CRM: {dest}")
-        await self.engine.navigate(dest)
+        await self.engine.navigate(dest, new_tab=new_tab)
 
         words = transcript.strip().split()
         verb = words[0].lower()

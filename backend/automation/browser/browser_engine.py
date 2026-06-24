@@ -1,14 +1,20 @@
 """
 Browser Engine — Enterprise web automation using Playwright.
-Isolates automation to a dedicated persistent profile (no CDP, no killing user's Chrome).
-Integrates stealth and human-like typing to avoid bot detection.
+
+Lifecycle model (v2 — Detached Chrome):
+  Chrome is launched as an INDEPENDENT process (not a child of Python) via subprocess.
+  Playwright connects to it via CDP (port 9222). When the backend restarts/reloads,
+  Chrome stays alive and the next ensure_browser() call reconnects via CDP instantly.
+  This eliminates the 15-30s cold-start on every server reload.
 """
 
 import asyncio
 import os
+import subprocess
 import sys
 import threading
 import random
+import time
 from pathlib import Path
 from loguru import logger
 from playwright.async_api import async_playwright, BrowserContext, Page
@@ -39,25 +45,105 @@ STANDARD_UA = (
     "Chrome/126.0.0.0 Safari/537.36"
 )
 
-# Common Chrome launch args that reduce automation fingerprint
-CHROME_ARGS = [
+# Chrome args for the detached subprocess launch
+_SUBPROCESS_CHROME_ARGS = [
+    "--remote-debugging-port=9222",
     "--disable-blink-features=AutomationControlled",
     "--no-first-run",
     "--no-default-browser-check",
     "--test-type",
-    "--remote-debugging-port=9222",
     "--disable-features=PasswordManager,IsolateOrigins,site-per-process",
     "--disable-ipc-flooding-protection",
+    "--disable-session-crashed-bubble",
     "--start-maximized",
     "--flag-switches-begin",
     "--flag-switches-end",
 ]
+
+# Playwright context args (used when connect_over_cdp returns a context without args)
+CHROME_ARGS = _SUBPROCESS_CHROME_ARGS
+
+
+def _find_chrome_executable() -> str | None:
+    """Locate the system Chrome/Chromium executable."""
+    if sys.platform == "win32":
+        candidates = [
+            os.path.expandvars(r"%PROGRAMFILES%\Google\Chrome\Application\chrome.exe"),
+            os.path.expandvars(r"%PROGRAMFILES(X86)%\Google\Chrome\Application\chrome.exe"),
+            os.path.expandvars(r"%LOCALAPPDATA%\Google\Chrome\Application\chrome.exe"),
+        ]
+    elif sys.platform == "darwin":
+        candidates = ["/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"]
+    else:
+        candidates = ["/usr/bin/google-chrome", "/usr/bin/chromium-browser", "/usr/bin/chromium"]
+
+    for c in candidates:
+        if os.path.exists(c):
+            return c
+    return None
+
+
+def _is_chrome_running_on_debug_port(port: int = 9222) -> bool:
+    """Check if a Chrome instance is already listening on the remote debugging port."""
+    import socket
+    try:
+        with socket.create_connection(("127.0.0.1", port), timeout=0.5):
+            return True
+    except OSError:
+        return False
+
+
+def _launch_detached_chrome(profile_path: str, port: int = 9222) -> None:
+    """
+    Spawn Chrome as a fully DETACHED process — independent of the Python process tree.
+    When the backend restarts, Chrome keeps running and we reconnect via CDP.
+    """
+    exe = _find_chrome_executable()
+    if not exe:
+        raise RuntimeError(
+            "Google Chrome not found on this system. "
+            "Install Chrome or set the CHROME_EXECUTABLE environment variable."
+        )
+
+    args = [
+        exe,
+        f"--user-data-dir={profile_path}",
+        f"--remote-debugging-port={port}",
+    ] + [
+        a for a in _SUBPROCESS_CHROME_ARGS
+        if not a.startswith("--remote-debugging-port")  # already added above
+    ]
+
+    if sys.platform == "win32":
+        # DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP ensures Chrome
+        # is NOT in Python's process tree and survives server restarts.
+        DETACHED_PROCESS = 0x00000008
+        CREATE_NEW_PROCESS_GROUP = 0x00000200
+        subprocess.Popen(
+            args,
+            creationflags=DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP,
+            close_fds=True,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    else:
+        subprocess.Popen(
+            args,
+            start_new_session=True,   # POSIX equivalent of detached
+            close_fds=True,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    logger.info(f"🚀 Detached Chrome launched (port {port}): {exe}")
 
 
 class BrowserEngine:
     """Singleton engine for isolated, stealthy browser automation."""
     _instance = None
     _playwright = None
+    _browser = None
     _context: BrowserContext | None = None
     _page: Page | None = None
     _lock = None
@@ -98,7 +184,11 @@ class BrowserEngine:
             await asyncio.sleep(random.uniform(0.02, 0.08))
 
     async def prewarm_profile(self):
-        """Prewarm the Chrome profile and Playwright binaries completely invisibly."""
+        """
+        Pre-warm: ensure a detached Chrome is already running before the first
+        command arrives. If Chrome is already up (server hot-reload), this is a
+        no-op and returns immediately.
+        """
         async def _do():
             if not self._playwright:
                 self._playwright = await async_playwright().start()
@@ -106,7 +196,12 @@ class BrowserEngine:
             profile_path = self._get_profile_path()
             os.makedirs(profile_path, exist_ok=True)
 
-            # Prevent "Restore pages?" bubble by fixing the Preferences file
+            # If Chrome is already running (surviving a server reload), do nothing.
+            if _is_chrome_running_on_debug_port(9222):
+                logger.info("✅ Chrome already running on port 9222 — pre-warm skipped (server reload detected).")
+                return
+
+            # Patch Chrome Preferences to prevent "Restore pages?" crash bubble
             prefs_path = os.path.join(profile_path, "Default", "Preferences")
             if os.path.exists(prefs_path):
                 try:
@@ -121,179 +216,282 @@ class BrowserEngine:
                 except Exception as e:
                     logger.debug(f"Failed to patch Chrome preferences: {e}")
 
-            # Launch headless briefly to populate cache and binaries
             try:
-                temp_ctx = await self._playwright.chromium.launch_persistent_context(
-                    user_data_dir=profile_path,
-                    channel="chrome",
-                    headless=True,
-                    user_agent=STANDARD_UA,
-                    args=[
-                        "--disable-blink-features=AutomationControlled",
-                        "--no-first-run",
-                        "--no-default-browser-check",
-                        "--disable-features=PasswordManager",
-                        "--start-maximized"
-                    ]
-                )
-                await asyncio.sleep(0.5)
-                await temp_ctx.close()
-                logger.info("✅ Headless pre-warm completed successfully.")
+                _launch_detached_chrome(profile_path)
+                # Wait up to 8s for Chrome to open its debug port
+                for _ in range(16):
+                    await asyncio.sleep(0.5)
+                    if _is_chrome_running_on_debug_port(9222):
+                        logger.info("✅ Detached Chrome is ready on port 9222.")
+                        break
+                else:
+                    logger.warning("⚠️  Chrome did not open debug port in 8s — first command will be slow.")
             except Exception as e:
-                logger.debug(f"Headless prewarm skipped/failed: {e}")
+                logger.warning(f"⚠️  Detached Chrome launch failed during pre-warm: {e}")
 
         await _run_in_playwright(_do())
 
     async def ensure_browser(self, background: bool = False) -> Page:
+        """
+        Connect to an already-running detached Chrome via CDP.
+        If Chrome is not running yet, launch it as a detached subprocess first.
+
+        Always resolves to the tab the user is **currently looking at**
+        (document.visibilityState === 'visible'), so voice commands target
+        the right page even after the user manually switches tabs.
+        """
         async def _do_ensure():
             if self._lock is None:
                 self._lock = asyncio.Lock()
             async with self._lock:
-                if self._context and not getattr(self._context, 'is_closed', lambda: True)():
-                    if not self._page or self._page.is_closed():
+
+                async def _resolve_active_page() -> Page:
+                    """
+                    Resolve the currently active browser tab.
+
+                    Optimized:
+                    1. Fetch targets from Chrome's http://localhost:9222/json REST API.
+                       This is a fast HTTP call (takes <5ms, no persistent connections).
+                    2. Check if the set of tabs has changed. If they match the pages we currently
+                       track in `self._context`, we just evaluate visibilityState on our existing pages (fast, <2ms).
+                    3. If there is a mismatch (new tab opened manually, closed, etc.),
+                       we cleanly close the old connection and reconnect once.
+                    """
+                    import urllib.request
+                    import json as _json
+
+                    _SKIP = ('chrome-extension://', 'chrome://', 'about:blank', 'devtools://')
+                    _SKIP_HOSTS = ('localhost:3000', '127.0.0.1:3000')
+
+                    def _is_valid(url: str) -> bool:
+                        u = url.lower()
+                        return (
+                            not any(u.startswith(s) for s in _SKIP)
+                            and not any(h in u for h in _SKIP_HOSTS)
+                        )
+
+                    # 1. Fetch live Chrome tabs from local REST API
+                    try:
+                        def _fetch():
+                            with urllib.request.urlopen("http://localhost:9222/json", timeout=1.0) as resp:
+                                return _json.loads(resp.read())
+                        targets = await asyncio.to_thread(_fetch)
+                    except Exception as e:
+                        logger.debug(f"_resolve_active_page: CDP /json fetch failed: {e}")
+                        targets = []
+
+                    live_urls = {
+                        t.get("url", "") for t in targets
+                        if t.get("type") == "page" and _is_valid(t.get("url", ""))
+                    }
+
+                    # Compare with our current context pages
+                    reconnect_needed = False
+                    if not self._browser or not self._context:
+                        reconnect_needed = True
+                    else:
+                        try:
+                            ctx_pages = [p for p in self._context.pages if not p.is_closed()]
+                            ctx_urls = {p.url for p in ctx_pages if _is_valid(p.url)}
+                            if not live_urls.issubset(ctx_urls) or len(live_urls) != len(ctx_urls):
+                                reconnect_needed = True
+                        except Exception:
+                            reconnect_needed = True
+
+                    if reconnect_needed:
+                        logger.info("🔄 Tab change detected or initial connection — reconnecting CDP to refresh pages...")
+                        try:
+                            # Safely close old browser connection to prevent resource/WS leaks
+                            if self._browser:
+                                try:
+                                    await self._browser.close()
+                                except Exception:
+                                    pass
+                                self._browser = None
+                                self._context = None
+
+                            self._browser = await self._playwright.chromium.connect_over_cdp(
+                                "http://localhost:9222"
+                            )
+                            self._context = self._browser.contexts[0] if self._browser.contexts else await self._browser.new_context()
+                        except Exception as e:
+                            logger.error(f"_resolve_active_page: Reconnection failed: {e}")
+
+                    # Find the active tab in self._context
+                    if self._context:
+                        candidates = [
+                            p for p in self._context.pages
+                            if not p.is_closed() and _is_valid(p.url)
+                        ]
+                        for p in candidates:
+                            try:
+                                # Check if this is the active visible tab in Chrome
+                                if await p.evaluate("document.visibilityState === 'visible'"):
+                                    if p.url != getattr(self._page, "url", ""):
+                                        logger.info(f"🔀 Active tab switched → {p.url}")
+                                    return p
+                            except Exception:
+                                continue
+
+                        # visibilityState check failed for all tabs — Chrome window is backgrounded
+                        # while the user speaks (ACE overlay/mic grabbed focus).
+                        # Prefer self._page (last explicitly-visited tab) over an arbitrary list position.
+                        if self._page and not self._page.is_closed() and self._page in candidates:
+                            logger.debug(
+                                f"All tabs hidden (Chrome backgrounded) — reusing last known active tab: {self._page.url}"
+                            )
+                            return self._page
+
+                        # Last resort: newest valid tab
+                        if candidates:
+                            return candidates[-1]
+
+                    # Ultimate fallback
+                    if self._page and not self._page.is_closed():
+                        return self._page
+                    if self._context:
                         pages = self._context.pages
-                        self._page = pages[0] if pages else await self._context.new_page()
+                        return pages[-1] if pages else await self._context.new_page()
                     return self._page
+
+                # ── Fast path: context still valid ───────────────────────────
+                if self._context:
+                    try:
+                        # Liveness check: .pages raises if the CDP connection is dead
+                        _ = self._context.pages
+                        # Always sync to whichever tab the user is currently viewing
+                        self._page = await _resolve_active_page()
+                        return self._page
+                    except Exception:
+                        # Context is dead (server reloaded while Chrome was open)
+                        logger.debug("Cached context is stale — will reconnect via CDP.")
+                        self._context = None
+                        self._page = None
 
                 if not self._playwright:
                     self._playwright = await async_playwright().start()
 
                 profile_path = self._get_profile_path()
                 os.makedirs(profile_path, exist_ok=True)
+                b_type = settings.browser_type.lower()
 
-                logger.info(f"Launching Browser ({settings.browser_type}) in isolated profile: {profile_path}")
-                is_cdp_reconnect = False
+                # ── Firefox / WebKit: classic persistent context ──────────────
+                if b_type == "firefox":
+                    self._context = await self._playwright.firefox.launch_persistent_context(
+                        user_data_dir=profile_path, headless=False, no_viewport=True,
+                    )
+                elif b_type == "webkit":
+                    self._context = await self._playwright.webkit.launch_persistent_context(
+                        user_data_dir=profile_path, headless=False, no_viewport=True,
+                    )
+                else:
+                    # ── Chrome: detached subprocess + CDP ────────────────────
+                    # Step 1: Ensure Chrome is running on port 9222
+                    if not _is_chrome_running_on_debug_port(9222):
+                        logger.info("Chrome not detected on port 9222 — launching detached process.")
+                        try:
+                            _launch_detached_chrome(profile_path)
+                        except Exception as launch_err:
+                            logger.error(f"Failed to launch Chrome: {launch_err}")
+                            raise
 
-                try:
-                    b_type = settings.browser_type.lower()
+                        # Wait up to 10s for Chrome's debug port to become ready
+                        for _ in range(20):
+                            await asyncio.sleep(0.5)
+                            if _is_chrome_running_on_debug_port(9222):
+                                break
+                        else:
+                            raise RuntimeError("Chrome launched but debug port 9222 never opened.")
 
+                    # Step 2: Connect via CDP (fast, ~50ms)
+                    logger.info("Connecting to Chrome via CDP on port 9222...")
                     try:
-                        if b_type == "firefox":
-                            self._context = await self._playwright.firefox.launch_persistent_context(
-                                user_data_dir=profile_path,
-                                headless=False,
-                                no_viewport=True,
-                            )
-                        elif b_type == "webkit":
-                            self._context = await self._playwright.webkit.launch_persistent_context(
-                                user_data_dir=profile_path,
-                                headless=False,
-                                no_viewport=True,
-                            )
-                        else:
-                            # Attempt to reconnect via CDP first
-                            try:
-                                browser = await self._playwright.chromium.connect_over_cdp("http://localhost:9222")
-                                self._context = browser.contexts[0] if browser.contexts else await browser.new_context()
-                                is_cdp_reconnect = True
-                                logger.info("Successfully reconnected to existing Chrome instance via CDP.")
-                            except Exception as e:
-                                logger.debug(f"No active CDP session found (expected if browser is closed): {e}")
-                                logger.info("Launching new persistent context.")
+                        self._browser = await self._playwright.chromium.connect_over_cdp("http://localhost:9222")
+                        self._context = self._browser.contexts[0] if self._browser.contexts else await self._browser.new_context()
+                        logger.info("✅ Connected to Chrome via CDP.")
+                    except Exception as cdp_err:
+                        logger.error(f"CDP connection failed: {cdp_err}")
+                        raise
 
-                                # FIX: user_agent now set on the primary launch path
-                                self._context = await self._playwright.chromium.launch_persistent_context(
-                                    user_data_dir=profile_path,
-                                    channel="chrome",
-                                    headless=False,
-                                    no_viewport=True,
-                                    user_agent=STANDARD_UA,
-                                    args=CHROME_ARGS,
-                                    ignore_default_args=["--enable-automation"]
-                                )
-
-                    except Exception as launch_err:
-                        logger.warning(f"Browser launch failed, attempting to kill locked processes: {launch_err}")
-                        import psutil
-                        for proc in psutil.process_iter(['name', 'cmdline']):
-                            try:
-                                if proc.info['name'] and proc.info['name'].lower() in ['chrome.exe', 'msedge.exe', 'firefox.exe']:
-                                    cmdline = proc.info.get('cmdline')
-                                    if cmdline and any('ACE\\BrowserProfile' in str(arg) for arg in cmdline):
-                                        logger.info(f"Killing orphaned browser process: {proc.info['name']} (PID: {proc.pid})")
-                                        proc.kill()
-                            except (psutil.NoSuchProcess, psutil.AccessDenied):
-                                pass
-
-                        await asyncio.sleep(2.0)
-
-                        # Retry once after cleanup
-                        if b_type == "firefox":
-                            self._context = await self._playwright.firefox.launch_persistent_context(
-                                user_data_dir=profile_path, headless=False, no_viewport=True
-                            )
-                        elif b_type == "webkit":
-                            self._context = await self._playwright.webkit.launch_persistent_context(
-                                user_data_dir=profile_path, headless=False, no_viewport=True
-                            )
-                        else:
-                            self._context = await self._playwright.chromium.launch_persistent_context(
-                                user_data_dir=profile_path,
-                                channel="chrome",
-                                headless=False,
-                                no_viewport=True,
-                                user_agent=STANDARD_UA,
-                                args=CHROME_ARGS + ["--disable-session-crashed-bubble"],
-                                ignore_default_args=["--enable-automation"]
-                            )
-
-                    if not is_cdp_reconnect:
-                        b_type = settings.browser_type.lower()
-                        if b_type not in ["firefox", "webkit"]:
-                            # Apply stealth to the context
-                            await self._apply_stealth(self._context)
-                            # Apply stealth to any already-open pages
-                            for p in self._context.pages:
-                                await self._apply_stealth(p)
-                            # FIX: let stealth JS patches settle before any navigation
-                            await asyncio.sleep(0.3)
-
-                    pages = self._context.pages
-
-                    # Intelligently find the active/relevant page,
-                    # filtering out extensions, blanks, and the command console
-                    active_page = None
-                    for p in reversed(pages):
-                        url = p.url.lower()
-                        if (not url.startswith('chrome-extension://')
-                                and url != 'about:blank'
-                                and 'localhost:3000' not in url
-                                and '127.0.0.1:3000' not in url):
-                            active_page = p
-                            break
-
-                    self._page = active_page if active_page else (pages[-1] if pages else await self._context.new_page())
-                    return self._page
-
-                except Exception as e:
-                    logger.error(f"Failed to launch persistent context: {e}")
-                    raise
+                # ── Page selection (cold start) ────────────────────────────
+                self._page = await _resolve_active_page()
+                return self._page
 
         return await _run_in_playwright(_do_ensure())
 
+
     async def close_browser(self):
+        """
+        Disconnect Playwright from Chrome WITHOUT killing the Chrome process.
+        Chrome stays alive so the next server startup can reconnect in ~50ms.
+        Call kill_browser() explicitly if you actually want to terminate Chrome.
+        """
         async def _do_close():
             if self._lock is None:
                 self._lock = asyncio.Lock()
             async with self._lock:
-                if self._context:
-                    await self._context.close()
-                    self._context = None
-                    self._page = None
+                if self._browser:
+                    try:
+                        await self._browser.close()
+                    except Exception:
+                        pass
+                self._browser = None
+                self._context = None
+                self._page = None
                 if self._playwright:
                     await self._playwright.stop()
                     self._playwright = None
+                logger.info("Playwright disconnected from Chrome (Chrome process still running).")
         await _run_in_playwright(_do_close())
 
+    async def kill_browser(self):
+        """Terminate the Chrome process entirely (use only when a full restart is needed)."""
+        import psutil
+        killed = False
+        for proc in psutil.process_iter(['name', 'cmdline']):
+            try:
+                if proc.info['name'] and proc.info['name'].lower() in ('chrome.exe', 'chromium', 'chromium-browser'):
+                    cmdline = proc.info.get('cmdline') or []
+                    if any('--remote-debugging-port=9222' in str(a) for a in cmdline):
+                        proc.terminate()
+                        killed = True
+                        logger.info(f"Terminated Chrome process PID {proc.pid}.")
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                pass
+        if self._browser:
+            try:
+                await self._browser.close()
+            except Exception:
+                pass
+        self._browser = None
+        self._context = None
+        self._page = None
+        if self._playwright:
+            async def _stop():
+                await self._playwright.stop()
+                self._playwright = None
+            await _run_in_playwright(_stop())
+        return "Chrome terminated." if killed else "No ACE Chrome process found to terminate."
+
     async def restart_browser(self):
-        await self.close_browser()
+        """Kill Chrome and relaunch it fresh."""
+        await self.kill_browser()
+        import asyncio as _a
+        await _a.sleep(1.0)  # let the OS release the port
         await self.ensure_browser()
         return "Browser restarted."
 
-    # --- Navigation ---
-    async def navigate(self, url: str) -> str:
+    async def navigate(self, url: str, new_tab: bool = False) -> str:
         async def _do_nav():
-            page = await self.ensure_browser()
+            if new_tab:
+                await self.ensure_browser()
+                if not self._context:
+                    raise RuntimeError("Browser context not initialized.")
+                self._page = await self._context.new_page()
+                await self._apply_stealth(self._page)
+                page = self._page
+            else:
+                page = await self.ensure_browser()
             target = f"https://{url}" if not url.startswith(("http://", "https://")) else url
 
             # Bring to front and maximize BEFORE goto() to avoid main-thread block
@@ -438,6 +636,38 @@ class BrowserEngine:
                 await self._page.bring_to_front()
                 return "Switched to last tab."
             return "No tabs open."
+        return await _run_in_playwright(_do())
+
+    async def switch_tab_next(self) -> str:
+        async def _do():
+            await self.ensure_browser()
+            pages = self._context.pages
+            if not pages:
+                return "No tabs open."
+            try:
+                current_idx = pages.index(self._page)
+            except ValueError:
+                current_idx = 0
+            next_idx = (current_idx + 1) % len(pages)
+            self._page = pages[next_idx]
+            await self._page.bring_to_front()
+            return f"Switched to next tab ({next_idx + 1} of {len(pages)})."
+        return await _run_in_playwright(_do())
+
+    async def switch_tab_prev(self) -> str:
+        async def _do():
+            await self.ensure_browser()
+            pages = self._context.pages
+            if not pages:
+                return "No tabs open."
+            try:
+                current_idx = pages.index(self._page)
+            except ValueError:
+                current_idx = 0
+            prev_idx = (current_idx - 1) % len(pages)
+            self._page = pages[prev_idx]
+            await self._page.bring_to_front()
+            return f"Switched to previous tab ({prev_idx + 1} of {len(pages)})."
         return await _run_in_playwright(_do())
 
     async def switch_tab_by_url(self, partial_url: str) -> str:
@@ -744,13 +974,21 @@ class BrowserEngine:
         return "Upload handlers configured. Trigger a file chooser to upload."
 
     # --- Human-like Search (Anti-Bot) ---
-    async def search_google(self, query: str) -> str:
+    async def search_google(self, query: str, new_tab: bool = False) -> str:
         """
         FIX: Navigate to google.com homepage first, then type the query like a human.
         Going directly to /search?q= is a major bot detection signal.
         """
         async def _do():
-            page = await self.ensure_browser()
+            if new_tab:
+                await self.ensure_browser()
+                if not self._context:
+                    raise RuntimeError("Browser context not initialized.")
+                self._page = await self._context.new_page()
+                await self._apply_stealth(self._page)
+                page = self._page
+            else:
+                page = await self.ensure_browser()
             logger.info(f"[search_google] Navigating to Google homepage then typing query: '{query}'")
 
             from playwright.async_api import TimeoutError as PlaywrightTimeoutError
@@ -796,13 +1034,21 @@ class BrowserEngine:
             return f"Searched Google for '{query}'"
         return await _run_in_playwright(_do())
 
-    async def search_youtube(self, query: str) -> str:
+    async def search_youtube(self, query: str, new_tab: bool = False) -> str:
         """
         FIX: Navigate to YouTube homepage first, then type into the search box
         instead of going directly to the search results URL.
         """
         async def _do():
-            page = await self.ensure_browser()
+            if new_tab:
+                await self.ensure_browser()
+                if not self._context:
+                    raise RuntimeError("Browser context not initialized.")
+                self._page = await self._context.new_page()
+                await self._apply_stealth(self._page)
+                page = self._page
+            else:
+                page = await self.ensure_browser()
             logger.info(f"[search_youtube] Navigating to YouTube homepage then typing query: '{query}'")
 
             from playwright.async_api import TimeoutError as PlaywrightTimeoutError

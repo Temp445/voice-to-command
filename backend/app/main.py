@@ -206,34 +206,14 @@ async def _background_init(app_state, running_loop: asyncio.AbstractEventLoop):
         from app.services.command_service import command_service
         await command_service.warm_website_shortcuts()
 
-    async def _prewarm_browser():
-        """Launch the Playwright browser in background during Phase 1.
-        
-        Without this, the FIRST voice command that opens a website triggers a
-        cold browser launch: Playwright init (~2s) + Chrome persistent context
-        launch (~10–15s) + stealth patch (~3s) + CDP maximize (~0.5s) = 15–30s
-        (measured at 106s on slow HDD + cold Chrome profile).
-        
-        Pre-warming absorbs all of that cost at startup so the first command
-        navigates to its URL immediately.
-        """
-        try:
-            # Small delay so Phase 1 settings (browser_type etc.) are applied first
-            await asyncio.sleep(1.0)
-            from automation.browser.browser_engine import BrowserEngine
-            engine = BrowserEngine()
-            await engine.prewarm_profile()
-            logger.info("✅ Browser pre-warmed invisibly — next navigation will be fast")
-        except Exception as e:
-            logger.warning(f"⚠️  Browser pre-warm failed (non-fatal, will cold-start on first use): {e}")
 
     await asyncio.gather(
         _restore_settings(),
         _init_llm(),
         _warm_shortcuts(),
-        _prewarm_browser(),
         return_exceptions=True,
     )
+    logger.info("ℹ️  Browser launch deferred — Chrome will open on first browser command.")
     logger.info(f"✅ Phase 1 done in {asyncio.get_event_loop().time() - t0:.1f}s — server fully operational")
 
     # Resolve scan_mode from restored settings

@@ -39,3 +39,8 @@ class MouseController:
         # Note: on Windows, negative scroll values scroll down.
         pyautogui.scroll(-amount)
         logger.debug(f"Scrolled down by {amount}.")
+
+    def triple_click(self) -> None:
+        """Triple click at the current mouse position."""
+        pyautogui.click(clicks=3)
+        logger.debug("Mouse triple-clicked.")
