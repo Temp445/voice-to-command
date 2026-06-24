@@ -109,6 +109,7 @@ def start_local_mic():
     global _local_mic_running
     if _local_mic_running:
         return
+    logger.info("🎙️ Starting local microphone broadcast thread...")
     _local_mic_running = True
     threading.Thread(target=_local_mic_loop, daemon=True).start()
 

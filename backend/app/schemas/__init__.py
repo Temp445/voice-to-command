@@ -57,6 +57,10 @@ class SettingsUpdate(BaseModel):
     llm_temperature: float | None = None
     llm_mode: str | None = None           # "fallback" | "always_on"
     scan_mode: str | None = None          # "auto" | "manual"
+    # ElevenLabs
+    elevenlabs_api_key: str | None = None
+    # Deepgram
+    deepgram_api_key: str | None = None
 
 
 class SettingsResponse(BaseModel):
@@ -87,6 +91,11 @@ class SettingsResponse(BaseModel):
     llm_temperature: float
     llm_mode: str
     scan_mode: str          # "auto" | "manual"
+    # ElevenLabs
+    elevenlabs_configured: bool
+    # Deepgram
+    deepgram_configured: bool
+
 
 
 # ─── Commands ────────────────────────────────────────────────────────────────

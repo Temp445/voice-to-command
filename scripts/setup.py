@@ -86,11 +86,28 @@ def main():
         print("  ℹ️  .env already exists")
 
     print("\n🐍 Installing Python dependencies...")
-    rc = pip_install(requirements=str(ROOT / "backend" / "requirements.txt"))
-    if rc != 0:
-        print("  ⚠️  Some packages failed. Retrying with --no-deps for core packages...")
+    req_files = [
+        ROOT / "backend" / "requirements.txt",
+        ROOT / "backend" / "requirements-automation.in",
+        ROOT / "backend" / "requirements-voice.in"
+    ]
+    
+    any_failed = False
+    for req_file in req_files:
+        if req_file.exists():
+            print(f"  Installing from {req_file.name}...")
+            rc = pip_install(requirements=str(req_file))
+            if rc != 0:
+                print(f"  ⚠️  Failed to install dependencies from {req_file.name}")
+                any_failed = True
+        else:
+            print(f"  ⚠️  Requirements file not found: {req_file}")
+            any_failed = True
+
+    if any_failed:
+        print("  ⚠️  Some packages failed. Retrying with core packages fallback...")
         # Install critical packages individually as fallback
-        for pkg in ["fastapi", "uvicorn[standard]", "sqlalchemy", "pydantic", "loguru", "httpx"]:
+        for pkg in ["fastapi", "uvicorn[standard]", "sqlalchemy", "pydantic", "loguru", "httpx", "psutil"]:
             pip_install(pkg)
 
     print("\n📥 Downloading Piper TTS voice model...")

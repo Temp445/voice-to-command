@@ -4,7 +4,7 @@ import { persist } from "zustand/middleware";
 
 interface SettingsStore {
   wakeWord: string;
-  sttProvider: "whisper" | "gstt";
+  sttProvider: "whisper" | "gstt" | "elevenlabs" | "deepgram";
   sttNoiseCancellation: boolean;
   whisperModel: "tiny" | "base" | "small" | "medium";
   activeModeTimeout: number;
@@ -20,6 +20,14 @@ interface SettingsStore {
   overlayShortcut: string;
   listenShortcut: string;
   
+  // ElevenLabs
+  elevenlabsApiKey: string;
+  elevenlabsConfigured: boolean;
+
+  // Deepgram
+  deepgramApiKey: string;
+  deepgramConfigured: boolean;
+
   // CRM Integration
   crmUrl: string;       // legacy: first site URL (kept for backward compat)
   crmKeywords: string;  // legacy: first site keywords
@@ -88,6 +96,14 @@ export const useSettingsStore = create<SettingsStore>()(
 
       // Scanning
       scanMode:       "auto",
+
+      // ElevenLabs
+      elevenlabsApiKey: "",
+      elevenlabsConfigured: false,
+
+      // Deepgram
+      deepgramApiKey: "",
+      deepgramConfigured: false,
 
       setTtsProvider: (p) => set({ ttsProvider: p }),
       update: (patch) => {

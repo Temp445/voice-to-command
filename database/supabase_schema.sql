@@ -48,6 +48,8 @@ CREATE TABLE IF NOT EXISTS public.settings (
     llm_temperature             FLOAT DEFAULT 0.7,
     llm_mode                    TEXT DEFAULT 'fallback',
     scan_mode                   TEXT DEFAULT 'manual' CHECK (scan_mode IN ('auto', 'manual')),
+    elevenlabs_api_key_encrypted TEXT,
+    deepgram_api_key_encrypted   TEXT,
     updated_at                  TIMESTAMPTZ DEFAULT NOW(),
     UNIQUE(user_id)
 );

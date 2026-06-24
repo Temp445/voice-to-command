@@ -98,6 +98,8 @@ export default function SettingsPage() {
         llmEnabled: data.llm_enabled, llmProvider: data.llm_provider, llmModel: data.llm_model,
         llmMode: data.llm_mode, llmTemperature: data.llm_temperature,
         scanMode: (data.scan_mode as "auto" | "manual") || "manual",
+        elevenlabsConfigured: data.elevenlabs_configured || false,
+        deepgramConfigured: data.deepgram_configured || false,
       });
       setInitialLoaded(true);
     }).catch(err => console.error(err));
@@ -121,7 +123,7 @@ export default function SettingsPage() {
     settings.activeModeTimeout, settings.requireWakeWordAlways,
     settings.crmUrl, settings.crmKeywords, JSON.stringify(settings.crmSites),
     settings.llmEnabled, settings.llmProvider, settings.llmModel, settings.llmMode,
-    settings.llmTemperature, settings.llmApiKey, settings.scanMode
+    settings.llmTemperature, settings.llmApiKey, settings.scanMode, settings.elevenlabsApiKey, settings.deepgramApiKey
   ]);
 
   const handleTestLlm = async () => {
@@ -261,6 +263,8 @@ export default function SettingsPage() {
         scan_mode: settings.scanMode,
       };
       if (settings.llmApiKey) patch.llm_api_key = settings.llmApiKey;
+      if (settings.elevenlabsApiKey) patch.elevenlabs_api_key = settings.elevenlabsApiKey;
+      if (settings.deepgramApiKey) patch.deepgram_api_key = settings.deepgramApiKey;
       await api.updateSettings(patch);
       setSaved(true); setTimeout(() => setSaved(false), 2500);
     } finally { setSaving(false); }
@@ -289,14 +293,15 @@ export default function SettingsPage() {
               </div>
               <div>
                 <p style={lbl}>STT Provider</p>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginBottom: "1.5rem" }}>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "1rem", marginBottom: "1.5rem" }}>
                   {[
                     { key: "whisper", label: "Whisper", desc: "Private, works offline" },
-                    // { key: "gstt", label: "Google STT", desc: "Highly accurate, requires internet" },
+                    { key: "elevenlabs", label: "ElevenLabs STT", desc: "Scribe v2 cloud, highly accurate" },
+                    { key: "deepgram", label: "Deepgram STT", desc: "Nova-3 cloud, blazing fast" },
                   ].map(({ key, label, desc }) => {
                     const active = settings.sttProvider === key;
                     return (
-                      <button key={key} onClick={() => settings.update({ sttProvider: key as "whisper" | "gstt" })}
+                      <button key={key} onClick={() => settings.update({ sttProvider: key as "whisper" | "elevenlabs" | "deepgram" })}
                         style={{ textAlign: "left", padding: "1.25rem", borderRadius: "0.75rem", cursor: "pointer", transition: "all 0.2s ease", background: active ? "var(--secondary)" : "transparent", border: active ? "2px solid var(--primary)" : "1px solid var(--border)", boxShadow: active ? "0 4px 12px rgba(0,0,0,0.05)" : "none" }}>
                         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.5rem" }}>
                           <span style={{ fontSize: "0.9375rem", fontWeight: 600, color: "var(--foreground)" }}>{label}</span>
@@ -308,6 +313,50 @@ export default function SettingsPage() {
                   })}
                 </div>
               </div>
+
+              {settings.sttProvider === "elevenlabs" && (
+                <div style={{ marginBottom: "1.5rem" }}>
+                  <p style={lbl}>ElevenLabs API Key</p>
+                  <div style={{ position: "relative", maxWidth: "24rem" }}>
+                    <input
+                      type={showApiKey ? "text" : "password"}
+                      style={{ ...inp, paddingRight: "3.5rem" }}
+                      placeholder={settings.elevenlabsConfigured ? "••••••••••••••••••••••••" : "Enter ElevenLabs API Key"}
+                      value={settings.elevenlabsApiKey}
+                      onChange={(e) => settings.update({ elevenlabsApiKey: e.target.value })}
+                    />
+                    <button
+                      onClick={() => setShowApiKey(!showApiKey)}
+                      style={{ position: "absolute", right: "1rem", top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "var(--muted-foreground)" }}
+                    >
+                      {showApiKey ? <EyeOff size={18} /> : <Eye size={18} />}
+                    </button>
+                  </div>
+                  <p style={sub}>API key is required to use ElevenLabs STT. Saved securely in the database.</p>
+                </div>
+              )}
+
+              {settings.sttProvider === "deepgram" && (
+                <div style={{ marginBottom: "1.5rem" }}>
+                  <p style={lbl}>Deepgram API Key</p>
+                  <div style={{ position: "relative", maxWidth: "24rem" }}>
+                    <input
+                      type={showApiKey ? "text" : "password"}
+                      style={{ ...inp, paddingRight: "3.5rem" }}
+                      placeholder={settings.deepgramConfigured ? "••••••••••••••••••••••••" : "Enter Deepgram API Key"}
+                      value={settings.deepgramApiKey}
+                      onChange={(e) => settings.update({ deepgramApiKey: e.target.value })}
+                    />
+                    <button
+                      onClick={() => setShowApiKey(!showApiKey)}
+                      style={{ position: "absolute", right: "1rem", top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "var(--muted-foreground)" }}
+                    >
+                      {showApiKey ? <EyeOff size={18} /> : <Eye size={18} />}
+                    </button>
+                  </div>
+                  <p style={sub}>API key is required to use Deepgram STT. Saved securely in the database.</p>
+                </div>
+              )}
 
               {settings.sttProvider === "whisper" && (
                 <div>

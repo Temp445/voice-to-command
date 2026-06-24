@@ -45,6 +45,8 @@ _DEFAULTS = {
     "llm_temperature": 0.7,
     "llm_mode": "fallback",
     "scan_mode": "manual",
+    "elevenlabs_api_key_encrypted": None,
+    "deepgram_api_key_encrypted": None,
 }
 
 
@@ -128,6 +130,8 @@ def _build_response(s: dict) -> SettingsResponse:
         llm_temperature=s.get("llm_temperature", 0.7),
         llm_mode=s.get("llm_mode", "fallback"),
         scan_mode=s.get("scan_mode", "manual"),
+        elevenlabs_configured=bool(s.get("elevenlabs_api_key_encrypted")),
+        deepgram_configured=bool(s.get("deepgram_api_key_encrypted")),
     )
 
 
@@ -136,6 +140,8 @@ def _build_response(s: dict) -> SettingsResponse:
 @router.get("", response_model=SettingsResponse)
 async def get_settings(request: Request, user_id: str = Depends(get_current_user_id)):
     s = await _get_or_create_settings(user_id)
+    _apply_elevenlabs_settings(s)
+    _apply_deepgram_settings(s)
     
     from app.config import settings as global_settings
     global_settings.owner_user_id = user_id
@@ -180,6 +186,12 @@ async def update_settings(
     for field, value in body.model_dump(exclude_none=True).items():
         if field == "llm_api_key" and value:
             updates["llm_api_key_encrypted"] = encrypt_api_key(value)
+        elif field == "elevenlabs_api_key" and value:
+            updates["elevenlabs_api_key_encrypted"] = encrypt_api_key(value)
+            global_settings.elevenlabs_api_key = value
+        elif field == "deepgram_api_key" and value:
+            updates["deepgram_api_key_encrypted"] = encrypt_api_key(value)
+            global_settings.deepgram_api_key = value
         else:
             updates[field] = value
             # Sync to in-memory config
@@ -248,6 +260,10 @@ async def update_settings(
     llm_fields = {"llm_provider", "llm_model", "llm_api_key", "llm_enabled", "llm_mode", "llm_temperature"}
     if any(f in body.model_dump(exclude_none=True) for f in llm_fields):
         _apply_llm_settings(s)
+
+    # Hot-swap ElevenLabs settings if ElevenLabs settings changed
+    if "elevenlabs_api_key" in body.model_dump(exclude_none=True):
+        _apply_elevenlabs_settings(s)
 
     # Hot-reload STT model if it changed
     if "whisper_model" in body.model_dump(exclude_none=True):
@@ -341,6 +357,31 @@ def _apply_llm_settings(s: dict) -> None:
             msg = str(e) or repr(e)
         logger.error(f"Failed to apply LLM settings: {msg}")
         llm_service.disable(f"Initialization Failed: {msg}")
+
+
+def _apply_elevenlabs_settings(s: dict) -> None:
+    """Decrypt the ElevenLabs API key and apply it to global settings."""
+    from app.config import settings as global_settings
+    if s.get("elevenlabs_api_key_encrypted"):
+        try:
+            api_key = decrypt_api_key(s["elevenlabs_api_key_encrypted"])
+            global_settings.elevenlabs_api_key = api_key
+            logger.info("✅ ElevenLabs STT API key loaded and decrypted")
+        except Exception as e:
+            logger.error(f"Failed to decrypt ElevenLabs STT API key: {e}")
+
+
+def _apply_deepgram_settings(s: dict) -> None:
+    """Decrypt the Deepgram API key and apply it to global settings."""
+    from app.config import settings as global_settings
+    if s.get("deepgram_api_key_encrypted"):
+        try:
+            api_key = decrypt_api_key(s["deepgram_api_key_encrypted"])
+            global_settings.deepgram_api_key = api_key
+            logger.info("✅ Deepgram STT API key loaded and decrypted")
+        except Exception as e:
+            logger.error(f"Failed to decrypt Deepgram STT API key: {e}")
+
 
 
 # ── On-Demand Scan Endpoint ────────────────────────────────────────────────────

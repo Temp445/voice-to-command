@@ -102,6 +102,8 @@ class UserSettings(Base):
     llm_api_key_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
     llm_temperature: Mapped[float] = mapped_column(default=0.7)
     llm_mode: Mapped[str] = mapped_column(String(20), default="fallback")  # fallback | always_on
+    elevenlabs_api_key_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
+    deepgram_api_key_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
     user: Mapped["User"] = relationship("User", back_populates="settings")

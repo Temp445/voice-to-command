@@ -23,7 +23,7 @@ SAMPLE_RATE = 16000
 CHUNK_SIZE = 1280          # 80ms at 16kHz (OWW requirement)
 FORMAT = pyaudio.paInt16
 CHANNELS = 1
-DETECTION_THRESHOLD = 0.65  # Confidence threshold (Increased to 0.65 to strictly prevent false positives)
+DETECTION_THRESHOLD = 0.50  # Confidence threshold (Lowered to 0.50 to make it more responsive to different voices)
 
 # Max bytes we allow to queue up before dropping stale audio.
 # 3 × 1280 samples × 2 bytes = ~240ms of backlog before we start skipping.
@@ -68,6 +68,7 @@ class WakeWordDetector:
         self._model: "OWWModel | None" = None
         self._audio = pyaudio.PyAudio()
         self._audio_buffer = np.array([], dtype=np.int16)
+        self._chunk_counter = 0
 
     def _load_model(self) -> "OWWModel":
         if not OWW_AVAILABLE:
@@ -153,6 +154,11 @@ class WakeWordDetector:
                 while len(self._audio_buffer) >= CHUNK_SIZE:
                     chunk = self._audio_buffer[:CHUNK_SIZE]
                     self._audio_buffer = self._audio_buffer[CHUNK_SIZE:]
+
+                    self._chunk_counter += 1
+                    if self._chunk_counter % 50 == 0:
+                        rms = np.sqrt(np.mean(chunk.astype(np.float32) ** 2))
+                        logger.info(f"🎙️ Audio Stream Active: RMS amplitude = {rms:.1f} (counter={self._chunk_counter})")
 
                     predictions = self._model.predict(chunk)
 

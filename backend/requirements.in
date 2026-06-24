@@ -18,3 +18,8 @@ ollama
 aiofiles
 loguru
 rich
+symspellpy
+
+
+-r requirements-automation.in
+-r requirements-voice.in

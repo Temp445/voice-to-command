@@ -165,7 +165,7 @@ async def _background_init(app_state, running_loop: asyncio.AbstractEventLoop):
     async def _restore_settings():
         try:
             from app.core.supabase_client import supabase_admin, sb_run
-            from app.routers.settings_router import _apply_llm_settings
+            from app.routers.settings_router import _apply_llm_settings, _apply_elevenlabs_settings, _apply_deepgram_settings
             # Hard 5s timeout — never let a slow/cold Supabase hang Phase 1
             res = await asyncio.wait_for(
                 sb_run(lambda: supabase_admin.table("settings").select("*").order("updated_at", desc=True).limit(1).execute()),
@@ -181,12 +181,16 @@ async def _background_init(app_state, running_loop: asyncio.AbstractEventLoop):
                     "active_mode_timeout", "require_wake_word_always", "browser_type",
                     "enable_desktop_overlay", "crm_url", "crm_keywords", "crm_sites",
                     "llm_provider", "llm_model", "llm_mode", "llm_temperature",
-                    "scan_mode",
+                    "scan_mode", "stt_provider",
                 ):
                     if field in s and s[field] is not None and hasattr(gs, field):
                         setattr(gs, field, s[field])
                 if s.get("llm_api_key_encrypted"):
                     _apply_llm_settings(s)
+                if s.get("elevenlabs_api_key_encrypted"):
+                    _apply_elevenlabs_settings(s)
+                if s.get("deepgram_api_key_encrypted"):
+                    _apply_deepgram_settings(s)
                 logger.info(f"✅ Settings restored (user={gs.owner_user_id})")
         except asyncio.TimeoutError:
             logger.warning("⚠️  Settings restore timed out after 5s — using defaults. Will retry on next restart.")

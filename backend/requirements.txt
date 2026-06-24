@@ -4,28 +4,64 @@
 #
 #    pip-compile --output-file=requirements.txt requirements.in
 #
---trusted-host pypi.org
---trusted-host pypi.python.org
---trusted-host files.pythonhosted.org
-
 aiofiles==25.1.0
-    # via -r requirements.in
+    # via
+    #   -r requirements.in
+    #   bubus
+aiohappyeyeballs==2.6.2
+    # via aiohttp
+aiohttp==3.14.1
+    # via browser-use
+aiosignal==1.4.0
+    # via aiohttp
 annotated-doc==0.0.4
-    # via fastapi
+    # via
+    #   fastapi
+    #   typer
 annotated-types==0.7.0
     # via pydantic
 anthropic==0.111.0
-    # via -r requirements.in
+    # via
+    #   -r requirements.in
+    #   browser-use
 anyio==4.14.0
     # via
     #   anthropic
+    #   browser-use
+    #   bubus
+    #   google-genai
     #   groq
     #   httpx
+    #   mcp
     #   openai
+    #   sse-starlette
     #   starlette
     #   watchfiles
+attrs==26.1.0
+    # via
+    #   aiohttp
+    #   jsonschema
+    #   referencing
+authlib==1.7.2
+    # via browser-use
+av==17.1.0
+    # via faster-whisper
+backoff==2.2.1
+    # via posthog
 bcrypt==5.0.0
     # via passlib
+beautifulsoup4==4.15.0
+    # via
+    #   -r requirements-automation.in
+    #   markdownify
+browser-use==0.11.13
+    # via -r requirements-automation.in
+browser-use-sdk==3.8.4
+    # via browser-use
+bubus==1.5.6
+    # via browser-use
+cdp-use==1.4.5
+    # via browser-use
 certifi==2026.6.17
     # via
     #   httpcore
@@ -34,21 +70,38 @@ certifi==2026.6.17
 cffi==2.0.0
     # via cryptography
 charset-normalizer==3.4.7
-    # via requests
+    # via
+    #   reportlab
+    #   requests
 click==8.4.1
-    # via uvicorn
+    # via
+    #   browser-use
+    #   gtts
+    #   huggingface-hub
+    #   typer
+    #   uvicorn
+cloudpickle==3.1.2
+    # via browser-use
 colorama==0.4.6
     # via
     #   click
     #   loguru
     #   tqdm
     #   uvicorn
+comtypes==1.4.16
+    # via
+    #   pycaw
+    #   pywinauto
 cryptography==49.0.0
     # via
     #   -r requirements.in
+    #   authlib
     #   google-auth
+    #   joserfc
     #   pyjwt
     #   python-jose
+ctranslate2==4.8.0
+    # via faster-whisper
 deprecation==2.1.0
     # via
     #   postgrest
@@ -56,56 +109,94 @@ deprecation==2.1.0
 distro==1.9.0
     # via
     #   anthropic
+    #   google-genai
     #   groq
     #   openai
+    #   posthog
 dnspython==2.8.0
     # via email-validator
 docstring-parser==0.18.0
     # via anthropic
 ecdsa==0.19.2
     # via python-jose
+editdistpy==0.2.0
+    # via symspellpy
+elevenlabs==2.54.0
+    # via -r requirements-voice.in
 email-validator==2.3.0
     # via pydantic
 fastapi==0.138.0
     # via -r requirements.in
+fastembed==0.8.0
+    # via -r requirements-automation.in
+faster-whisper==1.2.1
+    # via -r requirements-voice.in
+filelock==3.29.4
+    # via huggingface-hub
+flatbuffers==25.12.19
+    # via onnxruntime
+frozenlist==1.8.0
+    # via
+    #   aiohttp
+    #   aiosignal
+fsspec==2026.6.0
+    # via huggingface-hub
 google-ai-generativelanguage==0.6.15
     # via google-generativeai
 google-api-core[grpc]==2.31.0
     # via
+    #   browser-use
     #   google-ai-generativelanguage
     #   google-api-python-client
     #   google-generativeai
 google-api-python-client==2.197.0
-    # via google-generativeai
-google-auth==2.55.0
     # via
+    #   browser-use
+    #   google-generativeai
+google-auth[requests]==2.55.0
+    # via
+    #   browser-use
     #   google-ai-generativelanguage
     #   google-api-core
     #   google-api-python-client
     #   google-auth-httplib2
+    #   google-auth-oauthlib
+    #   google-genai
     #   google-generativeai
 google-auth-httplib2==0.4.0
     # via google-api-python-client
+google-auth-oauthlib==1.4.0
+    # via browser-use
+google-genai==1.75.0
+    # via browser-use
 google-generativeai==0.8.6
     # via -r requirements.in
 googleapis-common-protos==1.75.0
     # via
     #   google-api-core
     #   grpcio-status
+greenlet==3.5.2
+    # via playwright
 groq==1.5.0
-    # via -r requirements.in
+    # via
+    #   -r requirements.in
+    #   browser-use
 grpcio==1.81.1
     # via
     #   google-api-core
     #   grpcio-status
 grpcio-status==1.71.2
     # via google-api-core
+gtts==2.2.4
+    # via -r requirements-voice.in
 h11==0.16.0
     # via
     #   httpcore
     #   uvicorn
 h2==4.3.0
     # via httpx
+hf-xet==1.5.1
+    # via huggingface-hub
 hpack==4.1.0
     # via h2
 httpcore==1.0.9
@@ -119,7 +210,14 @@ httptools==0.8.0
 httpx[http2]==0.28.1
     # via
     #   anthropic
+    #   browser-use
+    #   browser-use-sdk
+    #   cdp-use
+    #   elevenlabs
+    #   google-genai
     #   groq
+    #   huggingface-hub
+    #   mcp
     #   ollama
     #   openai
     #   postgrest
@@ -127,6 +225,13 @@ httpx[http2]==0.28.1
     #   supabase
     #   supabase-auth
     #   supabase-functions
+httpx-sse==0.4.3
+    # via mcp
+huggingface-hub==1.20.1
+    # via
+    #   fastembed
+    #   faster-whisper
+    #   tokenizers
 hyperframe==6.1.0
     # via h2
 idna==3.18
@@ -136,30 +241,119 @@ idna==3.18
     #   httpx
     #   requests
     #   yarl
+inquirerpy==0.3.4
+    # via browser-use
 jiter==0.15.0
     # via
     #   anthropic
     #   openai
+joblib==1.5.3
+    # via scikit-learn
+joserfc==1.7.1
+    # via authlib
+jsonschema==4.26.0
+    # via mcp
+jsonschema-specifications==2025.9.1
+    # via jsonschema
 loguru==0.7.3
-    # via -r requirements.in
+    # via
+    #   -r requirements.in
+    #   fastembed
+lxml==6.1.1
+    # via
+    #   -r requirements-automation.in
+    #   python-docx
 markdown-it-py==4.2.0
     # via rich
+markdownify==1.2.2
+    # via browser-use
+mcp==1.28.0
+    # via browser-use
 mdurl==0.1.2
     # via markdown-it-py
+mmh3==5.2.1
+    # via fastembed
+mouseinfo==0.1.3
+    # via pyautogui
+mss==10.2.0
+    # via -r requirements-automation.in
 multidict==6.7.1
-    # via yarl
+    # via
+    #   aiohttp
+    #   yarl
+narwhals==2.22.1
+    # via scikit-learn
+numpy==2.4.6
+    # via
+    #   -r requirements-voice.in
+    #   ctranslate2
+    #   fastembed
+    #   onnxruntime
+    #   scikit-learn
+    #   scipy
+oauthlib==3.3.1
+    # via requests-oauthlib
 ollama==0.6.2
-    # via -r requirements.in
+    # via
+    #   -r requirements.in
+    #   browser-use
+onnxruntime==1.27.0
+    # via
+    #   fastembed
+    #   faster-whisper
+    #   openwakeword
+    #   piper-tts
 openai==2.43.0
-    # via -r requirements.in
+    # via
+    #   -r requirements.in
+    #   browser-use
+openwakeword==0.6.0
+    # via -r requirements-voice.in
 packaging==26.2
-    # via deprecation
+    # via
+    #   deprecation
+    #   huggingface-hub
+    #   onnxruntime
+    #   pytesseract
 passlib[bcrypt]==1.7.4
     # via -r requirements.in
+pathvalidate==3.3.1
+    # via piper-tts
+pfzy==0.3.4
+    # via inquirerpy
+pillow==12.2.0
+    # via
+    #   -r requirements-automation.in
+    #   browser-use
+    #   fastembed
+    #   pyscreeze
+    #   pystray
+    #   pytesseract
+    #   reportlab
+piper-tts==1.4.2
+    # via -r requirements-voice.in
+playwright==1.60.0
+    # via
+    #   -r requirements-automation.in
+    #   playwright-stealth
+playwright-stealth==2.0.3
+    # via -r requirements-automation.in
+plyer==2.1.0
+    # via -r requirements-automation.in
+portalocker==2.10.1
+    # via
+    #   browser-use
+    #   bubus
 postgrest==2.31.0
     # via supabase
+posthog==7.20.3
+    # via browser-use
+prompt-toolkit==3.0.52
+    # via inquirerpy
 propcache==0.5.2
-    # via yarl
+    # via
+    #   aiohttp
+    #   yarl
 proto-plus==1.28.0
     # via
     #   google-ai-generativelanguage
@@ -171,7 +365,15 @@ protobuf==5.29.6
     #   google-generativeai
     #   googleapis-common-protos
     #   grpcio-status
+    #   onnxruntime
     #   proto-plus
+psutil==7.2.2
+    # via
+    #   -r requirements-automation.in
+    #   browser-use
+    #   pycaw
+py-rust-stemmers==0.1.8
+    # via fastembed
 pyasn1==0.6.3
     # via
     #   pyasn1-modules
@@ -179,15 +381,27 @@ pyasn1==0.6.3
     #   rsa
 pyasn1-modules==0.4.2
     # via google-auth
+pyaudio==0.2.14
+    # via -r requirements-voice.in
+pyautogui==0.9.54
+    # via -r requirements-automation.in
+pycaw==20251023 ; sys_platform == "win32"
+    # via -r requirements-automation.in
 pycparser==3.0
     # via cffi
 pydantic[email]==2.13.4
     # via
     #   -r requirements.in
     #   anthropic
+    #   browser-use
+    #   browser-use-sdk
+    #   bubus
+    #   elevenlabs
     #   fastapi
+    #   google-genai
     #   google-generativeai
     #   groq
+    #   mcp
     #   ollama
     #   openai
     #   postgrest
@@ -196,45 +410,153 @@ pydantic[email]==2.13.4
     #   storage3
     #   supabase-auth
 pydantic-core==2.46.4
-    # via pydantic
+    # via
+    #   elevenlabs
+    #   pydantic
 pydantic-settings==2.14.2
-    # via -r requirements.in
+    # via
+    #   -r requirements.in
+    #   mcp
+pyee==13.0.1
+    # via playwright
+pygame==2.6.1
+    # via -r requirements-voice.in
+pygetwindow==0.0.9
+    # via pyautogui
 pygments==2.20.0
     # via rich
 pyjwt[crypto]==2.13.0
-    # via supabase-auth
+    # via
+    #   mcp
+    #   supabase-auth
+pymsgbox==2.0.1
+    # via pyautogui
+pynput==1.8.2
+    # via -r requirements-automation.in
+pyotp==2.10.0
+    # via browser-use
 pyparsing==3.3.2
     # via httplib2
+pypdf==6.14.2
+    # via browser-use
+pyperclip==1.11.0
+    # via
+    #   -r requirements-automation.in
+    #   mouseinfo
+pyqt6==6.11.0 ; sys_platform == "win32"
+    # via -r requirements-automation.in
+pyqt6-qt6==6.11.1
+    # via pyqt6
+pyqt6-sip==13.11.1
+    # via pyqt6
+pyrect==0.2.0
+    # via pygetwindow
+pyscreeze==1.0.1
+    # via pyautogui
+pystray==0.19.5 ; sys_platform == "win32"
+    # via -r requirements-automation.in
+pytesseract==0.3.13
+    # via -r requirements-automation.in
+python-docx==1.2.0
+    # via browser-use
 python-dotenv==1.2.2
     # via
     #   -r requirements.in
+    #   browser-use
     #   pydantic-settings
     #   uvicorn
 python-jose[cryptography]==3.5.0
     # via -r requirements.in
 python-multipart==0.0.32
-    # via -r requirements.in
+    # via
+    #   -r requirements.in
+    #   mcp
+pytweening==1.2.0
+    # via pyautogui
+pywin32==312
+    # via
+    #   mcp
+    #   portalocker
+    #   pywinauto
+pywinauto==0.6.9 ; sys_platform == "win32"
+    # via -r requirements-automation.in
 pyyaml==6.0.3
-    # via uvicorn
+    # via
+    #   ctranslate2
+    #   huggingface-hub
+    #   uvicorn
+qasync==0.28.0 ; sys_platform == "win32"
+    # via -r requirements-automation.in
 rapidfuzz==3.14.5
     # via -r requirements.in
 realtime==2.31.0
     # via supabase
+referencing==0.37.0
+    # via
+    #   jsonschema
+    #   jsonschema-specifications
+reportlab==5.0.0
+    # via browser-use
 requests==2.34.2
-    # via google-api-core
+    # via
+    #   browser-use
+    #   elevenlabs
+    #   fastembed
+    #   google-api-core
+    #   google-auth
+    #   google-genai
+    #   gtts
+    #   openwakeword
+    #   posthog
+    #   requests-oauthlib
+requests-oauthlib==2.0.0
+    # via google-auth-oauthlib
 rich==15.0.0
-    # via -r requirements.in
+    # via
+    #   -r requirements.in
+    #   browser-use
+    #   typer
+rpds-py==2026.5.1
+    # via
+    #   jsonschema
+    #   referencing
 rsa==4.9.1
     # via python-jose
+scikit-learn==1.9.0
+    # via openwakeword
+scipy==1.17.1
+    # via
+    #   openwakeword
+    #   scikit-learn
+screeninfo==0.8.1
+    # via browser-use
+send2trash==2.1.0
+    # via -r requirements-automation.in
+shellingham==1.5.4
+    # via typer
 six==1.17.0
-    # via ecdsa
+    # via
+    #   ecdsa
+    #   gtts
+    #   markdownify
+    #   pynput
+    #   pystray
+    #   pywinauto
 sniffio==1.3.1
     # via
     #   anthropic
+    #   google-genai
     #   groq
     #   openai
+soupsieve==2.8.4
+    # via beautifulsoup4
+sse-starlette==3.4.5
+    # via mcp
 starlette==1.3.1
-    # via fastapi
+    # via
+    #   fastapi
+    #   mcp
+    #   sse-starlette
 storage3==2.31.0
     # via supabase
 strenum==0.4.15
@@ -245,47 +567,99 @@ supabase-auth==2.31.0
     # via supabase
 supabase-functions==2.31.0
     # via supabase
+symspellpy==6.9.0
+    # via -r requirements.in
+tenacity==9.1.4
+    # via google-genai
+threadpoolctl==3.6.0
+    # via scikit-learn
+tokenizers==0.23.1
+    # via
+    #   fastembed
+    #   faster-whisper
 tqdm==4.68.3
     # via
+    #   fastembed
+    #   faster-whisper
     #   google-generativeai
+    #   huggingface-hub
     #   openai
+    #   openwakeword
+typer==0.25.1
+    # via huggingface-hub
 typing-extensions==4.15.0
     # via
+    #   aiohttp
+    #   aiosignal
     #   anthropic
     #   anyio
+    #   beautifulsoup4
+    #   browser-use
+    #   bubus
+    #   cdp-use
+    #   elevenlabs
     #   fastapi
+    #   google-genai
     #   google-generativeai
     #   groq
     #   grpcio
+    #   huggingface-hub
+    #   mcp
     #   openai
+    #   posthog
     #   pydantic
     #   pydantic-core
+    #   pyee
+    #   python-docx
     #   realtime
+    #   referencing
     #   starlette
     #   typing-inspection
 typing-inspection==0.4.2
     # via
     #   fastapi
+    #   mcp
     #   pydantic
     #   pydantic-settings
 uritemplate==4.2.0
     # via google-api-python-client
 urllib3==2.7.0
     # via requests
+uuid7==0.1.0
+    # via
+    #   browser-use
+    #   bubus
 uvicorn[standard]==0.49.0
-    # via -r requirements.in
+    # via
+    #   -r requirements.in
+    #   mcp
 watchfiles==1.2.0
-    # via uvicorn
+    # via
+    #   -r requirements-automation.in
+    #   uvicorn
+wcwidth==0.8.1
+    # via prompt-toolkit
+webrtcvad==2.0.10
+    # via -r requirements-voice.in
 websockets==15.0.1
     # via
     #   -r requirements.in
+    #   cdp-use
+    #   elevenlabs
+    #   google-genai
     #   realtime
     #   uvicorn
 win32-setctime==1.2.0
     # via loguru
+winsdk==1.0.0b10 ; sys_platform == "win32"
+    # via -r requirements-automation.in
 yarl==1.24.2
     # via
+    #   aiohttp
     #   postgrest
     #   storage3
     #   supabase
     #   supabase-functions
+
+# The following packages are considered to be unsafe in a requirements file:
+# setuptools
