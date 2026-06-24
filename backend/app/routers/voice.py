@@ -121,16 +121,18 @@ async def websocket_test_stt(websocket: WebSocket):
     silence_chunks = 0
     MAX_SILENCE_CHUNKS = 15  # ~450ms of silence ends the utterance
     MAX_BUFFER_SIZE = 160000 # 10 seconds max duration to prevent CPU hang
-    
+    _connected = True  # flipped to False the moment the client disconnects
+
     async def transcribe_loop():
         nonlocal speech_buffer, silence_chunks
-        last_transcribe_time = time.time()
-        
+
         while True:
             await asyncio.sleep(0.4)
+            if not _connected:
+                break
             buf_copy = speech_buffer
-            
-            # Only transcribe on final chunk to prevent massive CPU backlog and 58s delays
+
+            # Only transcribe on final chunk to prevent massive CPU backlog
             is_max_length = len(buf_copy) >= MAX_BUFFER_SIZE
             is_final = silence_chunks >= MAX_SILENCE_CHUNKS or is_max_length
             if len(buf_copy) >= 3200 and is_final:
@@ -139,18 +141,19 @@ async def websocket_test_stt(websocket: WebSocket):
                     start_t = time.time()
                     text = await loop.run_in_executor(None, stt.transcribe, buf_copy)
                     duration_ms = int((time.time() - start_t) * 1000)
-                    
-                    if text.strip():
+
+                    if text.strip() and _connected:
                         await websocket.send_json({"text": text, "is_final": is_final, "duration_ms": duration_ms})
-                        
+
                     if is_final:
                         speech_buffer = b""
                         silence_chunks = 0
-                        
-                    last_transcribe_time = time.time()
+                except WebSocketDisconnect:
+                    break  # client gone — exit cleanly
+                except asyncio.CancelledError:
+                    break
                 except Exception as e:
-                    logger.error(f"[{__name__}] {type(e).__name__}: {e}")
-                    pass
+                    logger.debug(f"[ws-test-stt] transcribe_loop: {type(e).__name__}: {e}")
 
     transcribe_task = asyncio.create_task(transcribe_loop())
     
@@ -189,21 +192,28 @@ async def websocket_test_stt(websocket: WebSocket):
                     logger.error(f"[{__name__}] {type(e).__name__}: {e}")
                     pass
     except WebSocketDisconnect:
-        pass
+        _connected = False  # client disconnected — do NOT send anything more
     finally:
+        # Cancel the background task and wait for it to finish cleanly
         transcribe_task.cancel()
-        if len(speech_buffer) >= 3200:
-            try:
-                loop = asyncio.get_running_loop()
-                start_t = time.time()
-                text = await loop.run_in_executor(None, stt.transcribe, speech_buffer)
-                duration_ms = int((time.time() - start_t) * 1000)
-                await websocket.send_json({"text": text, "is_final": True, "duration_ms": duration_ms})
-            except Exception as e:
-                logger.error(f"[{__name__}] {type(e).__name__}: {e}")
-                pass
         try:
-            await websocket.close()
-        except Exception as e:
-            logger.error(f"[{__name__}] {type(e).__name__}: {e}")
+            await transcribe_task
+        except (asyncio.CancelledError, Exception):
             pass
+
+        # Only send the final transcript + close if the client is still connected
+        if _connected:
+            if len(speech_buffer) >= 3200:
+                try:
+                    loop = asyncio.get_running_loop()
+                    start_t = time.time()
+                    text = await loop.run_in_executor(None, stt.transcribe, speech_buffer)
+                    duration_ms = int((time.time() - start_t) * 1000)
+                    if text.strip():
+                        await websocket.send_json({"text": text, "is_final": True, "duration_ms": duration_ms})
+                except Exception as e:
+                    logger.debug(f"[ws-test-stt] final transcription send failed: {e}")
+            try:
+                await websocket.close()
+            except Exception:
+                pass
