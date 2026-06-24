@@ -67,6 +67,149 @@ _MATCH_PRIORITY = [
 _CACHE_TTL = 300
 
 
+# ── Voice Credential Normalizer ─────────────────────────────────────────────
+def _normalize_voice_credential(raw: str) -> str:
+    """
+    Convert a voice-dictated credential/password value into its typed form.
+
+    Supported transformations (applied in token order):
+      Number words  → digits   : "one two three" → "123"
+                                  "twenty one"    → "21"
+      Symbol words  → symbols  : "at" → "@",  "dot" → ".",  "dash" → "-"
+                                  "hash" → "#",  "exclamation" → "!"
+      Caps modifier → case     : "cap word"      → "Word"   (first-letter cap)
+                                  "all caps word" → "WORD"   (full uppercase)
+      Trailing junk stripped   : "all yes caps", "end", leftover modifiers
+
+    Examples:
+      "reset at one two three"         → "reset@123"
+      "cap r e cap s e t at one two three" → "ReSet@123"
+      "password at hash one two three" → "password@#123"
+    """
+    import re as _re
+
+    _ONES = {
+        'zero': '0', 'oh': '0', 'o': '0',
+        'one': '1', 'two': '2', 'three': '3', 'four': '4', 'five': '5',
+        'six': '6', 'seven': '7', 'eight': '8', 'nine': '9',
+    }
+    _TENS = {
+        'ten': '10', 'eleven': '11', 'twelve': '12', 'thirteen': '13',
+        'fourteen': '14', 'fifteen': '15', 'sixteen': '16', 'seventeen': '17',
+        'eighteen': '18', 'nineteen': '19',
+        'twenty': '20', 'thirty': '30', 'forty': '40', 'fifty': '50',
+        'sixty': '60', 'seventy': '70', 'eighty': '80', 'ninety': '90',
+        'hundred': '100',
+    }
+    _SYMBOLS = {
+        'at':           '@',
+        'hash':         '#', 'hashtag': '#', 'pound': '#', 'number': '#',
+        'dot':          '.', 'period': '.',
+        'underscore':   '_', 'under': '_',
+        'dash':         '-', 'hyphen': '-', 'minus': '-',
+        'exclamation':  '!', 'bang': '!',
+        'dollar':       '$',
+        'percent':      '%', 'percentage': '%',
+        'asterisk':     '*', 'star': '*',
+        'plus':         '+',
+        'equals':       '=', 'equal': '=',
+        'slash':        '/',
+        'backslash':    '\\',
+        'colon':        ':',
+        'semicolon':    ';',
+        'question':     '?',
+        'caret':        '^', 'hat': '^',
+        'tilde':        '~',
+        'comma':        ',',
+        'apostrophe':   "'", 'quote': "'",
+        'open':         '(',  # "open paren"
+        'close':        ')',  # "close paren"
+    }
+    # Trailing dictation noise tokens that should be silently dropped
+    # "case" covers "case caps" which is a common STT artifact for capitalization instructions
+    _NOISE = {'yes', 'end', 'stop', 'done', 'ok', 'okay', 'confirm', 'case', 'please'}
+
+    tokens = raw.split()
+    result: list[str] = []
+    i = 0
+    all_caps_mode = False
+    caps_next = False       # capitalize the NEXT single token
+
+    while i < len(tokens):
+        raw_tok = tokens[i]
+        tok = raw_tok.lower().strip(".,!?;:'\"-")
+
+        # ── Caps modifiers ────────────────────────────────────────────────────
+        if tok in ('caps', 'cap', 'upper', 'uppercase'):
+            # Peek: "all caps" → all_caps_mode; plain "caps" → caps_next
+            caps_next = True
+            i += 1
+            continue
+
+        if tok == 'all' and i + 1 < len(tokens) and tokens[i + 1].lower().strip('.,') in ('caps', 'cap', 'upper'):
+            all_caps_mode = True
+            i += 2  # skip "all" + "caps"
+            continue
+
+        if tok in ('no', 'lower', 'lowercase', 'normal'):
+            all_caps_mode = False
+            caps_next = False
+            i += 1
+            continue
+
+        # ── Drop pure noise tokens at the END of the sequence ─────────────────
+        # Only drop if every remaining token is noise (avoids eating real content)
+        remaining_real = [t.lower().strip(".,!?;:") for t in tokens[i:]]
+        if all(t in _NOISE or t in ('caps', 'cap', 'all', 'upper') for t in remaining_real):
+            break  # discard the tail
+
+        # ── Symbol words ──────────────────────────────────────────────────────
+        if tok in _SYMBOLS:
+            ch = _SYMBOLS[tok]
+            result.append(ch.upper() if all_caps_mode else ch)
+            caps_next = False
+            i += 1
+            continue
+
+        # ── Tens + optional ones (e.g. "twenty one" → "21") ──────────────────
+        if tok in _TENS:
+            tens_str = _TENS[tok]
+            if tok == 'hundred':
+                result.append(tens_str)
+                i += 1
+                continue
+            # Look ahead for ones digit
+            nxt = tokens[i + 1].lower().strip('.,') if i + 1 < len(tokens) else ''
+            if nxt in _ONES:
+                combined = str(int(tens_str) + int(_ONES[nxt]))
+                result.append(combined)
+                i += 2
+            else:
+                result.append(tens_str)
+                i += 1
+            caps_next = False
+            continue
+
+        # ── Ones digits ───────────────────────────────────────────────────────
+        if tok in _ONES:
+            result.append(_ONES[tok])
+            caps_next = False
+            i += 1
+            continue
+
+        # ── Regular word ──────────────────────────────────────────────────────
+        word = raw_tok.strip(".,!?;:")
+        if all_caps_mode:
+            word = word.upper()
+        elif caps_next:
+            word = word[0].upper() + word[1:] if word else word
+            caps_next = False
+        result.append(word)
+        i += 1
+
+    return ''.join(result)
+
+
 class CommandService:
     """
     Parses raw text into an intent + parameters, then executes the handler.
@@ -168,6 +311,56 @@ class CommandService:
         Returns a dict with: intent, parameters, result, status, duration_ms.
         """
         text = text.strip()
+
+        # ── STT Normalization: fix common Whisper gerund / contraction errors ──
+        # Whisper often collapses two-word commands into gerund form, e.g.:
+        #   "sign in" → "signing"    "log out" → "logging"    "scroll down" → "scrolling"
+        # These are applied BEFORE spellcheck and all matching layers so every
+        # downstream layer sees the corrected phrase.
+        _STT_NORM = {
+            # Auth actions
+            "signing":      "sign in",
+            "signin":       "sign in",
+            "signup":       "sign up",
+            "signingup":    "sign up",
+            "signingout":   "sign out",
+            "signout":      "sign out",
+            "logging":      "log in",
+            "login":        "log in",
+            "logout":       "log out",
+            # Navigation / page actions
+            "refreshing":   "refresh",
+            "reloading":    "reload",
+            "scrolling":    "scroll",
+            "clicking":     "click",
+            "pressing":     "press",
+            "submitting":   "submit",
+            "searching":    "search",
+            "opening":      "open",
+            "closing":      "close",
+        }
+        _text_key = text.lower().replace(" ", "")
+        if _text_key in _STT_NORM:
+            _corrected = _STT_NORM[_text_key]
+            logger.info(f"STT normalization: '{text}' → '{_corrected}'")
+            text = _corrected
+        else:
+            # Also handle partial gerund at the start of a longer phrase
+            # e.g. "signing in to the portal" → "sign in to the portal"
+            import re as _stt_re
+            _GERUND_MAP = [
+                (r"^signing\s+(?:in|into)\b", "sign in"),
+                (r"^signing\s+(?:up)\b",      "sign up"),
+                (r"^signing\s+out\b",          "sign out"),
+                (r"^logging\s+(?:in|into)\b", "log in"),
+                (r"^logging\s+out\b",          "log out"),
+            ]
+            for _pat, _rep in _GERUND_MAP:
+                if _stt_re.match(_pat, text, _stt_re.IGNORECASE):
+                    _corrected = _stt_re.sub(_pat, _rep, text, count=1, flags=_stt_re.IGNORECASE)
+                    logger.info(f"STT phrase normalization: '{text}' → '{_corrected}'")
+                    text = _corrected
+                    break
 
         # Apply spelling correction off the event loop (SymSpell is CPU-bound).
         # Skip for short commands (≤3 words): app names and simple commands like
@@ -437,23 +630,38 @@ class CommandService:
             # Layer 0.9: Implicit Web Click Intercept
             # Prioritize active screen context. If a short phrase exactly or partially
             # matches a visible button/link on the page, click it INSTANTLY.
+            # FIX: All Playwright awaits must run on the dedicated _playwright_loop thread.
+            # Calling them on the FastAPI/pipeline loop causes silent cross-loop failures.
             if not intent_name and len(text.split()) <= 5:
                 try:
                     from automation.browser.browser_controller import BrowserController
+                    from automation.browser.browser_engine import _run_in_playwright
                     bc = BrowserController()
                     if bc.engine._context is not None:
-                        page = await bc._ensure_page()
-                        if page:
-                            import re as _re
+                        import re as _re
+                        _click_text = text  # capture for closure
+                        _start_ref = start
+
+                        async def _do_implicit_click():
+                            page = await bc.engine.get_active_page()
+                            if not page:
+                                return None
+
+                            # Bring Chrome to front so click has OS-level focus
+                            try:
+                                await page.bring_to_front()
+                            except Exception:
+                                pass
+
                             _locators = [
                                 # 1. Exact Matches
-                                page.get_by_role("button", name=_re.compile(f"^{_re.escape(text)}$", _re.IGNORECASE)),
-                                page.get_by_role("link", name=_re.compile(f"^{_re.escape(text)}$", _re.IGNORECASE)),
-                                page.get_by_text(text, exact=True),
+                                page.get_by_role("button", name=_re.compile(f"^{_re.escape(_click_text)}$", _re.IGNORECASE)),
+                                page.get_by_role("link",   name=_re.compile(f"^{_re.escape(_click_text)}$", _re.IGNORECASE)),
+                                page.get_by_text(_click_text, exact=True),
                                 # 2. Partial Matches
-                                page.get_by_role("button", name=_re.compile(_re.escape(text), _re.IGNORECASE)),
-                                page.get_by_role("link", name=_re.compile(_re.escape(text), _re.IGNORECASE)),
-                                page.get_by_text(text, exact=False)
+                                page.get_by_role("button", name=_re.compile(_re.escape(_click_text), _re.IGNORECASE)),
+                                page.get_by_role("link",   name=_re.compile(_re.escape(_click_text), _re.IGNORECASE)),
+                                page.get_by_text(_click_text, exact=False),
                             ]
                             for _loc in _locators:
                                 try:
@@ -461,132 +669,261 @@ class CommandService:
                                     for i in range(count):
                                         element = _loc.nth(i)
                                         if await element.is_visible():
-                                            await element.click(timeout=1000)
-                                            return {
-                                                "intent": "implicit_browser_click",
-                                                "parameters": {"text": text},
-                                                "status": "success",
-                                                "result": f"Clicked '{text}' on webpage.",
-                                                "duration_ms": int((time.perf_counter() - start) * 1000),
-                                                "is_fallback": True,
-                                            }
-                                except Exception as _e:
-                                    logger.debug(f"Implicit click locator failed, trying next: {_e}")
-                            
-                            # 3. JavaScript Fuzzy Token Match (for colloquial terms like "nov 25 excel" -> "NOVEMBER_2025")
+                                            await element.scroll_into_view_if_needed(timeout=1000)
+                                            await element.click(timeout=2000)
+                                            # Wait for navigation to begin (non-blocking if no nav)
+                                            try:
+                                                await page.wait_for_load_state("commit", timeout=3000)
+                                            except Exception:
+                                                pass
+                                            return "clicked_exact"
+                                except Exception as _le:
+                                    logger.debug(f"Implicit click locator failed, trying next: {_le}")
+
+                            # 3. JavaScript Fuzzy Token Match — find the best element by text score,
+                            # then click via Playwright mouse (not JS .click()) so React SPA events fire.
                             _stop_words = {"open", "click", "press", "hit", "the", "a", "an", "on", "file", "app", "link", "button", "document", "excel", "word", "powerpoint", "go", "to", "my", "show", "me", "move", "switch", "navigate", "change", "tab"}
-                            _target_words = [w.lower() for w in text.split() if w.lower() not in _stop_words]
+                            _target_words = [w.lower() for w in _click_text.split() if w.lower() not in _stop_words]
                             if _target_words:
-                                _js_script = """
+                                # Return bounding rect of best-scoring element instead of clicking in JS
+                                _js_find = """
                                 (targetWords) => {
-                                    const elements = Array.from(document.querySelectorAll("a, button, [role='button'], [role='link'], [role='menuitem'], [role='row'], [role='tab']"));
+                                    const elements = Array.from(document.querySelectorAll("a, button, [role='button'], [role='link'], [role='menuitem'], [role='tab']"));
                                     let bestEl = null;
                                     let bestScore = 0;
                                     for (const el of elements) {
                                         const style = window.getComputedStyle(el);
                                         if (style.display === 'none' || style.visibility === 'hidden' || el.offsetWidth === 0) continue;
-                                        
                                         const text = el.innerText ? el.innerText.toLowerCase() : '';
                                         if (!text) continue;
-                                        
                                         let score = 0;
-                                        for (const w of targetWords) {
-                                            if (text.includes(w)) score++;
-                                        }
-                                        if (score > bestScore) {
-                                            bestScore = score;
-                                            bestEl = el;
-                                        }
+                                        for (const w of targetWords) { if (text.includes(w)) score++; }
+                                        if (score > bestScore) { bestScore = score; bestEl = el; }
                                     }
                                     if (bestEl && bestScore >= Math.max(1, targetWords.length - 1)) {
-                                        bestEl.click();
-                                        return true;
+                                        const r = bestEl.getBoundingClientRect();
+                                        return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
                                     }
-                                    return false;
+                                    return null;
                                 }
                                 """
                                 try:
-                                    _clicked = False
                                     for _frame in page.frames:
                                         try:
-                                            if await _frame.evaluate(_js_script, _target_words):
-                                                _clicked = True
-                                                break
+                                            _pos = await _frame.evaluate(_js_find, _target_words)
+                                            if _pos and _pos.get("x") is not None:
+                                                # Use Playwright mouse click so React synthetic events fire
+                                                await page.mouse.click(_pos["x"], _pos["y"])
+                                                try:
+                                                    await page.wait_for_load_state("commit", timeout=3000)
+                                                except Exception:
+                                                    pass
+                                                return "clicked_fuzzy"
                                         except Exception:
                                             pass
-                                            
-                                    if _clicked:
-                                        return {
-                                            "intent": "implicit_browser_click",
-                                            "parameters": {"text": text},
-                                            "status": "success",
-                                            "result": f"Clicked closest match for '{text}' via fuzzy logic.",
-                                            "duration_ms": int((time.perf_counter() - start) * 1000),
-                                            "is_fallback": True,
-                                        }
-                                except Exception as _e:
-                                    logger.debug(f"Implicit click JS fuzzy match failed: {_e}")
-                            
-                            # Explicitly fail generic commands if not found, to prevent LLM hallucinations
-                            _lower = text.lower()
+                                except Exception as _je:
+                                    logger.debug(f"Implicit click JS fuzzy match failed: {_je}")
+
+                            # Guard: fail fast for known auth commands to prevent LLM hallucinations
+                            _lower = _click_text.lower()
                             if _lower in ["sign in", "login", "log in", "log out", "logout", "sign out", "submit"] or _lower.startswith("sign in") or _lower.startswith("log in"):
-                                return {
-                                    "intent": "implicit_browser_click",
-                                    "parameters": {"text": text},
-                                    "status": "failed",
-                                    "result": f"Unable to find '{text}' on the current webpage.",
-                                    "duration_ms": int((time.perf_counter() - start) * 1000),
-                                    "is_fallback": True,
-                                }
+                                return "auth_not_found"
+                            return None
+
+                        _click_result = await _run_in_playwright(_do_implicit_click())
+                        if _click_result == "clicked_exact":
+                            return {
+                                "intent": "implicit_browser_click",
+                                "parameters": {"text": text},
+                                "status": "success",
+                                "result": f"Clicked '{text}' on webpage.",
+                                "duration_ms": int((time.perf_counter() - start) * 1000),
+                                "is_fallback": True,
+                            }
+                        elif _click_result == "clicked_fuzzy":
+                            return {
+                                "intent": "implicit_browser_click",
+                                "parameters": {"text": text},
+                                "status": "success",
+                                "result": f"Clicked closest match for '{text}' via fuzzy logic.",
+                                "duration_ms": int((time.perf_counter() - start) * 1000),
+                                "is_fallback": True,
+                            }
+                        elif _click_result == "auth_not_found":
+                            return {
+                                "intent": "implicit_browser_click",
+                                "parameters": {"text": text},
+                                "status": "failed",
+                                "result": f"Unable to find '{text}' on the current webpage.",
+                                "duration_ms": int((time.perf_counter() - start) * 1000),
+                                "is_fallback": True,
+                            }
                 except Exception as _e:
                     logger.debug(f"Implicit web click intercept failed: {_e}")
 
-            # Layer 0.95: Implicit Web Type Intercept (Single Credential)
+            # Layer 0.94: Bare Email Address Intercept
+            # Catches text that IS (or contains) an email address even without "email" prefix.
+            # STT often splits "anandhs@acesoft.in" → "anand s@acesoft.in" — we repair that too.
             if not intent_name:
                 import re as _re
-                _cred_match = _re.match(r"^(email|username|password)\s+(.+)$", text, _re.IGNORECASE)
-                if _cred_match:
+                _bare_text = text.strip().rstrip(".,!?")
+                # Repair STT space before @ (e.g. "anand s@acesoft.in" → "anands@acesoft.in")
+                _bare_text_fixed = _re.sub(r'\s+@', '@', _bare_text)
+                _bare_text_fixed = _re.sub(r'@\s+', '@', _bare_text_fixed)
+                _bare_text_fixed = _re.sub(r'\s+(\.\w{2,})', r'\1', _bare_text_fixed)
+                # Detect bare email pattern: word@domain.tld (with no other text, or minimal prefix)
+                _email_match = _re.search(r'\b[\w.+-]+@[\w.-]+\.\w{2,}\b', _bare_text_fixed)
+                if _email_match:
+                    _email_val = _email_match.group(0)
                     try:
                         from automation.browser.browser_controller import BrowserController
+                        from automation.browser.browser_engine import _run_in_playwright
                         bc = BrowserController()
                         if bc.engine._context is not None:
-                            page = await bc._ensure_page()
-                            if page:
-                                _field_type = _cred_match.group(1).lower()
-                                _val = _cred_match.group(2).strip()
-                                
+                            logger.info(f"Bare email intercept: '{_email_val}' (from '{text}')")
+
+                            async def _do_bare_email():
+                                page = await bc.engine.get_active_page()
+                                if not page:
+                                    return False
+                                # Prefer focused input, then email-typed, then any visible text input
+                                _loc = page.locator(
+                                    "input[type='email'], input[name*='email' i], input[placeholder*='email' i], "
+                                    "input[name*='user' i], input[type='text']:visible"
+                                ).first
+                                if await _loc.count() > 0:
+                                    await _loc.fill(_email_val)
+                                    return True
+                                return False
+
+                            _bare_typed = await _run_in_playwright(_do_bare_email())
+                            if _bare_typed:
+                                return {
+                                    "intent": "implicit_browser_type",
+                                    "parameters": {"field": "email", "value": _email_val},
+                                    "status": "success",
+                                    "result": f"Filled email '{_email_val}'.",
+                                    "duration_ms": int((time.perf_counter() - start) * 1000),
+                                    "is_fallback": True,
+                                }
+                    except Exception as _e:
+                        logger.debug(f"Bare email intercept failed: {_e}")
+
+            # Layer 0.95: Implicit Web Type Intercept (Single Credential)
+            # FIX: Playwright operations run on _playwright_loop thread via _run_in_playwright.
+            # Robustness improvements:
+            #   - Strips filler words ("uh", "um", "er", "so", "like") that STT inserts
+            #   - Tolerates punctuation after field keyword ("Email, user@x.com")
+            #   - Repairs STT space errors inside email addresses ("anand s@x.com" → "anands@x.com")
+            #   - Accepts command-verb prefixes: "update the password X" → "password X"
+            if not intent_name:
+                import re as _re
+                # Normalize: remove filler words and punctuation between keyword and value
+                _cred_text = _re.sub(
+                    r'\b(uh|um|er|ah|like|so|well|right|okay|ok)\b[,\s]*', ' ', text, flags=_re.IGNORECASE
+                ).strip()
+                # Strip command-verb prefix so "update the password X" becomes "password X"
+                # Handles: "update/change/set/enter/fill/create/type [the/my/a/your] [new] password [. ] X"
+                _cred_text = _re.sub(
+                    r'^(?:update|change|set|enter|fill|use|create|make|type|modify|edit)\s+'
+                    r'(?:the\s+|my\s+|a\s+|your\s+)?(?:new\s+)?',
+                    '', _cred_text, flags=_re.IGNORECASE
+                ).strip()
+                # Tolerate commas/colons/periods after the field keyword
+                _cred_text = _re.sub(
+                    r'^(email(?:\s+(?:address|id))?|username|user\s*name|password|pass)\s*[,.:;\s]+',
+                    lambda m: m.group(1) + ' ', _cred_text, flags=_re.IGNORECASE
+                ).strip()
+                _cred_match = _re.match(
+                    r'^(email(?:\s+(?:address|id))?|username|user\s*name|password|pass)\s+(.+)$',
+                    _cred_text, _re.IGNORECASE
+                )
+                # Normalise the field type to simple canonical form
+                if _cred_match:
+                    _raw_field = _cred_match.group(1).lower().replace(' ', '')
+                    if _raw_field in ('emailaddress', 'emailid'):
+                        _canonical_field = 'email'
+                    elif _raw_field in ('username', 'username'):
+                        _canonical_field = 'username'
+                    elif _raw_field in ('pass',):
+                        _canonical_field = 'password'
+                    else:
+                        _canonical_field = _raw_field
+                    try:
+                        from automation.browser.browser_controller import BrowserController
+                        from automation.browser.browser_engine import _run_in_playwright
+                        bc = BrowserController()
+                        if bc.engine._context is not None:
+                            _field_type = _canonical_field
+                            _val = _cred_match.group(2).strip()
+
+                            # Repair STT-induced spaces in email addresses:
+                            # "anand s@caseof.in" → "anands@caseof.in"
+                            # "user@ domain.com" → "user@domain.com"
+                            if _field_type in ("email", "username") and "@" in _val:
+                                _val = _re.sub(r'\s+(@)', r'\1', _val)   # space before @
+                                _val = _re.sub(r'(@)\s+', r'\1', _val)   # space after @
+                                _val = _re.sub(r'\s+(\.\w)', r'\1', _val)  # space before domain dot
+                            else:
+                                # Apply voice-to-credential normalization for passwords:
+                                # converts number words → digits and symbol words → symbols
+                                _val_normalized = _normalize_voice_credential(_val)
+                                if _val_normalized != _val:
+                                    logger.info(f"Password normalized: '{_val}' → '{_val_normalized}'")
+                                _val = _val_normalized
+
+                            logger.info(f"Credential intercept: field='{_field_type}' value='{_val}' (from '{text}')")
+
+                            async def _do_implicit_type():
+                                page = await bc.engine.get_active_page()
+                                if not page:
+                                    return False
                                 if _field_type in ["email", "username"]:
                                     _loc = page.locator("input[type='email'], input[name*='email' i], input[placeholder*='email' i], input[name*='user' i]").first
                                 else:
                                     _loc = page.locator("input[type='password'], input[name*='pass' i], input[placeholder*='pass' i]").first
-                                
                                 if await _loc.count() > 0:
                                     await _loc.fill(_val)
                                     await _loc.press("Enter")
-                                    return {
-                                        "intent": "implicit_browser_type",
-                                        "parameters": {"field": _field_type, "value": _val},
-                                        "status": "success",
-                                        "result": f"Filled {_field_type} and submitted.",
-                                        "duration_ms": int((time.perf_counter() - start) * 1000),
-                                        "is_fallback": True,
-                                    }
+                                    return True
+                                return False
+
+                            _typed = await _run_in_playwright(_do_implicit_type())
+                            if _typed:
+                                return {
+                                    "intent": "implicit_browser_type",
+                                    "parameters": {"field": _field_type, "value": _val},
+                                    "status": "success",
+                                    "result": f"Filled {_field_type} and submitted.",
+                                    "duration_ms": int((time.perf_counter() - start) * 1000),
+                                    "is_fallback": True,
+                                }
                     except Exception as _e:
                         logger.debug(f"Implicit web type intercept failed: {_e}")
 
             # Layer 0.96: Implicit Web Type Intercept (Pure Numbers / OTP)
+            # FIX: Playwright operations run on _playwright_loop thread via _run_in_playwright.
             if not intent_name:
                 _digits_only = text.replace(" ", "").replace("-", "")
                 if _digits_only.isdigit() and len(_digits_only) >= 4:
                     try:
                         from automation.browser.browser_controller import BrowserController
+                        from automation.browser.browser_engine import _run_in_playwright
                         bc = BrowserController()
                         if bc.engine._context is not None:
-                            page = await bc._ensure_page()
-                            if page:
+                            _otp_val = _digits_only
+
+                            async def _do_implicit_otp():
+                                page = await bc.engine.get_active_page()
+                                if not page:
+                                    return False
                                 # Playwright types into the active DOM element, ignoring OS focus.
                                 # Delay added to allow React/Angular inputs to auto-advance focus.
-                                await page.keyboard.type(_digits_only, delay=50)
+                                await page.keyboard.type(_otp_val, delay=50)
+                                return True
+
+                            _otp_typed = await _run_in_playwright(_do_implicit_otp())
+                            if _otp_typed:
                                 return {
                                     "intent": "implicit_browser_type_otp",
                                     "parameters": {"value": _digits_only},
@@ -597,7 +934,7 @@ class CommandService:
                                 }
                     except Exception as _e:
                         logger.debug(f"Implicit web type OTP intercept failed: {_e}")
-                    
+
                     # If browser fails or is not active, route to desktop type_text
                     intent_name = "type_text"
                     params = {"text": _digits_only}
