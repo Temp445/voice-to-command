@@ -627,12 +627,91 @@ class CommandService:
             params = {}
             llm_routed = False
 
+            # ── Kick off async page snapshot in background (non-blocking) ─────────
+            # This pre-warms the PageContextService cache so Layer 0.85 has data
+            # on the NEXT voice command (latency-free pipeline warm-up).
+            try:
+                from app.services.page_context_service import page_context_service as _pcs
+                import asyncio as _asyncio
+                _asyncio.ensure_future(
+                    _pcs.get_snapshot(),
+                    loop=_asyncio.get_event_loop()
+                )
+            except Exception:
+                pass
+
+            # Layer 0.85: Snapshot-based Fast Click (cached DOM — no Playwright round-trip)
+            # Reads the pre-warmed PageContextService cache and scores every visible element
+            # against the voice query using text-similarity scoring.
+            # Falls through to Layer 0.9 if the snapshot is stale/missing or nothing scores.
+            if not intent_name and len(text.split()) <= 7:
+                try:
+                    from app.services.page_context_service import (
+                        page_context_service as _pcs,
+                        find_best_element as _find_best,
+                    )
+                    from automation.browser.browser_engine import _run_in_playwright, BrowserEngine
+                    _snap = _pcs.get_cached_snapshot()
+                    _be = BrowserEngine()
+                    if _snap and _be._context is not None:
+                        _best_el = _find_best(_snap.elements, text, min_score=45)
+                        if _best_el:
+                            _target_text = _best_el.text or _best_el.name or _best_el.el_id
+                            _target_text_snap = _target_text  # capture for closure
+
+                            async def _do_snapshot_click():
+                                import re as _re
+                                page = await _be.get_active_page()
+                                if not page:
+                                    return False
+                                try:
+                                    await page.bring_to_front()
+                                except Exception:
+                                    pass
+                                # Click by exact label using Playwright locators
+                                for _loc in [
+                                    page.get_by_role("button", name=_re.compile(_re.escape(_target_text_snap), _re.IGNORECASE)),
+                                    page.get_by_role("link",   name=_re.compile(_re.escape(_target_text_snap), _re.IGNORECASE)),
+                                    page.get_by_text(_target_text_snap, exact=False),
+                                ]:
+                                    try:
+                                        if await _loc.count() > 0:
+                                            el = _loc.first
+                                            if await el.is_visible():
+                                                await el.scroll_into_view_if_needed(timeout=1000)
+                                                await el.click(timeout=2000)
+                                                try:
+                                                    await page.wait_for_load_state("commit", timeout=3000)
+                                                except Exception:
+                                                    pass
+                                                # Invalidate snapshot since page may have changed
+                                                _pcs.invalidate()
+                                                return True
+                                    except Exception:
+                                        pass
+                                return False
+
+                            _snapped = await _run_in_playwright(_do_snapshot_click())
+                            if _snapped:
+                                logger.info(f"Layer 0.85 snapshot click: '{text}' → '{_target_text}'")
+                                return {
+                                    "intent": "implicit_browser_click",
+                                    "parameters": {"text": text, "matched_element": _target_text},
+                                    "status": "success",
+                                    "result": f"Clicked '{_target_text}' on webpage.",
+                                    "duration_ms": int((time.perf_counter() - start) * 1000),
+                                    "is_fallback": True,
+                                }
+                except Exception as _e:
+                    logger.debug(f"Layer 0.85 snapshot click failed: {_e}")
+
             # Layer 0.9: Implicit Web Click Intercept
             # Prioritize active screen context. If a short phrase exactly or partially
             # matches a visible button/link on the page, click it INSTANTLY.
             # FIX: All Playwright awaits must run on the dedicated _playwright_loop thread.
             # Calling them on the FastAPI/pipeline loop causes silent cross-loop failures.
             if not intent_name and len(text.split()) <= 5:
+
                 try:
                     from automation.browser.browser_controller import BrowserController
                     from automation.browser.browser_engine import _run_in_playwright
@@ -1017,13 +1096,104 @@ class CommandService:
                 intent_name = "ask_llm"
                 params = {"question": text}
             else:
-                return {
-                    "intent": None,
-                    "parameters": {},
-                    "status": "failed",
-                    "result": f"Sorry, I didn't understand: '{text}'",
-                    "duration_ms": int((time.perf_counter() - start) * 1000),
-                }
+                # Layer 3.5: Vision Fallback — Gemini sees the screen and identifies the element
+                # Only runs when ALL prior layers (regex, fuzzy, semantic, LLM, dynamic browser) failed.
+                # Takes a Playwright browser screenshot, asks Gemini Vision what to do,
+                # then executes the action via Playwright.
+                _vision_executed = False
+                try:
+                    from app.services.vision_service import vision_service as _vs
+                    from automation.browser.browser_engine import BrowserEngine as _BE, _run_in_playwright as _rip
+                    _be_vision = _BE()
+                    if _be_vision._context is not None:
+                        _vision_action = await _vs.find_and_click_by_voice(text)
+                        if _vision_action:
+                            _v_action   = _vision_action.get("action", "none")
+                            _v_target   = _vision_action.get("target_text", "")
+                            _v_value    = _vision_action.get("value", "")
+                            _v_target_c = _v_target   # capture for closure
+                            _v_value_c  = _v_value
+                            _v_action_c = _v_action
+
+                            async def _do_vision_action():
+                                import re as _re
+                                page = await _be_vision.get_active_page()
+                                if not page:
+                                    return False
+                                try:
+                                    await page.bring_to_front()
+                                except Exception:
+                                    pass
+
+                                if _v_action_c == "click":
+                                    for _loc in [
+                                        page.get_by_role("button", name=_re.compile(_re.escape(_v_target_c), _re.IGNORECASE)),
+                                        page.get_by_role("link",   name=_re.compile(_re.escape(_v_target_c), _re.IGNORECASE)),
+                                        page.get_by_text(_v_target_c, exact=False),
+                                    ]:
+                                        try:
+                                            if await _loc.count() > 0:
+                                                el = _loc.first
+                                                if await el.is_visible():
+                                                    await el.scroll_into_view_if_needed(timeout=1000)
+                                                    await el.click(timeout=2000)
+                                                    try:
+                                                        await page.wait_for_load_state("commit", timeout=3000)
+                                                    except Exception:
+                                                        pass
+                                                    return True
+                                        except Exception:
+                                            pass
+
+                                elif _v_action_c == "type" and _v_value_c:
+                                    # Try to fill the identified input field
+                                    for _loc in [
+                                        page.get_by_placeholder(_re.compile(_re.escape(_v_target_c), _re.IGNORECASE)),
+                                        page.get_by_label(_re.compile(_re.escape(_v_target_c), _re.IGNORECASE)),
+                                        page.locator(f"input[name*='{_v_target_c.lower()}' i]"),
+                                    ]:
+                                        try:
+                                            if await _loc.count() > 0:
+                                                el = _loc.first
+                                                if await el.is_visible():
+                                                    await el.fill(_v_value_c)
+                                                    return True
+                                        except Exception:
+                                            pass
+
+                                elif _v_action_c == "scroll":
+                                    direction = "down" if "down" in text.lower() else "up"
+                                    delta = 400 if direction == "down" else -400
+                                    await page.mouse.wheel(0, delta)
+                                    return True
+
+                                return False
+
+                            _vis_ok = await _rip(_do_vision_action())
+                            if _vis_ok:
+                                _vision_executed = True
+                                from app.services.page_context_service import page_context_service as _pcs_v
+                                _pcs_v.invalidate()
+                                return {
+                                    "intent": "vision_fallback",
+                                    "parameters": {"text": text, "action": _v_action, "target": _v_target},
+                                    "status": "success",
+                                    "result": f"[Vision] {_v_action.capitalize()}ed '{_v_target}' on screen.",
+                                    "duration_ms": int((time.perf_counter() - start) * 1000),
+                                    "routed_by_vision": True,
+                                }
+                except Exception as _ve:
+                    logger.debug(f"Layer 3.5 vision fallback error: {_ve}")
+
+                if not _vision_executed:
+                    return {
+                        "intent": None,
+                        "parameters": {},
+                        "status": "failed",
+                        "result": f"Sorry, I didn't understand: '{text}'",
+                        "duration_ms": int((time.perf_counter() - start) * 1000),
+                    }
+
 
         res_dict = await self._execute_intent(intent_name, params, text, start)
         if locals().get("llm_routed", False):

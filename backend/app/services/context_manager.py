@@ -17,6 +17,15 @@ class ContextManager:
             lines.append(f"- Active Project Path: {self.last_project_path}")
         if self.last_dev_server_url:
             lines.append(f"- Active Dev Server URL: {self.last_dev_server_url}")
+
+        # Inject live browser page title/URL from PageContextService cache (non-blocking)
+        try:
+            from app.services.page_context_service import page_context_service
+            snap = page_context_service.get_cached_snapshot()
+            if snap:
+                lines.append(f"- Browser Page: {snap.title} ({snap.url})")
+        except Exception:
+            pass
             
         if not lines:
             return ""

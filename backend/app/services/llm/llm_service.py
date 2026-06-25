@@ -223,6 +223,16 @@ class LLMService:
             state_injection = context_manager.get_system_prompt_injection()
             context_prefix = f"[Context: {state_injection}]\n\n" if state_injection else ""
 
+            # Inject live page context so the LLM knows what's on screen
+            try:
+                from app.services.page_context_service import page_context_service as _pcs
+                _snap = _pcs.get_cached_snapshot()
+                if _snap:
+                    context_prefix += f"[SCREEN CONTEXT]\n{_snap.summary_for_llm()}\n\n"
+            except Exception:
+                pass
+
+
             prompt = (
                 f"{context_prefix}"
                 f"Available intents:\n{intents_json}\n\n"
