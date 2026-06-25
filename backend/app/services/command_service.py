@@ -645,32 +645,34 @@ class CommandService:
             _d_text = text.lower().strip()
             _chrome_dialog_action: str | None = None
 
-            # "save password" / "save it" / "yes save" → Enter key
+            # PRIORITY 1: Close / Dismiss / No-thanks
+            # MUST be checked before "save" because "close the save password popup"
+            # contains the substring "save password" and would falsely trigger Enter.
             if _d_re.search(
-                r'\b(save\s+password|yes\s+save|keep\s+password|save\s+it|click\s+save)\b',
+                r'\bno\s*thanks\b'
+                r'|\bdon\'t\s+save\b|\bdont\s+save\b'
+                r'|\bnot\s+now\b'
+                r'|\b(close|dismiss|skip|cancel|reject|ignore)\b.{0,35}\b(password|save|dialog|popup|notification)\b',
                 _d_text
             ):
-                _chrome_dialog_action = "save"
+                _chrome_dialog_action = "no_thanks"
 
-            # "never" / "never save" / "click never" → Shift+Tab + Enter
+            # PRIORITY 2: Never save
             elif _d_re.search(
-                r'\b(never\s+save\s+password|never\s+save|click\s+never|press\s+never|select\s+never)\b'
-                r'|\bnever\b.{0,20}\bpassword\b'
-                r'|\bpassword\b.{0,20}\bnever\b',
+                r'\bnever\s+save\b'
+                r'|\b(click|press|select|choose)\s+never\b'
+                r'|\bnever\b.{0,15}\bpassword\b',
                 _d_text
             ):
                 _chrome_dialog_action = "never"
 
-            # "no thanks" / "don't save" / "close password" → Escape
+            # PRIORITY 3: Save — anchored so "close the save password" does NOT match
             elif _d_re.search(
-                r'\bno\s+thanks\b'
-                r'|\bdon\'?t\s+save\b'
-                r'|\bnot\s+now\b'
-                r'|\b(close|dismiss)\s+(the\s+)?(password|save|dialog|popup|notification)\b'
-                r'|\bskip\s+(the\s+)?(save\s+)?(password)?\b',
+                r'^\s*(save\s+password|yes\s+save|keep\s+password|save\s+it)\b'
+                r'|\b(click|press|select|choose)\s+save\b',
                 _d_text
             ):
-                _chrome_dialog_action = "no_thanks"
+                _chrome_dialog_action = "save"
 
             if not intent_name and _chrome_dialog_action:
                 try:
