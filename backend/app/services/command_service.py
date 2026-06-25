@@ -25,7 +25,7 @@ except ImportError:
     _RAPIDFUZZ_AVAILABLE = False
 
 from loguru import logger
-
+from automation.browser.browser_controller import VoiceBrowserCommands, BrowserController
 def _is_chrome_running_fast(port: int = 9222) -> bool:
     """Fast non-blocking check to see if Chrome debugging port is open."""
     import socket

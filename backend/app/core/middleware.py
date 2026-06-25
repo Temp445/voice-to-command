@@ -41,7 +41,14 @@ def register_middleware(app: FastAPI) -> None:
 
         logger.debug(f"[{request_id}] → {request.method} {request.url.path}")
 
-        response: Response = await call_next(request)
+        try:
+            response: Response = await call_next(request)
+        except Exception as e:
+            # Prevent anyio.EndOfStream from bubbling up and crashing the Uvicorn worker
+            if "No response returned" in str(e) or "EndOfStream" in str(type(e)):
+                logger.warning(f"[{request_id}] Client disconnected before response was generated.")
+                return JSONResponse(status_code=499, content={"detail": "Client Closed Request"})
+            raise
 
         elapsed = (time.perf_counter() - start) * 1000
         response.headers["X-Request-ID"] = request_id

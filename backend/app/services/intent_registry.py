@@ -6,6 +6,7 @@ Defines all built-in intents with regex patterns and wires them to the automatio
 import re
 from app.services.command_service import Intent, command_service
 from loguru import logger
+from automation.browser.browser_controller import VoiceBrowserCommands, BrowserController
 
 
 # ─── Lazy import executor to avoid circular deps ─────────────────────────────
@@ -673,9 +674,90 @@ async def handle_browser_paginate(direction: str = "", page_num: str = "", **_) 
     return f"Could not find or click the {action_desc} button. It might be disabled or hidden."        
 
 async def handle_crm_action(text: str = "", **_) -> str:
-    from automation.browser.browser_controller import VoiceBrowserCommands
     cmd = VoiceBrowserCommands()
     return await cmd.execute(text)
+
+
+async def handle_toggle_element(text: str = "", **_) -> str:
+    """Enable, disable, or toggle a switch/checkbox element on the active page.
+
+    `text` is the target label spoken by the user (e.g. "device-1", "background auto-sync").
+    We use JS to find any toggle/switch element whose nearest container text includes
+    the spoken label, then click it directly — without going through VoiceBrowserCommands
+    (which would strip the action word and click the wrong element).
+    """
+    from automation.browser.browser_engine import BrowserEngine, _run_in_playwright
+
+    target = text.strip().lower()
+    engine = BrowserEngine()
+
+    async def _do_toggle():
+        page = await engine.get_active_page()
+        if not page:
+            return "No active browser tab found. Open the page first."
+
+        result = await page.evaluate("""
+            (target) => {
+                // Strategy 1: Find toggle/switch/checkbox near the target text label
+                const toggleSels = [
+                    'input[type="checkbox"]',
+                    '[role="switch"]',
+                    '[role="checkbox"]',
+                    'button[class*="toggle" i]',
+                    'button[class*="switch" i]',
+                    'label[class*="toggle" i]',
+                    'div[class*="toggle" i]',
+                    'span[class*="toggle" i]',
+                ];
+                const allToggles = Array.from(document.querySelectorAll(toggleSels.join(',')));
+
+                for (const t of allToggles) {
+                    let node = t.parentElement;
+                    for (let depth = 0; depth < 12; depth++) {
+                        if (!node) break;
+                        if (node.innerText?.toLowerCase().includes(target)) {
+                            t.click();
+                            return 'clicked_toggle';
+                        }
+                        node = node.parentElement;
+                    }
+                }
+
+                // Strategy 2: Find DISABLED/ENABLED label text near the target
+                const allEls = Array.from(document.querySelectorAll('*'));
+                for (const el of allEls) {
+                    if (el.children.length > 0) continue;
+                    const txt = (el.innerText || el.textContent || '').trim().toUpperCase();
+                    if (txt !== 'DISABLED' && txt !== 'ENABLED') continue;
+
+                    let node = el.parentElement;
+                    for (let depth = 0; depth < 15; depth++) {
+                        if (!node) break;
+                        if (node.innerText?.toLowerCase().includes(target)) {
+                            // Click the nearest clickable ancestor of the label
+                            const clickTarget =
+                                el.closest('[role="switch"], button, label, [class*="toggle" i]')
+                                || el.parentElement;
+                            clickTarget?.click();
+                            return `clicked_label_${txt}`;
+                        }
+                        node = node.parentElement;
+                    }
+                }
+
+                return 'not_found';
+            }
+        """, target)
+
+        if result == "not_found":
+            return f"Could not find a toggle switch near '{text}'. Try saying the exact label visible on screen."
+        elif result == "clicked_toggle" or result.startswith("clicked_label"):
+            return f"Toggled '{text}' successfully."
+        return f"Toggle result: {result}"
+
+    return await _run_in_playwright(_do_toggle())
+
+
 async def handle_browser_date_filter(start_date: str = "", end_date: str = "", text: str = "", **kwargs) -> str:
     """
     Set a date range filter on ANY website (CRM, analytics, booking, reporting).
@@ -1731,12 +1813,12 @@ async def handle_click_text(text: str = "", **_) -> str:
     # If the browser engine is running (even via CDP reconnect), always try this first.
     # This guarantees we click the website, not any screen overlay like the command console.
     try:
-        from automation.browser.browser_controller import BrowserController
+        from automation.browser.browser_engine import BrowserEngine
         from automation.browser.dom_agent import DOMAgent
-        bc = BrowserController()
+        engine = BrowserEngine()
         # get_active_page() checks visibilityState → hasFocus → most-recent.
         # Fixes clicking inside a background CRM tab when user is on Acesoft tab.
-        page = await bc.engine.get_active_page()
+        page = await engine.get_active_page()
         if page is not None:
             agent = DOMAgent(page)
             dom_res = await agent.execute_intent(f"click {clean_text}")
@@ -1767,7 +1849,65 @@ async def handle_click_text(text: str = "", **_) -> str:
                             return f"Clicked '{clean_text}' on webpage."
                 except Exception:
                     pass
-            logger.warning(f"Direct Playwright locators could not find '{clean_text}'. Falling back to OCR.")
+            # ── Priority 2.5: JS Broad Element Search ───────────────────────────
+            # Playwright role-locators only find proper <button>/<a> tags.
+            # Many React/Next.js sites use styled <div> or <span> components.
+            # This JS walks ALL visible interactive-ish elements and finds the
+            # best text match, then clicks via Playwright mouse (not JS .click())
+            # so React synthetic events fire correctly.
+            try:
+                _js_broad = """
+                (query) => {
+                    const q = query.toLowerCase().trim();
+                    const candidates = Array.from(document.querySelectorAll(
+                        "a, button, [role='button'], [role='link'], [role='menuitem'], " +
+                        "[role='tab'], [onclick], [tabindex], div, span, li, p, h1, h2, h3, h4, h5"
+                    ));
+                    let bestEl = null, bestScore = 0;
+                    for (const el of candidates) {
+                        const style = window.getComputedStyle(el);
+                        if (style.display === 'none' || style.visibility === 'hidden' ||
+                            el.offsetWidth === 0 || el.offsetHeight === 0) continue;
+                        const label = (el.innerText || el.textContent || '').trim().toLowerCase();
+                        if (!label) continue;
+                        let score = 0;
+                        if (label === q) score = 100;
+                        else if (label.startsWith(q) || q.startsWith(label)) score = 85;
+                        else if (label.includes(q) || q.includes(label)) score = 70;
+                        else {
+                            const qWords = q.split(' ');
+                            const matches = qWords.filter(w => label.includes(w)).length;
+                            score = Math.round((matches / qWords.length) * 60);
+                        }
+                        if (score > bestScore && score >= 60) {
+                            bestScore = score;
+                            bestEl = el;
+                        }
+                    }
+                    if (!bestEl) return null;
+                    const r = bestEl.getBoundingClientRect();
+                    return { x: r.left + r.width / 2, y: r.top + r.height / 2, label: bestEl.innerText || bestEl.textContent };
+                }
+                """
+                for frame in page.frames:
+                    try:
+                        pos = await frame.evaluate(_js_broad, clean_text)
+                        if pos and pos.get("x") is not None:
+                            await page.mouse.click(pos["x"], pos["y"])
+                            try:
+                                await page.wait_for_load_state("commit", timeout=3000)
+                            except Exception:
+                                pass
+                            # Re-pin the page since navigation may occur after click
+                            engine.pin_active_page(page)
+                            matched_label = (pos.get("label") or clean_text).strip()
+                            logger.info(f"Priority 2.5 JS broad click: '{clean_text}' → '{matched_label}'")
+                            return f"Clicked '{matched_label}' on webpage."
+                    except Exception:
+                        continue
+            except Exception as _js_err:
+                logger.debug(f"JS broad element search failed: {_js_err}")
+            logger.warning(f"All browser locators failed for '{clean_text}'. Falling back to OCR.")
     except Exception as e:
         logger.warning(f"Browser-first click failed for '{clean_text}': {e}. Falling back to OCR.")
 
@@ -3157,6 +3297,18 @@ def register_all_intents() -> None:
             handler=handle_click_text,
             description="Open or click a specific link/tab in the browser using the DOM Agent",
             examples=["open the linkedin link", "open the fourth tab"],
+            param_names=["text"],
+        ),
+        Intent(
+            name="toggle_element",
+            domain="browser",
+            patterns=[
+                r"^(?:enable|disable|toggle|activate|deactivate)\s+(?P<text>.+)$",
+                r"^turn\s+(?:on|off)\s+(?P<text>.+)$",
+            ],
+            handler=handle_toggle_element,
+            description="Enable, disable, or toggle a switch, checkbox, or status element on the page",
+            examples=["enable device 1", "disable device 2", "toggle background auto-sync", "turn on notifications", "deactivate user"],
             param_names=["text"],
         ),
     ]

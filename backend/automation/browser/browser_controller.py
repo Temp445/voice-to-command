@@ -377,6 +377,78 @@ class VoiceBrowserCommands:
                         pass
         except Exception as e:
             logger.debug(f"Deterministic fallback failed: {e}")
+
+        # --- Toggle / Enable / Disable Handler ---
+        # Handles: "enable device 1", "disable device 2", "toggle background auto-sync"
+        _toggle_match = re.match(
+            r'^(?P<action>enable|disable|toggle|turn\s+on|turn\s+off|activate|deactivate)\s+(?P<target>.+)$',
+            transcript_lower.strip()
+        )
+        if _toggle_match and active_page:
+            _action = _toggle_match.group("action")
+            _target = _toggle_match.group("target").strip()
+            _want_enabled = _action in ("enable", "turn on", "activate")
+            _want_disabled = _action in ("disable", "turn off", "deactivate")
+            try:
+                # Strategy: find any checkbox/toggle/switch near text matching the target
+                _clicked = await active_page.evaluate("""
+                    (args) => {
+                        const { target, wantEnabled, wantDisabled } = args;
+
+                        // Helper: does this element or its ancestors contain the target text?
+                        function nearText(el) {
+                            const row = el.closest('tr, li, div.device, div.card, div.item, section, article, [class*="row"], [class*="card"], [class*="item"], [class*="device"]');
+                            const scope = row || el.parentElement?.parentElement || document;
+                            return scope.innerText?.toLowerCase().includes(target);
+                        }
+
+                        // 1. Look for role=switch or input[type=checkbox] near the target text
+                        const toggles = Array.from(document.querySelectorAll(
+                            'input[type=checkbox], [role=switch], [role=checkbox], button[class*="toggle" i], button[class*="switch" i], span[class*="toggle" i], div[class*="toggle" i]'
+                        ));
+                        
+                        for (const t of toggles) {
+                            if (!nearText(t)) continue;
+                            const isChecked = t.checked ?? t.getAttribute('aria-checked') === 'true' 
+                                ?? t.classList.contains('active') ?? t.classList.contains('enabled');
+                            
+                            if (wantEnabled && isChecked) return 'already_on';
+                            if (wantDisabled && !isChecked) return 'already_off';
+                            t.click();
+                            return 'clicked';
+                        }
+                        
+                        // 2. Look for any element with visible text "DISABLED" or "ENABLED" near the target
+                        const labels = Array.from(document.querySelectorAll('*')).filter(el => {
+                            const txt = el.innerText?.trim().toUpperCase();
+                            return (txt === 'DISABLED' || txt === 'ENABLED') && el.children.length === 0;
+                        });
+                        for (const lbl of labels) {
+                            if (!nearText(lbl)) continue;
+                            const txt = lbl.innerText?.trim().toUpperCase();
+                            if (wantEnabled && txt === 'ENABLED') return 'already_on';
+                            if (wantDisabled && txt === 'DISABLED') return 'already_off';
+                            // click the parent toggle container
+                            const clickTarget = lbl.closest('button, [role=switch], label, [class*="toggle" i]') || lbl.parentElement;
+                            clickTarget?.click();
+                            return 'clicked_label';
+                        }
+                        
+                        return 'not_found';
+                    }
+                """, {"target": _target, "wantEnabled": _want_enabled, "wantDisabled": _want_disabled})
+
+                if _clicked == "clicked" or _clicked == "clicked_label":
+                    state = "enabled" if _want_enabled else ("disabled" if _want_disabled else "toggled")
+                    return f"Successfully {state} '{_target}'."
+                elif _clicked == "already_on":
+                    return f"'{_target}' is already enabled."
+                elif _clicked == "already_off":
+                    return f"'{_target}' is already disabled."
+                else:
+                    logger.info(f"Toggle handler could not find '{_target}' on page — falling through to DOMAgent.")
+            except Exception as _te:
+                logger.warning(f"Toggle handler error: {_te}")
         
         # --- CRM Workflows ---
         if self.crm:
@@ -568,7 +640,7 @@ class VoiceBrowserCommands:
                 r'\b(?:filter|set|change|update|from|between)\b.{1,30}\b\d{1,2}\b.{1,20}\bto\b.{1,20}\b\d{4}\b',
                 transcript, re.IGNORECASE
             ))
-            if not _is_date_filter_cmd and re.search(r'\b(edit|assign|update|change|modify|revise|correct|alter|fix|replace|type|fill|enter|write|put|set|input|select|choose|pick|grab|check|uncheck|tick|untick|mark|unmark|deselect|clear|upload|attach)\b', transcript, re.IGNORECASE):
+            if not _is_date_filter_cmd and re.search(r'\b(edit|assign|update|change|modify|revise|correct|alter|fix|replace|type|fill|enter|write|put|set|input|select|choose|pick|grab|check|uncheck|tick|untick|mark|unmark|deselect|clear|upload|attach|enable|disable|toggle|activate|deactivate|switch|turn\s+on|turn\s+off)\b', transcript, re.IGNORECASE):
                 from automation.browser.dom_agent import DOMAgent
                 page = active_page or await self.ctrl._ensure_page()
                 agent = DOMAgent(page)
