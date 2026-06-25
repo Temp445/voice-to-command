@@ -26,6 +26,16 @@ except ImportError:
 
 from loguru import logger
 
+def _is_chrome_running_fast(port: int = 9222) -> bool:
+    """Fast non-blocking check to see if Chrome debugging port is open."""
+    import socket
+    try:
+        with socket.create_connection(("127.0.0.1", port), timeout=0.02):
+            return True
+    except OSError:
+        return False
+
+
 
 @dataclass
 class Intent:
@@ -775,7 +785,7 @@ class CommandService:
                     from automation.browser.browser_engine import _run_in_playwright, BrowserEngine
                     _snap = _pcs.get_cached_snapshot()
                     _be = BrowserEngine()
-                    if _snap and _be._context is not None:
+                    if _snap and (_be._context is not None or _is_chrome_running_fast(9222)):
                         _best_el = _find_best(_snap.elements, text, min_score=45)
                         if _best_el:
                             _target_text = _best_el.text or _best_el.name or _best_el.el_id
@@ -838,7 +848,7 @@ class CommandService:
                     from automation.browser.browser_controller import BrowserController
                     from automation.browser.browser_engine import _run_in_playwright
                     bc = BrowserController()
-                    if bc.engine._context is not None:
+                    if bc.engine._context is not None or _is_chrome_running_fast(9222):
                         import re as _re
                         _click_text = text  # capture for closure
                         _start_ref = start
@@ -980,7 +990,7 @@ class CommandService:
                         from automation.browser.browser_controller import BrowserController
                         from automation.browser.browser_engine import _run_in_playwright
                         bc = BrowserController()
-                        if bc.engine._context is not None:
+                        if bc.engine._context is not None or _is_chrome_running_fast(9222):
                             logger.info(f"Bare email intercept: '{_email_val}' (from '{text}')")
 
                             async def _do_bare_email():
@@ -1054,7 +1064,7 @@ class CommandService:
                         from automation.browser.browser_controller import BrowserController
                         from automation.browser.browser_engine import _run_in_playwright
                         bc = BrowserController()
-                        if bc.engine._context is not None:
+                        if bc.engine._context is not None or _is_chrome_running_fast(9222):
                             _field_type = _canonical_field
                             _val = _cred_match.group(2).strip()
 
@@ -1111,7 +1121,7 @@ class CommandService:
                         from automation.browser.browser_controller import BrowserController
                         from automation.browser.browser_engine import _run_in_playwright
                         bc = BrowserController()
-                        if bc.engine._context is not None:
+                        if bc.engine._context is not None or _is_chrome_running_fast(9222):
                             _otp_val = _digits_only
 
                             async def _do_implicit_otp():
@@ -1405,7 +1415,7 @@ class CommandService:
             else:
                 user_msg = f"Sorry, I couldn't complete that action. ({error_type})"
 
-            logger.error(f"Handler '{intent_name}' raised: {e}")
+            logger.exception(f"Handler '{intent_name}' failed:")
             return {
                 "intent": intent_name,
                 "parameters": params,

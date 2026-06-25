@@ -5,4 +5,5 @@ from .state_manager import StateManagerMixin
 
 class DOMAgent(ElementFinderMixin, ActionExecutorMixin, StateManagerMixin):
     def __init__(self, page: Page):
-            self.page = page
+        self.page = page
+        StateManagerMixin.__init__(self)

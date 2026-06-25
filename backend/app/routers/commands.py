@@ -74,50 +74,53 @@ async def execute_command(
     if pipeline:
         from voice.pipeline import PipelineState
         pipeline._set_state(PipelineState.PROCESSING)
+        pipeline._active_task = asyncio.current_task()
 
     if body.source == "text":
         await ws_manager.broadcast("transcript", {"text": body.text, "is_final": True})
 
-    # ── Core execution — this is the only thing blocking the response ──────────
-    result = await command_service.parse_and_execute(body.text)
+    try:
+        # ── Core execution — this is the only thing blocking the response ──────────
+        result = await command_service.parse_and_execute(body.text)
 
-    now = datetime.now(timezone.utc)
-    entry_id = body.id or str(uuid.uuid4())
+        now = datetime.now(timezone.utc)
+        entry_id = body.id or str(uuid.uuid4())
 
-    # ── Broadcast to overlay IMMEDIATELY after execution, before browser opens ─
-    # Previously the overlay received command_executed only after navigate() +
-    # focus + CDP maximize all completed — causing a 10–25s overlay delay.
-    # Now we fire it here so the overlay pops up instantly on command success,
-    # regardless of how long the browser navigation takes afterward.
-    asyncio.create_task(ws_manager.broadcast("command_executed", {
-        "id": entry_id,
-        "raw_text": body.text,
-        "intent": result.get("intent"),
-        "status": result.get("status", "failed"),
-        "result": result.get("result"),
-        "source": body.source,
-        "routed_by_llm": result.get("routed_by_llm", False),
-    }))
+        # ── Broadcast to overlay IMMEDIATELY after execution, before browser opens ─
+        # Previously the overlay received command_executed only after navigate() +
+        # focus + CDP maximize all completed — causing a 10–25s overlay delay.
+        # Now we fire it here so the overlay pops up instantly on command success,
+        # regardless of how long the browser navigation takes afterward.
+        asyncio.create_task(ws_manager.broadcast("command_executed", {
+            "id": entry_id,
+            "raw_text": body.text,
+            "intent": result.get("intent"),
+            "status": result.get("status", "failed"),
+            "result": result.get("result"),
+            "source": body.source,
+            "routed_by_llm": result.get("routed_by_llm", False),
+        }))
 
-    # ── Everything else fires in background — response returns immediately ─────
-    background_tasks.add_task(
-        _save_history_bg, entry_id, user_id, body, result, now
-    )
+        # ── Everything else fires in background — response returns immediately ─────
+        background_tasks.add_task(
+            _save_history_bg, entry_id, user_id, body, result, now
+        )
 
-    if pipeline and body.source != "text":
-        from voice.pipeline import PipelineState
-        pipeline._set_state(PipelineState.IDLE)
-
-    return CommandResultResponse(
-        id=entry_id,
-        raw_text=body.text,
-        intent=result.get("intent"),
-        parameters=result.get("parameters"),
-        status=result.get("status", "failed"),
-        result=result.get("result"),
-        duration_ms=result.get("duration_ms"),
-        executed_at=now,
-    )
+        return CommandResultResponse(
+            id=entry_id,
+            raw_text=body.text,
+            intent=result.get("intent"),
+            parameters=result.get("parameters"),
+            status=result.get("status", "failed"),
+            result=result.get("result"),
+            duration_ms=result.get("duration_ms"),
+            executed_at=now,
+        )
+    finally:
+        if pipeline:
+            from voice.pipeline import PipelineState
+            pipeline._set_state(PipelineState.IDLE)
+            pipeline._active_task = None
 
 
 @router.get("/history", response_model=list[CommandResultResponse])

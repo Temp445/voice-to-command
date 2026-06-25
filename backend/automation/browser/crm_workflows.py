@@ -53,7 +53,7 @@ class CRMMacros:
                     logger.info(f"Opening CRM: {dest}")
                     await self.engine.navigate(dest, new_tab=new_tab)
                     from automation.browser.dom_agent import DOMAgent
-                    page = await self.engine.ensure_browser()
+                    page = await self.engine.get_active_page()
                     agent = DOMAgent(page)
                     await agent.execute_intent("click the login, sign in, or Site Admin link")
                     return f"Opened website and initiated login."
@@ -81,6 +81,9 @@ class CRMMacros:
         """Automates the CRM login flow with robust error handling and fallbacks."""
         logger.info("Logging into CRM...")
         
+        # Login always targets the CRM page itself (we navigate to /login)
+        # so we call ensure_browser() here to get a stable page reference,
+        # then immediately navigate to the CRM login URL.
         page = await self.engine.ensure_browser()
         
         try:
@@ -125,7 +128,7 @@ class CRMMacros:
     async def logout(self):
         """Automates the CRM logout flow using the smart multi-layer LogoutHandler."""
         logger.info("Logging out of CRM...")
-        page = await self.engine.ensure_browser()
+        page = await self.engine.get_active_page()
         from automation.browser.logout_handler import LogoutHandler
         handler = LogoutHandler(page)
         return await handler.smart_logout()
@@ -136,7 +139,7 @@ class CRMMacros:
         module_name = module_name.lower().strip()
         logger.info(f"Navigating to CRM module: {module_name}")
         
-        page = await self.engine.ensure_browser()
+        page = await self.engine.get_active_page()
         
         # Check if user is blocked by the login page or landing page
         current_url = page.url.lower()
@@ -198,7 +201,7 @@ class CRMMacros:
         module_name = entity_name + "s" if not entity_name.endswith('s') else entity_name
         await self.navigate_to_module(module_name)
         
-        page = await self.engine.ensure_browser()
+        page = await self.engine.get_active_page()
         
         try:
             import re
@@ -240,7 +243,7 @@ class CRMMacros:
         module_name = entity_name + "s" if not entity_name.endswith('s') else entity_name
         await self.navigate_to_module(module_name)
         
-        page = await self.engine.ensure_browser()
+        page = await self.engine.get_active_page()
         
         try:
             # Common CRM search bar selectors
@@ -266,7 +269,7 @@ class CRMMacros:
     async def open_first_record(self):
         """Clicks the first available record in a standard data table."""
         logger.info("Attempting to open the first record in the data grid...")
-        page = await self.engine.ensure_browser()
+        page = await self.engine.get_active_page()
         
         try:
             # Common table row links: looking for an anchor tag in the first row of a tbody

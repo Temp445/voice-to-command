@@ -147,6 +147,10 @@ class BrowserEngine:
     _context: BrowserContext | None = None
     _page: Page | None = None
     _lock = None
+    # Short-lived cache for get_active_page() — avoids redundant CDP/JS calls
+    # within a single command's execution pipeline (~80-150ms saved per call).
+    _active_page_cache: "tuple[float, Page] | None" = None
+    _ACTIVE_PAGE_TTL: float = 0.3  # seconds
 
     def __new__(cls):
         if cls._instance is None:
@@ -231,19 +235,33 @@ class BrowserEngine:
 
         await _run_in_playwright(_do())
 
+    def invalidate_active_page_cache(self) -> None:
+        """Force the next get_active_page() call to do a fresh tab detection.
+        Call this whenever a navigation or tab-switch occurs."""
+        self._active_page_cache = None
+
     async def get_active_page(self) -> Page:
         """Return the tab the user is currently looking at.
 
-        Three-layer detection — each layer is tried in order:
-          1. document.visibilityState == "visible"  → the OS-foreground tab
-          2. document.hasFocus()                    → fallback when visibility API is blocked
-          3. Most-recently opened non-extension tab → final fallback
+        Detection priority:
+          1. Short-lived cache (300 ms TTL) — avoids redundant CDP/JS round-trips
+             when multiple layers of a single command all need the active page.
+          2. document.visibilityState == "visible" → OS-foreground tab
+          3. document.hasFocus()                   → fallback when visibility API blocked
+          4. CDP REST /json endpoint               → works even when ACE overlay steals focus
+          5. Most-recently created non-system tab  → final fallback
 
-        This replaces the old self._page cache as the source-of-truth for every
-        automation command. self._page is now only used to track the tab that ACE
-        itself navigated to (so voice navigate commands still work), but every
-        click/type/fill resolves the real active tab at call time.
+        This is the SINGLE source-of-truth for every automation command.
+        self._page is kept only for ACE-initiated navigations; never rely on it
+        to determine what the user is currently looking at.
         """
+        # ── Cache layer ──────────────────────────────────────────────────────
+        if self._active_page_cache is not None:
+            ts, cached_page = self._active_page_cache
+            if (time.time() - ts) < self._ACTIVE_PAGE_TTL and not cached_page.is_closed():
+                return cached_page
+            self._active_page_cache = None  # expired or closed
+
         async def _do_get_active():
             if not self._context or getattr(self._context, 'is_closed', lambda: True)():
                 return await self.ensure_browser()
@@ -326,7 +344,11 @@ class BrowserEngine:
             self._page = fallback
             return fallback
 
-        return await _run_in_playwright(_do_get_active())
+        page = await _run_in_playwright(_do_get_active())
+        # Populate cache
+        if page and not page.is_closed():
+            self._active_page_cache = (time.time(), page)
+        return page
 
     async def ensure_browser(self, background: bool = False) -> Page:
         """
@@ -522,6 +544,8 @@ class BrowserEngine:
             except Exception as e:
                 logger.debug(f"bring_to_front skipped: {e}")
 
+            # Invalidate cached active page — URL has changed
+            self.invalidate_active_page_cache()
             return f"Navigated to {target}"
         return await _run_in_playwright(_do_nav())
 
@@ -562,6 +586,8 @@ class BrowserEngine:
             if url:
                 target = f"https://{url}" if not url.startswith(("http://", "https://")) else url
                 await self._page.goto(target)
+            # Invalidate cache — new tab is now the active one
+            self.invalidate_active_page_cache()
             return "Opened new tab."
         return await _run_in_playwright(_do())
 
@@ -572,6 +598,8 @@ class BrowserEngine:
             pages = self._context.pages
             if pages:
                 self._page = pages[-1]
+            # Active tab changed — invalidate cache
+            self.invalidate_active_page_cache()
             return "Tab closed."
         return await _run_in_playwright(_do())
 
@@ -598,6 +626,7 @@ class BrowserEngine:
             if 0 <= index < len(pages):
                 self._page = pages[index]
                 await self._page.bring_to_front()
+                self.invalidate_active_page_cache()
                 return f"Switched to tab {index + 1}."
             return "Tab index out of range."
         return await _run_in_playwright(_do())
@@ -609,6 +638,7 @@ class BrowserEngine:
             if pages:
                 self._page = pages[-1]
                 await self._page.bring_to_front()
+                self.invalidate_active_page_cache()
                 return "Switched to last tab."
             return "No tabs open."
         return await _run_in_playwright(_do())
@@ -626,6 +656,7 @@ class BrowserEngine:
             next_idx = (current_idx + 1) % len(pages)
             self._page = pages[next_idx]
             await self._page.bring_to_front()
+            self.invalidate_active_page_cache()
             return f"Switched to next tab ({next_idx + 1} of {len(pages)})."
         return await _run_in_playwright(_do())
 
@@ -642,6 +673,7 @@ class BrowserEngine:
             prev_idx = (current_idx - 1) % len(pages)
             self._page = pages[prev_idx]
             await self._page.bring_to_front()
+            self.invalidate_active_page_cache()
             return f"Switched to previous tab ({prev_idx + 1} of {len(pages)})."
         return await _run_in_playwright(_do())
 
@@ -652,6 +684,7 @@ class BrowserEngine:
                 if partial_url.lower() in p.url.lower():
                     self._page = p
                     await self._page.bring_to_front()
+                    self.invalidate_active_page_cache()
                     return f"Switched to tab matching {partial_url}."
             return f"No tab found matching {partial_url}."
         return await _run_in_playwright(_do())

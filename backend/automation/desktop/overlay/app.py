@@ -278,13 +278,18 @@ class OverlayApp(QWidget):
             self.status_label.setStyleSheet("color: #60a5fa;")
             self._set_pill_accent("#3b82f6")
         else:
+            self._set_pill_accent(None)
+            self.sub_label.setText(f"Wake word: {self._wake_word}")
+            
             if self._last_transcript:
                 self.show()
                 self.raise_()
                 self.status_label.setText(self._last_transcript)
+                
+                t_lower = self._last_transcript.lower()
                 if self._last_transcript.startswith('✓'):
                     self.status_label.setStyleSheet("color: #10b981;")
-                elif self._last_transcript.startswith('✗'):
+                elif self._last_transcript.startswith('✗') or "cancel" in t_lower or "abort" in t_lower or "stop" in t_lower:
                     self.status_label.setStyleSheet("color: #ef4444;")
                 else:
                     self.status_label.setStyleSheet("color: #fbbf24;")
@@ -292,12 +297,10 @@ class OverlayApp(QWidget):
             else:
                 self.status_label.setText("ACE is ready")
                 self.status_label.setStyleSheet("color: #e5e7eb;")
-                self.sub_label.setText(f"Wake word: {self._wake_word}")
-                self._set_pill_accent(None)
                 
-                # If it's already visible (e.g., finishing a command), start the auto-hide timer
-                if self.isVisible() and not self._auto_hide_timer.isActive():
-                    self._auto_hide_timer.start(3000)
+            # If it's already visible (e.g., finishing a command), start the auto-hide timer
+            if self.isVisible() and not self._auto_hide_timer.isActive():
+                self._auto_hide_timer.start(3000)
 
     def _on_settings_update(self, settings_data: dict):
         if "wake_word" in settings_data:

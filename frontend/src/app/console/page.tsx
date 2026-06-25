@@ -137,7 +137,14 @@ function CommandRow({ entry }: { entry: CommandEntry }) {
           <Loader2 style={{ width: "0.75rem", height: "0.75rem", animation: "spin 1s linear infinite" }} />
           <span style={{ fontSize: "0.75rem" }}>Processing…</span>
           <button 
-            onClick={() => useCommandStore.getState().updateEntry(entry.id, { status: "failed", result: "Cancelled by user" })}
+            onClick={async () => {
+              useCommandStore.getState().updateEntry(entry.id, { status: "failed", result: "Cancelled by user" });
+              try {
+                await api.deactivate();
+              } catch (e) {
+                console.error("Failed to cancel on backend:", e);
+              }
+            }}
             style={{ marginLeft: "0.5rem", padding: "0.1rem 0.4rem", fontSize: "0.7rem", background: "rgba(239, 68, 68, 0.1)", color: "#ef4444", border: "1px solid rgba(239, 68, 68, 0.3)", borderRadius: "0.25rem", cursor: "pointer", transition: "all 0.15s" }}
             onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "rgba(239, 68, 68, 0.2)"; }}
             onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "rgba(239, 68, 68, 0.1)"; }}

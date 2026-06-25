@@ -1690,7 +1690,7 @@ async def handle_type_text(text: str = "", **_) -> str:
             if "couldn't find" not in dom_res.lower() and "failed" not in dom_res.lower():
                 return dom_res
     except Exception as e:
-        logger.error(f"[{__name__}] {type(e).__name__}: {e}")
+        logger.exception(f"[{__name__}] {type(e).__name__} in DOMAgent: {e}")
         pass
 
     from automation.input.keyboard_controller import KeyboardController
@@ -1722,8 +1722,8 @@ async def handle_click_text(text: str = "", **_) -> str:
     """
     Priority order for clicking text:
     1. DOMAgent (browser-based) — precise, targets only the browser page, not the whole screen.
-    2. VoiceBrowserCommands — legacy browser commands.
-    3. OCR (last resort) — scans the entire screen. Only used when no browser session is active.
+    2. Direct Playwright Locators — fallback if DOMAgent fails or element is not in DOMAgent snapshot.
+    3. OCR (last resort) — scans the entire screen. Only used when no browser session is active or element not found.
     """
     clean_text = text.strip()
     
@@ -1740,12 +1740,36 @@ async def handle_click_text(text: str = "", **_) -> str:
         if page is not None:
             agent = DOMAgent(page)
             dom_res = await agent.execute_intent(f"click {clean_text}")
-            if "couldn't find" not in dom_res.lower() and "failed" not in dom_res.lower():
+            if not any(err in dom_res.lower() for err in ["couldn't find", "failed", "could not determine", "no actions"]):
                 return dom_res
-            # If DOMAgent couldn't find the element, fall through to OCR
-            logger.warning(f"DOMAgent could not find '{clean_text}' on page. Falling back to OCR.")
+            logger.warning(f"DOMAgent failed for '{clean_text}' (Result: {dom_res}). Trying direct Playwright locators...")
+            
+            # ── Priority 2: Direct Playwright Locators ────────────────────────────
+            import re as _re
+            for _loc in [
+                page.get_by_role("button", name=_re.compile(f"^{_re.escape(clean_text)}$", _re.IGNORECASE)),
+                page.get_by_role("link",   name=_re.compile(f"^{_re.escape(clean_text)}$", _re.IGNORECASE)),
+                page.get_by_text(clean_text, exact=True),
+                page.get_by_role("button", name=_re.compile(_re.escape(clean_text), _re.IGNORECASE)),
+                page.get_by_role("link",   name=_re.compile(_re.escape(clean_text), _re.IGNORECASE)),
+                page.get_by_text(clean_text, exact=False),
+            ]:
+                try:
+                    if await _loc.count() > 0:
+                        el = _loc.first
+                        if await el.is_visible():
+                            await el.scroll_into_view_if_needed(timeout=1000)
+                            await el.click(timeout=2000)
+                            try:
+                                await page.wait_for_load_state("commit", timeout=2000)
+                            except Exception:
+                                pass
+                            return f"Clicked '{clean_text}' on webpage."
+                except Exception:
+                    pass
+            logger.warning(f"Direct Playwright locators could not find '{clean_text}'. Falling back to OCR.")
     except Exception as e:
-        logger.warning(f"DOMAgent click failed for '{clean_text}': {e}. Falling back to OCR.")
+        logger.warning(f"Browser-first click failed for '{clean_text}': {e}. Falling back to OCR.")
 
     # ── Last Resort: Desktop OCR ─────────────────────────────────────────────
     # Only reaches here if no browser session is active OR the element was not found in DOM.
@@ -2747,6 +2771,10 @@ def register_all_intents() -> None:
                 r"^(?P<action>(?:open|select|click)\s+(?:first|top)\s+(?:record|row|lead|opportunity|customer|order|quote|task|account|contact))$",
                 r"^(?P<action>(?:edit|assign)\s+(?:lead|opportunity|customer|order|quote|task|account|contact)(?:\s+.*)?)$",
                 r"^(?P<action>update\s+(?:status|lead|opportunity|customer|order|quote|task|account|contact)(?:\s+.*)?)$",
+                r"^(?P<action>(?:change|set|switch|toggle)\s+(?:the\s+)?(?:view\s+mode|view|display|status|type)\s+(?:to\s+)?.+)$",
+                r"^(?P<action>(?:change|set|switch|toggle|select)\s+(?:the\s+)?[\w\s]+?\s+(?:to\s+)?.+)$",
+                r"^(?P<action>[\w\s]+?\s+(?:is|set\s+to)\s+.+)$",
+                r"^(?P<action>(?:view\s+mode|view|display)\s+(?:chart|list|kanban|grid|table|board))$",
                 # NOTE: "cancel" removed — handled by cancel_dialog intent (presses Escape instantly)
             ],
             handler=handle_crm_action,
@@ -2998,7 +3026,7 @@ def register_all_intents() -> None:
             ],
             handler=handle_click_text,
             description="Click on specific text on the screen using OCR",
-            examples=["click on submit", "tap next", "click login"],
+            examples=["click on submit", "tap next", "click login", "get started"],
             param_names=["text"],
         ),
         Intent(

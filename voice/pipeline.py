@@ -62,6 +62,7 @@ class VoicePipeline:
         self._loop: asyncio.AbstractEventLoop | None = None
         self._last_spoken_text: str = ""
         self._manually_stopped: bool = False
+        self._active_task: asyncio.Task | None = None
 
         # Init pygame mixer for audio playback (instantly uses pre_init defaults)
         pygame.mixer.init()
@@ -188,9 +189,11 @@ class VoicePipeline:
             logger.warning(f"Could not auto-enable overlay: {e}")
 
         if self._loop:
-            asyncio.run_coroutine_threadsafe(self._listen_and_process(), self._loop)
+            def _start_task():
+                self._active_task = asyncio.create_task(self._listen_and_process())
+            self._loop.call_soon_threadsafe(_start_task)
         else:
-            asyncio.run(self._listen_and_process())
+            self._active_task = asyncio.create_task(self._listen_and_process())
 
     def trigger_listening(self) -> None:
         """Manually trigger listening (from UI button or hotkey)."""
@@ -208,6 +211,10 @@ class VoicePipeline:
         self._audio_capture.stop_recording_early()
         self._audio_capture.stop()
         
+        if self._active_task and self._loop:
+            self._loop.call_soon_threadsafe(self._active_task.cancel)
+            self._active_task = None
+
         try:
             import pygame
             pygame.mixer.stop()  # Instantly stop any TTS playback
@@ -435,6 +442,7 @@ class VoicePipeline:
         finally:
             self._set_state(PipelineState.IDLE)
             self._wake_word.start()
+            self._active_task = None
 
     async def _save_history(self, raw_text: str, result: dict) -> None:
         """

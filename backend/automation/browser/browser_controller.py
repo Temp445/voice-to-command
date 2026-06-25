@@ -296,9 +296,38 @@ class VoiceBrowserCommands:
                 logger.debug(f"Credential shortcut failed, continuing: {_e}")
         # ── End credential-pair shortcut ─────────────────────────────────────
 
+        # --- Resolve the active page ONCE per command ----------------------------
+        # This is the SINGLE source-of-truth for the entire command.
+        # get_active_page() uses a 300ms TTL cache so this is fast on repeated calls.
+        # It detects visibilityState -> hasFocus -> CDP REST -> fallback, ensuring
+        # we always target whatever tab the user is currently looking at, regardless
+        # of whether it was opened by ACE or manually by the user.
+        try:
+            active_page = await self.ctrl.engine.get_active_page()
+        except Exception as _page_err:
+            logger.warning(f"Could not resolve active page: {_page_err}")
+            active_page = None
+        active_url = active_page.url if active_page else ""
+
+        # Site-guard helpers — used below to decide if CRM macros are applicable.
+        from app.config import settings as _settings
+        import json as _json
+        try:
+            _all_sites = _json.loads(_settings.crm_sites) if _settings.crm_sites else []
+        except Exception:
+            _all_sites = []
+        if not _all_sites:
+            _all_sites = [{"url": _settings.crm_url, "keywords": _settings.crm_keywords}]
+        _crm_hosts = set()
+        for _s in _all_sites:
+            _su = _s.get("url", "")
+            if _su:
+                _crm_hosts.add(_su.replace("https://", "").replace("http://", "").split("/")[0].lower())
+        _active_tab_is_crm = any(h and h in active_url.lower() for h in _crm_hosts)
+
         # --- Deterministic Fallbacks (Zero LLM Tokens) ---
         try:
-            page = await self.ctrl._ensure_page()
+            page = active_page
             import re
             
             # 1. Exact "click <text>" or matching a short phrase directly to a button
@@ -383,6 +412,20 @@ class VoiceBrowserCommands:
                 _matched_url = settings.crm_url   # fall back to primary for generic matches
 
             crm_match = _matched_url is not None
+            # ── Site-Guard ──────────────────────────────────────────────────────
+            # If the active tab is NOT a CRM page, CRM macros must not run —
+            # instead fall through to DOMAgent on the actual active tab.
+            if crm_match and not _active_tab_is_crm:
+                logger.info(
+                    f"CRM keyword matched but active tab is '{active_url}' — "
+                    f"routing to DOMAgent on active tab instead of CRM."
+                )
+                if active_page:
+                    from automation.browser.dom_agent import DOMAgent
+                    _agent = DOMAgent(active_page)
+                    return await _agent.execute_intent(transcript)
+                return "CRM keyword matched but no active browser tab found."
+
             if crm_match:
                 return await self.crm.open_crm(transcript, target_url=_matched_url)
                 
@@ -394,7 +437,7 @@ class VoiceBrowserCommands:
             _login_signup_keywords = ["log in", "login", "sign in", "sign up", "signup", "register", "create account"]
             is_search_or_url = transcript.startswith("search ") or re.search(r"https?://", transcript)
             if any(w in transcript for w in _login_signup_keywords) and not is_search_or_url:
-                page = await self.ctrl._ensure_page()
+                page = active_page or await self.ctrl._ensure_page()
                 url = await self.ctrl.engine.get_url()
                 from app.config import settings
                 crm_host = settings.crm_url.replace("https://", "").replace("http://", "").split("/")[0]
@@ -439,7 +482,7 @@ class VoiceBrowserCommands:
                     "sign off", "log off",
                 ]
             if any(t in transcript_lower for t in _logout_triggers):
-                page = await self.ctrl._ensure_page()
+                page = active_page or await self.ctrl._ensure_page()
                 url = await self.ctrl.engine.get_url()
                 from app.config import settings
                 crm_host = settings.crm_url.replace("https://", "").replace("http://", "").split("/")[0]
@@ -527,7 +570,7 @@ class VoiceBrowserCommands:
             ))
             if not _is_date_filter_cmd and re.search(r'\b(edit|assign|update|change|modify|revise|correct|alter|fix|replace|type|fill|enter|write|put|set|input|select|choose|pick|grab|check|uncheck|tick|untick|mark|unmark|deselect|clear|upload|attach)\b', transcript, re.IGNORECASE):
                 from automation.browser.dom_agent import DOMAgent
-                page = await self.ctrl._ensure_page()
+                page = active_page or await self.ctrl._ensure_page()
                 agent = DOMAgent(page)
                 return await agent.execute_intent(transcript)
                     
@@ -609,7 +652,7 @@ class VoiceBrowserCommands:
         # --- Dynamic DOM Agent (Clicking, Typing, Interaction) ---
         try:
             from automation.browser.dom_agent import DOMAgent
-            page = await self.ctrl._ensure_page()
+            page = active_page or await self.ctrl.engine.get_active_page()
             agent = DOMAgent(page)
             import asyncio
             return await asyncio.wait_for(agent.execute_intent(transcript), timeout=20.0)
