@@ -627,6 +627,125 @@ class CommandService:
             params = {}
             llm_routed = False
 
+            # Layer 0.88: Chrome Native Dialog Intercept
+            # ──────────────────────────────────────────────────────────────────
+            # Chrome's "Save password?", "Translate?", etc. are native browser UI
+            # widgets — NOT in the page DOM. Playwright cannot reach them via
+            # get_by_text / get_by_role / page.locator.
+            #
+            # Solution: detect the intent from voice, bring Chrome to the OS
+            # foreground, then send keyboard events via pyautogui (OS-level).
+            # Fallback: Playwright CDP keyboard.press() if pyautogui is absent.
+            #
+            # Chrome password bubble keyboard map:
+            #   Enter           → activates the focused "Save" button (default)
+            #   Shift+Tab+Enter → moves focus to "Never", then clicks
+            #   Escape          → closes the bubble (No thanks / dismiss)
+            import re as _d_re
+            _d_text = text.lower().strip()
+            _chrome_dialog_action: str | None = None
+
+            # "save password" / "save it" / "yes save" → Enter key
+            if _d_re.search(
+                r'\b(save\s+password|yes\s+save|keep\s+password|save\s+it|click\s+save)\b',
+                _d_text
+            ):
+                _chrome_dialog_action = "save"
+
+            # "never" / "never save" / "click never" → Shift+Tab + Enter
+            elif _d_re.search(
+                r'\b(never\s+save\s+password|never\s+save|click\s+never|press\s+never|select\s+never)\b'
+                r'|\bnever\b.{0,20}\bpassword\b'
+                r'|\bpassword\b.{0,20}\bnever\b',
+                _d_text
+            ):
+                _chrome_dialog_action = "never"
+
+            # "no thanks" / "don't save" / "close password" → Escape
+            elif _d_re.search(
+                r'\bno\s+thanks\b'
+                r'|\bdon\'?t\s+save\b'
+                r'|\bnot\s+now\b'
+                r'|\b(close|dismiss)\s+(the\s+)?(password|save|dialog|popup|notification)\b'
+                r'|\bskip\s+(the\s+)?(save\s+)?(password)?\b',
+                _d_text
+            ):
+                _chrome_dialog_action = "no_thanks"
+
+            if not intent_name and _chrome_dialog_action:
+                try:
+                    from automation.browser.browser_engine import BrowserEngine as _BE_d, _run_in_playwright as _rip_d
+                    _be_d = _BE_d()
+                    if _be_d._context is not None:
+
+                        async def _bring_chrome_front():
+                            page = await _be_d.get_active_page()
+                            if page:
+                                try:
+                                    await page.bring_to_front()
+                                except Exception:
+                                    pass
+                            return True
+
+                        await _rip_d(_bring_chrome_front())
+
+                        import time as _t_d
+                        _t_d.sleep(0.25)   # Allow Chrome time to take OS focus
+
+                        _dialog_sent = False
+                        # ── Primary: OS-level keyboard via pyautogui ──────────
+                        try:
+                            import pyautogui as _pag
+                            _pag.FAILSAFE = False
+                            if _chrome_dialog_action == "save":
+                                _pag.press("enter")
+                            elif _chrome_dialog_action == "never":
+                                # Shift+Tab moves focus from Save → Never (leftmost button)
+                                _pag.hotkey("shift", "tab")
+                                _t_d.sleep(0.1)
+                                _pag.press("enter")
+                            elif _chrome_dialog_action == "no_thanks":
+                                _pag.press("escape")
+                            _dialog_sent = True
+                        except ImportError:
+                            pass  # pyautogui not installed — fall through to CDP
+
+                        # ── Fallback: Playwright CDP keyboard.press() ─────────
+                        if not _dialog_sent:
+                            async def _do_dialog_keyboard():
+                                page = await _be_d.get_active_page()
+                                if not page:
+                                    return False
+                                if _chrome_dialog_action == "save":
+                                    await page.keyboard.press("Return")
+                                elif _chrome_dialog_action == "never":
+                                    await page.keyboard.press("Shift+Tab")
+                                    await asyncio.sleep(0.1)
+                                    await page.keyboard.press("Return")
+                                elif _chrome_dialog_action == "no_thanks":
+                                    await page.keyboard.press("Escape")
+                                return True
+
+                            _dialog_sent = await _rip_d(_do_dialog_keyboard())
+
+                        if _dialog_sent:
+                            _action_labels = {
+                                "save":      "Password saved.",
+                                "never":     "Never save for this site.",
+                                "no_thanks": "Password dialog dismissed.",
+                            }
+                            logger.info(f"Layer 0.88 Chrome dialog: '{_chrome_dialog_action}'")
+                            return {
+                                "intent": "chrome_native_dialog",
+                                "parameters": {"action": _chrome_dialog_action},
+                                "status": "success",
+                                "result": _action_labels.get(_chrome_dialog_action, "Dialog action sent."),
+                                "duration_ms": int((time.perf_counter() - start) * 1000),
+                                "is_fallback": True,
+                            }
+                except Exception as _de:
+                    logger.debug(f"Layer 0.88 Chrome dialog handler failed: {_de}")
+
             # ── Kick off async page snapshot in background (non-blocking) ─────────
             # This pre-warms the PageContextService cache so Layer 0.85 has data
             # on the NEXT voice command (latency-free pipeline warm-up).
@@ -638,6 +757,7 @@ class CommandService:
                     loop=_asyncio.get_event_loop()
                 )
             except Exception:
+
                 pass
 
             # Layer 0.85: Snapshot-based Fast Click (cached DOM — no Playwright round-trip)
