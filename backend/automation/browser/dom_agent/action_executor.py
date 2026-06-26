@@ -5,6 +5,7 @@ from playwright.async_api import Page
 from app.services.llm.llm_service import llm_service
 from app.config import settings
 from app.services.page_context_service import page_context_service, find_best_element, PageElement
+from automation.browser.browser_engine import BrowserEngine
 
 def _get_element_label(el) -> str:
     """Get a user-friendly label for the element."""
@@ -111,14 +112,17 @@ class ActionExecutorMixin:
                     
                 lbl = _get_element_label(el)
                 if action_type == "click":
+                    await BrowserEngine()._animate_action(self.page, handle, "click")
                     await handle.click()
                     results.append(f"Clicked {lbl}")
                 elif action_type == "fill":
                     val = act.get("value", "")
+                    await BrowserEngine()._animate_action(self.page, handle, "click")
                     await handle.click()
                     await handle.fill(val)
                     results.append(f"Entered '{val}' into {lbl}")
                 elif action_type == "select":
+                    await BrowserEngine()._animate_action(self.page, handle, "click")
                     await handle.click()
                     await asyncio.sleep(0.5)
                     val = act.get("value", "")
@@ -168,6 +172,7 @@ class ActionExecutorMixin:
             if dropdown_el:
                 handle = await self.get_element_handle(dropdown_el)
                 if handle:
+                    await BrowserEngine()._animate_action(self.page, handle, "click")
                     await handle.click()
                     await asyncio.sleep(0.5)
                     
@@ -180,6 +185,7 @@ class ActionExecutorMixin:
                         if option_el:
                             opt_handle = await self.get_element_handle(option_el)
                             if opt_handle:
+                                await BrowserEngine()._animate_action(self.page, opt_handle, "click")
                                 await opt_handle.click()
                                 return f"Selected option '{option}' from '{dropdown}'."
                     
@@ -202,6 +208,7 @@ class ActionExecutorMixin:
             if direct_el:
                 direct_handle = await self.get_element_handle(direct_el)
                 if direct_handle:
+                    await BrowserEngine()._animate_action(self.page, direct_handle, "click")
                     await direct_handle.click()
                     return f"Clicked '{option}' directly."
 
@@ -214,6 +221,7 @@ class ActionExecutorMixin:
             if el:
                 handle = await self.get_element_handle(el)
                 if handle:
+                    await BrowserEngine()._animate_action(self.page, handle, "click")
                     await handle.click()
                     await handle.fill(value)
                     return f"Typed '{value}' into '{target}'."
@@ -226,6 +234,7 @@ class ActionExecutorMixin:
             if el:
                 handle = await self.get_element_handle(el)
                 if handle:
+                    await BrowserEngine()._animate_action(self.page, handle, "click")
                     await handle.click()
                     return f"Clicked '{target}'."
 

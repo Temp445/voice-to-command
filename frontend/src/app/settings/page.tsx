@@ -95,11 +95,14 @@ export default function SettingsPage() {
         crmSites: (() => {
           try { return JSON.parse(data.crm_sites || "[]") || []; } catch { return []; }
         })(),
+        restrictBrowserAutomation: data.restrict_browser_automation || false,
         llmEnabled: data.llm_enabled, llmProvider: data.llm_provider, llmModel: data.llm_model,
         llmMode: data.llm_mode, llmTemperature: data.llm_temperature,
         scanMode: (data.scan_mode as "auto" | "manual") || "manual",
         elevenlabsConfigured: data.elevenlabs_configured || false,
         deepgramConfigured: data.deepgram_configured || false,
+        replySound: data.reply_sound !== undefined ? data.reply_sound : true,
+        speechRate: data.speech_rate !== undefined ? data.speech_rate : 1.0,
       });
       setInitialLoaded(true);
     }).catch(err => console.error(err));
@@ -121,9 +124,10 @@ export default function SettingsPage() {
     settings.ttsProvider, settings.piperVoice, settings.theme, settings.browserType,
     settings.startupOnBoot, settings.minimizeToTray, settings.browserAnimationsEnabled, settings.enableDesktopOverlay,
     settings.activeModeTimeout, settings.requireWakeWordAlways,
-    settings.crmUrl, settings.crmKeywords, JSON.stringify(settings.crmSites),
+    settings.crmUrl, settings.crmKeywords, JSON.stringify(settings.crmSites), settings.restrictBrowserAutomation,
     settings.llmEnabled, settings.llmProvider, settings.llmModel, settings.llmMode,
-    settings.llmTemperature, settings.llmApiKey, settings.scanMode, settings.elevenlabsApiKey, settings.deepgramApiKey
+    settings.llmTemperature, settings.llmApiKey, settings.scanMode, settings.elevenlabsApiKey, settings.deepgramApiKey,
+    settings.replySound, settings.speechRate
   ]);
 
   const handleTestLlm = async () => {
@@ -258,9 +262,12 @@ export default function SettingsPage() {
         theme: settings.theme, browser_animations_enabled: settings.browserAnimationsEnabled, enable_desktop_overlay: settings.enableDesktopOverlay,
         crm_url: settings.crmUrl, crm_keywords: settings.crmKeywords,
         crm_sites: JSON.stringify(settings.crmSites),
+        restrict_browser_automation: settings.restrictBrowserAutomation,
         llm_enabled: settings.llmEnabled, llm_provider: settings.llmProvider, llm_model: settings.llmModel,
         llm_mode: settings.llmMode, llm_temperature: settings.llmTemperature,
         scan_mode: settings.scanMode,
+        reply_sound: settings.replySound,
+        speech_rate: settings.speechRate,
       };
       if (settings.llmApiKey) patch.llm_api_key = settings.llmApiKey;
       if (settings.elevenlabsApiKey) patch.elevenlabs_api_key = settings.elevenlabsApiKey;
@@ -517,6 +524,24 @@ export default function SettingsPage() {
                 </div>
               )}
 
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "1.5rem", padding: "1.25rem", background: "var(--secondary)", borderRadius: "0.75rem" }}>
+                <div>
+                  <p style={{ fontSize: "0.9375rem", fontWeight: 600, color: "var(--foreground)" }}>Reply Sound</p>
+                  <p style={{ fontSize: "0.8125rem", color: "var(--muted-foreground)", marginTop: "0.25rem" }}>Play audio response voice when executing commands</p>
+                </div>
+                <Toggle checked={settings.replySound} onChange={() => settings.update({ replySound: !settings.replySound })} />
+              </div>
+
+              <div style={{ marginTop: "1.5rem" }}>
+                <p style={lbl}>Speech Speed</p>
+                <select style={{ ...inp, maxWidth: "24rem" }} value={settings.speechRate}
+                  onChange={(e) => settings.update({ speechRate: parseFloat(e.target.value) })}>
+                  <option value={1.0}>1x (Normal)</option>
+                  <option value={1.5}>1.5x (Fast)</option>
+                </select>
+                <p style={sub}>Adjust the speed rate of voice speech responses.</p>
+              </div>
+
               <div style={{ marginTop: "1.5rem", padding: "1.5rem", background: "var(--secondary)", borderRadius: "0.75rem", border: "1px solid var(--border)" }}>
                 <p style={{ fontSize: "0.9375rem", fontWeight: 600, color: "var(--foreground)", marginBottom: "0.25rem" }}>Test Voice Output</p>
                 <p style={{ fontSize: "0.8125rem", color: "var(--muted-foreground)", marginBottom: "1.25rem" }}>Listen to how the assistant will sound</p>
@@ -660,6 +685,14 @@ export default function SettingsPage() {
                   <p style={{ fontSize: "0.8125rem", color: "var(--muted-foreground)", marginTop: "0.25rem" }}>Show visual feedback (animated cursor, element highlights) during automation</p>
                 </div>
                 <Toggle checked={settings.browserAnimationsEnabled} onChange={() => settings.update({ browserAnimationsEnabled: !settings.browserAnimationsEnabled })} />
+              </div>
+
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "1rem", padding: "1.25rem", background: "var(--secondary)", borderRadius: "0.75rem" }}>
+                <div>
+                  <p style={{ fontSize: "0.9375rem", fontWeight: 600, color: "var(--foreground)" }}>Restrict Website Automation</p>
+                  <p style={{ fontSize: "0.8125rem", color: "var(--muted-foreground)", marginTop: "0.25rem" }}>Only allow browser automation on sites added to Website Shortcuts</p>
+                </div>
+                <Toggle checked={settings.restrictBrowserAutomation} onChange={() => settings.update({ restrictBrowserAutomation: !settings.restrictBrowserAutomation })} />
               </div>
 
               {/* ── Website Shortcuts ── */}

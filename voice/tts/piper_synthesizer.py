@@ -75,10 +75,14 @@ class PiperSynthesizer(TTSProvider):
         # Load model into memory if not already loaded (or if voice changed)
         self._load_voice_if_needed()
 
+        # Read speech rate and compute length scale (speed multiplier)
+        speed = getattr(settings, "speech_rate", 1.0)
+        length_scale = 1.0 / max(0.1, speed)
+
         # Synthesize directly to an in-memory WAV buffer
         wav_io = io.BytesIO()
         with wave.open(wav_io, "wb") as wav_file:
-            self._piper_voice.synthesize_wav(text, wav_file)
+            self._piper_voice.synthesize_wav(text, wav_file, length_scale=length_scale)
             
         return wav_io.getvalue()
 

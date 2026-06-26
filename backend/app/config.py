@@ -85,6 +85,8 @@ class Settings(BaseSettings):
     tts_provider: str = "piper"  # piper | gtts
     piper_voice: str = "en_US-lessac-medium"
     piper_models_dir: str = "voice/tts/models"
+    reply_sound: bool = True
+    speech_rate: float = 1.0
 
     # --- Automation ---
     browser_type: str = "chromium"  # chromium | firefox | webkit

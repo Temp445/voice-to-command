@@ -328,6 +328,8 @@ async def handle_browser_list_options(element: str = "", **_) -> str:
         # 1. Try semantic combobox
         combobox = page.get_by_role('combobox', name=re.compile(element, re.IGNORECASE))
         if await combobox.count() == 1:
+            from automation.browser.browser_engine import BrowserEngine
+            await BrowserEngine()._animate_action(page, combobox.first, "click")
             await combobox.first.click(force=True)
             return f"Opened {element} dropdown."
         # 2. Ultimate fallback to DOM Agent
@@ -393,6 +395,8 @@ async def handle_browser_select_option(option: str = "", **_) -> str:
                         }
                     }""")
             else:
+                from automation.browser.browser_engine import BrowserEngine
+                await BrowserEngine()._animate_action(page, loc, "click")
                 await loc.click(force=True)
                 
             # Auto-close any lingering custom dropdowns (like MUI or React-Select)
@@ -482,6 +486,8 @@ async def handle_crm_clear_search(text: str = "", **_) -> str:
             try:
                 loc = page.locator(sel).first
                 if await loc.is_visible():
+                    from automation.browser.browser_engine import BrowserEngine
+                    await BrowserEngine()._animate_action(page, loc, "click")
                     await loc.click(timeout=2000)
                     await asyncio.sleep(0.4)
                     logger.info("[ClearSearch] Cleared dates via button: %s", sel)
@@ -505,6 +511,8 @@ async def handle_crm_clear_search(text: str = "", **_) -> str:
             try:
                 loc = page.locator(sel).first
                 if await loc.is_visible():
+                    from automation.browser.browser_engine import BrowserEngine
+                    await BrowserEngine()._animate_action(page, loc, "click")
                     await loc.click(click_count=3, timeout=2000)
                     await loc.fill("", timeout=2000)
                     await page.keyboard.press("Enter")
@@ -530,6 +538,8 @@ async def handle_crm_clear_search(text: str = "", **_) -> str:
         try:
             loc = page.locator(sel).first
             if await loc.is_visible():
+                from automation.browser.browser_engine import BrowserEngine
+                await BrowserEngine()._animate_action(page, loc, "click")
                 await loc.click(timeout=2000)
                 await asyncio.sleep(0.4)
                 logger.info("[ClearSearch] Cleared via button: %s", sel)
@@ -653,6 +663,8 @@ async def handle_browser_paginate(direction: str = "", page_num: str = "", **_) 
             for i in range(count):
                 el = loc.nth(i)
                 if await el.is_visible() and not await el.is_disabled():
+                    from automation.browser.browser_engine import BrowserEngine
+                    await BrowserEngine()._animate_action(page, el, "click")
                     await el.click(timeout=1500)
                     await asyncio.sleep(0.5)
                     logger.info(f"[Paginate] Clicked {action_desc} via {sel}")
@@ -1418,6 +1430,8 @@ async def handle_browser_date_filter(start_date: str = "", end_date: str = "", t
             if len(sorted_inputs) >= 2 and index < len(sorted_inputs):
                 el, itype = sorted_inputs[index]
                 val = value_iso if itype == "date" else value_dmy
+                from automation.browser.browser_engine import BrowserEngine
+                await BrowserEngine()._animate_action(page, el, "click")
                 await el.click(click_count=3, timeout=1500)
                 await el.fill(val, timeout=1500)
                 await page.keyboard.press("Tab")
@@ -1450,6 +1464,8 @@ async def handle_browser_date_filter(start_date: str = "", end_date: str = "", t
                         if await el.is_visible():
                             itype = await el.get_attribute("type") or "text"
                             val = value_iso if itype == "date" else value_dmy
+                            from automation.browser.browser_engine import BrowserEngine
+                            await BrowserEngine()._animate_action(page, el, "click")
                             await el.triple_click(timeout=1500)
                             await el.fill(val, timeout=1500)
                             await page.keyboard.press("Tab")
@@ -1620,6 +1636,8 @@ async def handle_browser_date_filter(start_date: str = "", end_date: str = "", t
         used.add(key)
 
         if not start_done:
+            from automation.browser.browser_engine import BrowserEngine
+            await BrowserEngine()._animate_action(page, {"x": info["x"], "y": info["y"]}, "click")
             await page.mouse.click(info["x"], info["y"])
             await asyncio.sleep(0.5)
             start_done = await _navigate_to_and_pick(s)
@@ -1628,6 +1646,8 @@ async def handle_browser_date_filter(start_date: str = "", end_date: str = "", t
             continue
 
         if start_done and not end_done:
+            from automation.browser.browser_engine import BrowserEngine
+            await BrowserEngine()._animate_action(page, {"x": info["x"], "y": info["y"]}, "click")
             await page.mouse.click(info["x"], info["y"])
             await asyncio.sleep(0.5)
             end_done = await _navigate_to_and_pick(e)
@@ -2169,6 +2189,8 @@ async def handle_click_text(text: str = "", **_) -> str:
                         el = _loc.first
                         if await el.is_visible():
                             await el.scroll_into_view_if_needed(timeout=1000)
+                            from automation.browser.browser_engine import BrowserEngine
+                            await BrowserEngine()._animate_action(page, el, "click")
                             await el.click(timeout=2000)
                             try:
                                 await page.wait_for_load_state("commit", timeout=2000)
@@ -2221,6 +2243,8 @@ async def handle_click_text(text: str = "", **_) -> str:
                     try:
                         pos = await frame.evaluate(_js_broad, clean_text)
                         if pos and pos.get("x") is not None:
+                            from automation.browser.browser_engine import BrowserEngine
+                            await BrowserEngine()._animate_action(page, {"x": pos["x"], "y": pos["y"]}, "click")
                             await page.mouse.click(pos["x"], pos["y"])
                             try:
                                 await page.wait_for_load_state("commit", timeout=3000)
@@ -2496,6 +2520,8 @@ async def handle_cancel(app_name: str = "", **_) -> str:
                         for i in range(min(count, 5)):
                             el = loc.nth(i)
                             if await el.is_visible():
+                                from automation.browser.browser_engine import BrowserEngine
+                                await BrowserEngine()._animate_action(page, el, "click")
                                 await el.click(timeout=1500)
                                 logger.info(f"[Cancel] Closed overlay via selector: {sel}")
                                 return "Closed the popup."
@@ -2512,6 +2538,8 @@ async def handle_cancel(app_name: str = "", **_) -> str:
                         for i in range(await cancel_button.count()):
                             btn = cancel_button.nth(i)
                             if await btn.is_visible():
+                                from automation.browser.browser_engine import BrowserEngine
+                                await BrowserEngine()._animate_action(page, btn, "click")
                                 await btn.click(timeout=1500)
                                 logger.info(f"[Cancel] Clicked '{label}' button on webpage.")
                                 return f"Clicked {label.capitalize()} on webpage."

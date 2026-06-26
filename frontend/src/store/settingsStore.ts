@@ -19,6 +19,8 @@ interface SettingsStore {
   enableDesktopOverlay: boolean;
   overlayShortcut: string;
   listenShortcut: string;
+  replySound: boolean;
+  speechRate: number;
   
   // ElevenLabs
   elevenlabsApiKey: string;
@@ -80,6 +82,8 @@ export const useSettingsStore = create<SettingsStore>()(
       enableDesktopOverlay: true,
       overlayShortcut: "Alt+A",
       listenShortcut: "Alt+S",
+      replySound: true,
+      speechRate: 1.0,
 
       // CRM / Website Shortcuts (empty by default — users add their own)
       crmUrl:         "",

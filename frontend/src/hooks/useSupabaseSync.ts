@@ -56,12 +56,15 @@ export function useSupabaseSync() {
               crmSites: (() => {
                 try { return JSON.parse(data.crm_sites || "[]") || []; } catch { return []; }
               })(),
+              restrictBrowserAutomation: data.restrict_browser_automation || false,
               llmEnabled: data.llm_enabled, 
               llmProvider: data.llm_provider, 
               llmModel: data.llm_model,
               llmMode: data.llm_mode, 
               llmTemperature: data.llm_temperature,
               scanMode: (data.scan_mode as "auto" | "manual") || "manual",
+              replySound: data.reply_sound !== undefined ? data.reply_sound : true,
+              speechRate: data.speech_rate !== undefined ? data.speech_rate : 1.0,
             });
             console.log('[Supabase Realtime] Local settings perfectly synchronized.');
           } catch (e) {

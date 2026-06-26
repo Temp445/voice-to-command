@@ -2,7 +2,7 @@ import pytest
 import pytest_asyncio
 from httpx import AsyncClient, ASGITransport
 from fastapi.testclient import TestClient
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, AsyncMock
 
 from app.main import app
 from app.config import get_settings
@@ -35,7 +35,7 @@ def test_settings_get():
     assert response.status_code in (200, 401)
 
 @patch("app.routers.commands.command_service.parse_and_execute")
-@patch("app.routers.commands.sb_run", new_callable=pytest.AsyncMock)
+@patch("app.routers.commands.sb_run", new_callable=AsyncMock)
 def test_command_dispatch(mock_sb_run, mock_parse):
     """Ensure /api/commands/execute triggers the command service without 500s."""
     # Mock to prevent actual execution

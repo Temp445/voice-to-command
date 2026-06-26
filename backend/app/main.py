@@ -176,15 +176,9 @@ async def _background_init(app_state, running_loop: asyncio.AbstractEventLoop):
                 from app.config import settings as gs
                 if s.get("user_id"):
                     gs.owner_user_id = s["user_id"]
-                for field in (
-                    "wake_word", "whisper_model", "tts_provider", "piper_voice",
-                    "active_mode_timeout", "require_wake_word_always", "browser_type",
-                    "enable_desktop_overlay", "crm_url", "crm_keywords", "crm_sites",
-                    "llm_provider", "llm_model", "llm_mode", "llm_temperature",
-                    "scan_mode", "stt_provider",
-                ):
-                    if field in s and s[field] is not None and hasattr(gs, field):
-                        setattr(gs, field, s[field])
+                for field, value in s.items():
+                    if value is not None and hasattr(gs, field):
+                        setattr(gs, field, value)
                 if s.get("llm_api_key_encrypted"):
                     _apply_llm_settings(s)
                 if s.get("elevenlabs_api_key_encrypted"):

@@ -292,16 +292,28 @@ class BrowserEngine:
         import json
         from urllib.parse import urlparse
         try:
+            url_lower = url.lower().strip()
+            if url_lower.startswith(("about:", "chrome:", "chrome-extension://")) or "localhost" in url_lower or "127.0.0.1" in url_lower or "new-tab-page" in url_lower or "newtab" in url_lower:
+                return True
+
             raw = getattr(settings, "crm_sites", "[]") or "[]"
             sites = json.loads(raw)
             if not sites:
                 return False
-            active_host = urlparse(url).netloc.lower()
+
+            # Add protocol prefix if missing so urlparse extracts netloc correctly
+            active_url = url_lower if url_lower.startswith(("http://", "https://")) else f"https://{url_lower}"
+            active_host = urlparse(active_url).netloc.lower()
+
             for site in sites:
                 site_url = site.get("url", "")
                 if not site_url:
                     continue
-                site_host = urlparse(site_url).netloc.lower()
+                site_url_with_scheme = site_url.lower().strip()
+                if not site_url_with_scheme.startswith(("http://", "https://")):
+                    site_url_with_scheme = f"https://{site_url_with_scheme}"
+                site_host = urlparse(site_url_with_scheme).netloc.lower()
+                
                 # Match on hostname (ignores path/query differences)
                 if active_host and site_host and (
                     active_host == site_host or active_host.endswith("." + site_host)
@@ -310,6 +322,110 @@ class BrowserEngine:
         except Exception:
             pass
         return False
+
+    async def _animate_action(self, page: Page, target, action_type="click"):
+        """Animate visual feedback (cursor, highlight, ripple) if enabled."""
+        if not getattr(settings, "browser_animations_enabled", True):
+            return
+        try:
+            # 1. Resolve bounding box
+            box = None
+            if isinstance(target, str):
+                loc = page.locator(target).first
+                if await loc.count() > 0:
+                    box = await loc.bounding_box()
+            elif hasattr(target, "bounding_box"):
+                box = await target.bounding_box()
+            elif isinstance(target, dict) and "x" in target and "y" in target:
+                box = target
+            
+            if not box:
+                return
+
+            if "width" in box and "height" in box:
+                x = box["x"] + box["width"] / 2
+                y = box["y"] + box["height"] / 2
+            else:
+                x = box["x"]
+                y = box["y"]
+
+            # Ensure x and y are within viewport bounds
+            viewport = page.viewport_size
+            if viewport:
+                x = min(max(0, x), viewport["width"])
+                y = min(max(0, y), viewport["height"])
+
+            js_script = """
+            async (args) => {
+                const { x, y, actionType } = args;
+                let style = document.getElementById('ace-animations-style');
+                if (!style) {
+                    style = document.createElement('style');
+                    style.id = 'ace-animations-style';
+                    style.innerHTML = `
+                        .ace-virtual-cursor {
+                            position: fixed;
+                            width: 18px;
+                            height: 18px;
+                            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' width='24' height='24'%3E%3Cpath fill='%230095FF' stroke='white' stroke-width='1.5' d='M0 0l14 11-6.5 1.5 4.5 6.5-2.5 1.5-4.5-6.5-5 4z'/%3E%3C/svg%3E");
+                            background-size: contain;
+                            background-repeat: no-repeat;
+                            pointer-events: none;
+                            z-index: 10000000;
+                            transition: all 0.5s cubic-bezier(0.25, 1, 0.5, 1);
+                            filter: drop-shadow(0px 1px 2px rgba(0,0,0,0.4));
+                        }
+                        .ace-click-ripple {
+                            position: fixed;
+                            border: 3px solid rgba(0, 149, 255, 0.9);
+                            border-radius: 50%;
+                            pointer-events: none;
+                            z-index: 10000000;
+                            transform: translate(-50%, -50%);
+                            animation: ace-ripple-ani 0.4s ease-out forwards;
+                        }
+                        .ace-element-highlight {
+                            outline: 3px solid rgba(0, 149, 255, 0.9) !important;
+                            outline-offset: 2px !important;
+                            transition: outline 0.2s ease;
+                        }
+                        @keyframes ace-ripple-ani {
+                            0% { width: 0px; height: 0px; opacity: 1; }
+                            100% { width: 40px; height: 40px; opacity: 0; }
+                        }
+                    `;
+                    document.head.appendChild(style);
+                }
+                let cursor = document.querySelector('.ace-virtual-cursor');
+                if (!cursor) {
+                    cursor = document.createElement('div');
+                    cursor.className = 'ace-virtual-cursor';
+                    cursor.style.left = '0px';
+                    cursor.style.top = '0px';
+                    document.body.appendChild(cursor);
+                    await new Promise(r => setTimeout(r, 50));
+                }
+                const el = document.elementFromPoint(x, y);
+                if (el) {
+                    el.classList.add('ace-element-highlight');
+                    setTimeout(() => el.classList.remove('ace-element-highlight'), 1000);
+                }
+                cursor.style.left = x + 'px';
+                cursor.style.top = y + 'px';
+                await new Promise(r => setTimeout(r, 500));
+                if (actionType === 'click' || actionType === 'dblclick') {
+                    const ripple = document.createElement('div');
+                    ripple.className = 'ace-click-ripple';
+                    ripple.style.left = x + 'px';
+                    ripple.style.top = y + 'px';
+                    document.body.appendChild(ripple);
+                    setTimeout(() => ripple.remove(), 400);
+                }
+            }
+            """
+            await page.evaluate(js_script, {"x": x, "y": y, "actionType": action_type})
+        except Exception as e:
+            logger.debug(f"Failed to show browser action animation: {e}")
 
     async def get_active_page(self, allow_restricted: bool = False) -> Page:
         """Return the tab the user is currently looking at.
@@ -607,6 +723,14 @@ class BrowserEngine:
                 page = await self.get_active_page(allow_restricted=True)
             target = f"https://{url}" if not url.startswith(("http://", "https://")) else url
 
+            if getattr(settings, "restrict_browser_automation", False) and not self._is_shortcut_url(target):
+                from urllib.parse import urlparse
+                host = urlparse(target).netloc or target
+                raise PermissionError(
+                    f"Automation restricted. '{host}' is not in your Website Shortcuts. "
+                    f"Disable 'Restrict Website Automation' in Settings or add this site to shortcuts."
+                )
+
             # Bring to front and maximize BEFORE goto() to avoid main-thread block
             try:
                 cdp = await page.context.new_cdp_session(page)
@@ -872,6 +996,7 @@ class BrowserEngine:
     async def click(self, selector: str) -> str:
         async def _do():
             page = await self.get_active_page()
+            await self._animate_action(page, selector, "click")
             await page.click(selector)
             return f"Clicked {selector}."
         return await _run_in_playwright(_do())
@@ -879,7 +1004,9 @@ class BrowserEngine:
     async def click_text(self, text: str) -> str:
         async def _do():
             page = await self.get_active_page()
-            await page.get_by_text(text).first.click()
+            loc = page.get_by_text(text).first
+            await self._animate_action(page, loc, "click")
+            await loc.click()
             return f"Clicked text '{text}'."
         return await _run_in_playwright(_do())
 
@@ -894,6 +1021,7 @@ class BrowserEngine:
                     elements = await page.locator("div.g a").all()
                 if 0 <= index < len(elements):
                     text = await elements[index].inner_text()
+                    await self._animate_action(page, elements[index], "click")
                     await elements[index].click()
                     return f"Clicked Google result: {text}"
                 return f"Could not find result at index {index + 1} (Found {len(elements)})"
@@ -902,6 +1030,7 @@ class BrowserEngine:
                 elements = await page.locator("ytd-video-renderer a#video-title").all()
                 if 0 <= index < len(elements):
                     text = await elements[index].inner_text()
+                    await self._animate_action(page, elements[index], "click")
                     await elements[index].click()
                     return f"Clicked YouTube result: {text}"
                 return f"Could not find video at index {index + 1} (Found {len(elements)})"
@@ -913,6 +1042,7 @@ class BrowserEngine:
                     elements = await page.locator(loc).all()
                     visible = [el for el in elements if await el.is_visible()]
                     if len(visible) > index:
+                        await self._animate_action(page, visible[index], "click")
                         await visible[index].click()
                         return f"Clicked search result {index + 1} via '{loc}'."
                 return f"Could not find search result {index + 1}."
@@ -923,6 +1053,7 @@ class BrowserEngine:
         async def _do():
             page = await self.get_active_page()
             if selector:
+                await self._animate_action(page, selector, "dblclick")
                 await page.dblclick(selector)
             else:
                 await page.mouse.dblclick(0, 0)
@@ -933,6 +1064,7 @@ class BrowserEngine:
         async def _do():
             page = await self.get_active_page()
             if selector:
+                await self._animate_action(page, selector, "click")
                 await page.click(selector, button="right")
             else:
                 await page.mouse.click(0, 0, button="right")
@@ -942,6 +1074,7 @@ class BrowserEngine:
     async def hover(self, selector: str) -> str:
         async def _do():
             page = await self.get_active_page()
+            await self._animate_action(page, selector, "hover")
             await page.hover(selector)
             return f"Hovered over {selector}."
         return await _run_in_playwright(_do())
@@ -949,6 +1082,7 @@ class BrowserEngine:
     async def type_text(self, selector: str, text: str, human_like: bool = True) -> str:
         async def _do():
             page = await self.get_active_page()
+            await self._animate_action(page, selector, "click")
             if human_like:
                 await page.locator(selector).first.click()
                 await page.keyboard.type(text, delay=random.randint(20, 60))
@@ -1209,6 +1343,7 @@ class BrowserEngine:
             try:
                 search_box = page.locator('textarea[name="q"], input[name="q"]').first
                 await search_box.wait_for(state="visible", timeout=5000)
+                await self._animate_action(page, search_box, "click")
                 await search_box.click()
                 await asyncio.sleep(random.uniform(0.3, 0.7))
             except Exception as e:
@@ -1277,6 +1412,7 @@ class BrowserEngine:
             try:
                 search_box = page.locator('input#search').first
                 await search_box.wait_for(state="visible", timeout=5000)
+                await self._animate_action(page, search_box, "click")
                 await search_box.click()
                 await asyncio.sleep(random.uniform(0.3, 0.6))
             except Exception as e:

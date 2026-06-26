@@ -485,6 +485,9 @@ class VoicePipeline:
     async def _speak(self, text: str) -> None:
         """Synthesize and play TTS response."""
         self._last_spoken_text = text
+        if not getattr(settings, "reply_sound", True):
+            logger.info(f"Silence response (reply_sound is False) — skipped speaking: '{text}'")
+            return
         self._set_state(PipelineState.SPEAKING)
         try:
             provider = await get_tts_provider()

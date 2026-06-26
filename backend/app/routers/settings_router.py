@@ -48,6 +48,8 @@ _DEFAULTS = {
     "scan_mode": "manual",
     "elevenlabs_api_key_encrypted": None,
     "deepgram_api_key_encrypted": None,
+    "reply_sound": True,
+    "speech_rate": 1.0,
 }
 
 
@@ -134,6 +136,8 @@ def _build_response(s: dict) -> SettingsResponse:
         scan_mode=s.get("scan_mode", "manual"),
         elevenlabs_configured=bool(s.get("elevenlabs_api_key_encrypted")),
         deepgram_configured=bool(s.get("deepgram_api_key_encrypted")),
+        reply_sound=s.get("reply_sound", True),
+        speech_rate=s.get("speech_rate", 1.0),
     )
 
 
@@ -147,6 +151,9 @@ async def get_settings(request: Request, user_id: str = Depends(get_current_user
     
     from app.config import settings as global_settings
     global_settings.owner_user_id = user_id
+    for field, value in s.items():
+        if value is not None and hasattr(global_settings, field):
+            setattr(global_settings, field, value)
     
     pipeline = getattr(request.app.state, "pipeline", None)
     if pipeline and not pipeline._running:

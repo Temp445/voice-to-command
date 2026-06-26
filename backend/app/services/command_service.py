@@ -98,6 +98,15 @@ def _normalize_voice_credential(raw: str) -> str:
     """
     import re as _re
 
+    # Pre-process multi-word symbol expressions
+    raw = _re.sub(r'\bat the rate of\b', 'at', raw, flags=_re.IGNORECASE)
+    raw = _re.sub(r'\bat the rate\b', 'at', raw, flags=_re.IGNORECASE)
+    raw = _re.sub(r'\bshift two\b', 'at', raw, flags=_re.IGNORECASE)
+    raw = _re.sub(r'\bshift 2\b', 'at', raw, flags=_re.IGNORECASE)
+    raw = _re.sub(r'\bexclamation (?:mark|point)\b', 'exclamation', raw, flags=_re.IGNORECASE)
+    raw = _re.sub(r'\bquestion mark\b', 'question', raw, flags=_re.IGNORECASE)
+    raw = _re.sub(r'\bhash\s*tag\b', 'hash', raw, flags=_re.IGNORECASE)
+
     _ONES = {
         'zero': '0', 'oh': '0', 'o': '0',
         'one': '1', 'two': '2', 'three': '3', 'four': '4', 'five': '5',
@@ -1047,6 +1056,100 @@ class CommandService:
                 _bare_text_fixed = _re.sub(r'\s+@', '@', _bare_text)
                 _bare_text_fixed = _re.sub(r'@\s+', '@', _bare_text_fixed)
                 _bare_text_fixed = _re.sub(r'\s+(\.\w{2,})', r'\1', _bare_text_fixed)
+                # Detect double credentials pattern: email/username AND password
+                _login_match = _re.search(
+                    r'\b(email|username|user\s*name|user)\b\s+(.+?)\s+(?:and\s+)?\b(password|pass)\b\s+(.+)$',
+                    _bare_text_fixed,
+                    _re.IGNORECASE
+                )
+                _login_match_rev = _re.search(
+                    r'\b(password|pass)\b\s+(.+?)\s+(?:and\s+)?\b(email|username|user\s*name|user)\b\s+(.+)$',
+                    _bare_text_fixed,
+                    _re.IGNORECASE
+                )
+                
+                _user_val = None
+                _pass_val = None
+                
+                if _login_match:
+                    _user_val = _login_match.group(2).strip()
+                    _pass_val = _login_match.group(4).strip()
+                elif _login_match_rev:
+                    _user_val = _login_match_rev.group(4).strip()
+                    _pass_val = _login_match_rev.group(2).strip()
+
+                if _user_val and _pass_val:
+                    try:
+                        from automation.browser.browser_controller import BrowserController
+                        from automation.browser.browser_engine import _run_in_playwright
+                        bc = BrowserController()
+                        if bc.engine._context is not None or _is_chrome_running_fast(9222):
+                            # Clean/repair email spaces
+                            # Normalize username/email
+                            _user_normalized = _normalize_voice_credential(_user_val)
+                            if "@" in _user_normalized:
+                                _user_normalized = _re.sub(r'\s+', '', _user_normalized)
+                            if _user_normalized != _user_val:
+                                logger.info(f"User field normalized: '{_user_val}' → '{_user_normalized}'")
+                                _user_val = _user_normalized
+                                
+                            # Normalize password
+                            _pass_normalized = _normalize_voice_credential(_pass_val)
+                            if _pass_normalized != _pass_val:
+                                logger.info(f"Password normalized: '{_pass_val}' → '{_pass_normalized}'")
+                                _pass_val = _pass_normalized
+                                
+                            logger.info(f"Double credentials intercept: user='{_user_val}' pass='***' (from '{text}')")
+
+                            async def _do_double_fill():
+                                page = await bc.engine.get_active_page()
+                                if not page:
+                                    return False
+                                    
+                                _user_loc = page.locator(
+                                    "input[type='email'], input[name*='email' i], input[placeholder*='email' i], "
+                                    "input[name*='user' i], input[id*='email' i], input[id*='user' i]"
+                                ).first
+                                
+                                _pass_loc = page.locator(
+                                    "input[type='password'], input[name*='pass' i], input[placeholder*='pass' i], "
+                                    "input[id*='pass' i]"
+                                ).first
+                                
+                                if await _user_loc.count() > 0 and await _pass_loc.count() > 0:
+                                    from automation.browser.browser_engine import BrowserEngine
+                                    await BrowserEngine()._animate_action(page, _user_loc, "click")
+                                    await _user_loc.fill(_user_val)
+                                    
+                                    await BrowserEngine()._animate_action(page, _pass_loc, "click")
+                                    await _pass_loc.fill(_pass_val)
+                                    
+                                    await _pass_loc.press("Enter")
+                                    return True
+                                return False
+
+                            _filled = await _run_in_playwright(_do_double_fill())
+                            if _filled:
+                                return {
+                                    "intent": "implicit_browser_type",
+                                    "parameters": {"email": _user_val, "password": _pass_val},
+                                    "status": "success",
+                                    "result": f"Filled email '{_user_val}' and password.",
+                                    "duration_ms": int((time.perf_counter() - start) * 1000),
+                                    "is_fallback": True,
+                                }
+                    except PermissionError as _pe:
+                        return {
+                            "intent": "implicit_browser_type",
+                            "parameters": {"email": _user_val, "password": _pass_val},
+                            "status": "failed",
+                            "result": f"🚫 {_pe}",
+                            "duration_ms": int((time.perf_counter() - start) * 1000),
+                            "is_fallback": True,
+                        }
+                    except Exception as _e:
+                        logger.debug(f"Double credentials intercept failed: {_e}")
+
                 # Detect bare email pattern: word@domain.tld (with no other text, or minimal prefix)
                 _email_match = _re.search(r'\b[\w.+-]+@[\w.-]+\.\w{2,}\b', _bare_text_fixed)
                 if _email_match:
@@ -1082,6 +1185,15 @@ class CommandService:
                                     "duration_ms": int((time.perf_counter() - start) * 1000),
                                     "is_fallback": True,
                                 }
+                    except PermissionError as _pe:
+                        return {
+                            "intent": "implicit_browser_type",
+                            "parameters": {"field": "email", "value": _email_val},
+                            "status": "failed",
+                            "result": f"🚫 {_pe}",
+                            "duration_ms": int((time.perf_counter() - start) * 1000),
+                            "is_fallback": True,
+                        }
                     except Exception as _e:
                         logger.debug(f"Bare email intercept failed: {_e}")
 
@@ -1136,16 +1248,13 @@ class CommandService:
                             # Repair STT-induced spaces in email addresses:
                             # "anand s@caseof.in" → "anands@caseof.in"
                             # "user@ domain.com" → "user@domain.com"
-                            if _field_type in ("email", "username") and "@" in _val:
-                                _val = _re.sub(r'\s+(@)', r'\1', _val)   # space before @
-                                _val = _re.sub(r'(@)\s+', r'\1', _val)   # space after @
-                                _val = _re.sub(r'\s+(\.\w)', r'\1', _val)  # space before domain dot
-                            else:
-                                # Apply voice-to-credential normalization for passwords:
-                                # converts number words → digits and symbol words → symbols
-                                _val_normalized = _normalize_voice_credential(_val)
-                                if _val_normalized != _val:
-                                    logger.info(f"Password normalized: '{_val}' → '{_val_normalized}'")
+                            # Apply voice-to-credential normalization:
+                            # converts number words → digits and symbol words → symbols
+                            _val_normalized = _normalize_voice_credential(_val)
+                            if _field_type == "email" or "@" in _val_normalized:
+                                _val_normalized = _re.sub(r'\s+', '', _val_normalized)
+                            if _val_normalized != _val:
+                                logger.info(f"Credential field normalized: '{_val}' → '{_val_normalized}'")
                                 _val = _val_normalized
 
                             logger.info(f"Credential intercept: field='{_field_type}' value='{_val}' (from '{text}')")
@@ -1174,6 +1283,15 @@ class CommandService:
                                     "duration_ms": int((time.perf_counter() - start) * 1000),
                                     "is_fallback": True,
                                 }
+                    except PermissionError as _pe:
+                        return {
+                            "intent": "implicit_browser_type",
+                            "parameters": {"field": _field_type, "value": _val},
+                            "status": "failed",
+                            "result": f"🚫 {_pe}",
+                            "duration_ms": int((time.perf_counter() - start) * 1000),
+                            "is_fallback": True,
+                        }
                     except Exception as _e:
                         logger.debug(f"Implicit web type intercept failed: {_e}")
 
@@ -1208,6 +1326,15 @@ class CommandService:
                                     "duration_ms": int((time.perf_counter() - start) * 1000),
                                     "is_fallback": True,
                                 }
+                    except PermissionError as _pe:
+                        return {
+                            "intent": "implicit_browser_type_otp",
+                            "parameters": {"value": _digits_only},
+                            "status": "failed",
+                            "result": f"🚫 {_pe}",
+                            "duration_ms": int((time.perf_counter() - start) * 1000),
+                            "is_fallback": True,
+                        }
                     except Exception as _e:
                         logger.debug(f"Implicit web type OTP intercept failed: {_e}")
 
@@ -1379,6 +1506,15 @@ class CommandService:
                                     "duration_ms": int((time.perf_counter() - start) * 1000),
                                     "routed_by_vision": True,
                                 }
+                except PermissionError as _pe:
+                    return {
+                        "intent": "vision_fallback",
+                        "parameters": {"text": text},
+                        "status": "failed",
+                        "result": f"🚫 {_pe}",
+                        "duration_ms": int((time.perf_counter() - start) * 1000),
+                        "routed_by_vision": True,
+                    }
                 except Exception as _ve:
                     logger.debug(f"Layer 3.5 vision fallback error: {_ve}")
 
