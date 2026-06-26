@@ -216,6 +216,7 @@ async def _background_init(app_state, running_loop: asyncio.AbstractEventLoop):
     logger.info("ℹ️  Browser launch deferred — Chrome will open on first browser command.")
     logger.info(f"✅ Phase 1 done in {asyncio.get_event_loop().time() - t0:.1f}s — server fully operational")
 
+
     # Resolve scan_mode from restored settings
     from app.config import settings as gs
     _scan_mode = getattr(gs, "scan_mode", "manual")

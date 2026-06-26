@@ -124,8 +124,10 @@ class TabRegistry:
         self._target_ids: dict[str, str] = {}        # tab_id → CDP targetId
         self._target_to_tab: dict[str, str] = {}     # CDP targetId → tab_id
         self._active_tab_id: str | None = None
+        self._focused_target_id: str | None = None   # Tracks active Chrome target ID (even if not yet mapped or system URL)
         self._mu = threading.RLock()
         self._cdp_session = None
+        self._cdp_sync_task: "asyncio.Task | None" = None
         self._persisted = _load_persisted_state()
 
     # ── Registration ──────────────────────────────────────────────────────────
@@ -201,6 +203,9 @@ class TabRegistry:
         except Exception as e:
             logger.debug(f"TabRegistry: direct targetId seeding failed: {e}")
 
+    async def _setup_visibility_listener(self, page) -> None:
+        pass
+
 
     def unregister(self, page) -> None:
         with self._mu:
@@ -223,7 +228,27 @@ class TabRegistry:
 
     # ── Active tab management ─────────────────────────────────────────────────
 
+    # URL prefixes that must never become the active page
+    _SYSTEM_URL_PREFIXES = (
+        "chrome://newtab",
+        "about:newtab",
+        "about:blank",
+        "chrome-extension://",
+        "devtools://",
+    )
+
     def set_active(self, page, source="unknown") -> str | None:
+        # Reject system / new-tab pages — they are never user-visible content
+        try:
+            _url = page.url.lower()
+            if any(_url.startswith(p) for p in self._SYSTEM_URL_PREFIXES) or _url == "":
+                logger.debug(
+                    f"TabRegistry.set_active: ignored system page {_url!r} (source={source})"
+                )
+                return None
+        except Exception:
+            pass
+
         tab_id = self.get_tab_id(page)
         if not tab_id:
             tab_id = self.register(page)
@@ -342,6 +367,13 @@ class TabRegistry:
         with self._mu:
             return self._pages.get(tab_id)
 
+    def get_page_by_target_id(self, target_id: str) -> object | None:
+        with self._mu:
+            tab_id = self._target_to_tab.get(target_id)
+            if tab_id:
+                return self._pages.get(tab_id)
+            return None
+
     # ── Tab listing ───────────────────────────────────────────────────────────
 
     def all_tabs(self) -> list[TabInfo]:
@@ -402,11 +434,8 @@ class TabRegistry:
 
     async def wire_cdp_session(self, context) -> None:
         """
-        Subscribe to Chrome CDP ``Target.targetActivated`` for instant tab-switch
-        detection.  Uses targetId (not URL) so SPA navigations never break matching.
-
-        Also populates targetId mappings for all currently registered pages by
-        calling ``Target.getTargets`` once at wire time.
+        Subscribe to Chrome CDP Target.targetActivated for instant tab-switch
+        detection. Uses targetId (not URL) so SPA navigations never break matching.
         """
         try:
             pages = [p for p in context.pages if not p.is_closed()]
@@ -414,7 +443,6 @@ class TabRegistry:
                 logger.debug("TabRegistry: no pages available for CDP session")
                 return
 
-            # Establish browser-level CDP session for stable, browser-wide events
             browser = getattr(context, "browser", None)
             if browser and hasattr(browser, "new_browser_cdp_session"):
                 cdp = await browser.new_browser_cdp_session()
@@ -428,25 +456,22 @@ class TabRegistry:
             # Enable target discovery so activatedTarget events flow
             await cdp.send("Target.setDiscoverTargets", {"discover": True})
 
-            # ── CDP event handler ─────────────────────────────────────────────
+            # CDP targetActivated handler
             def _on_target_activated(event: dict) -> None:
-                # 1. Target.targetActivated parameters contain only 'targetId'.
-                # In case other CDP versions pass targetInfo wrapper, check both.
                 target_id = event.get("targetId")
                 if not target_id:
                     target_info = event.get("targetInfo", {})
                     target_id = target_info.get("targetId", "")
-
                 if not target_id:
                     return
 
-                # Fast path: targetId is already mapped → O(1) lookup
+                logger.debug(f"TabRegistry: Target.targetActivated event received for {target_id[:8]}…")
+
+                # Fast path: targetId is already mapped
                 if self.set_active_by_target_id(target_id, source="cdp_target_activated"):
                     return
 
-                # Slow path: targetId not yet mapped (manually-opened tab or late registration).
-                # Since the event parameters do not include targetInfo/url, we must
-                # query Target.getTargetInfo asynchronously to find the URL.
+                # Slow path: resolve and map URL fallback if not mapped yet
                 if self._cdp_session:
                     async def _resolve_and_activate():
                         try:
@@ -457,28 +482,17 @@ class TabRegistry:
                                 if t_url:
                                     with self._mu:
                                         matching_tab_ids = []
-                                        items = list(self._pages.items())
-                                        for tab_id, page in items:
+                                        for tab_id, page in list(self._pages.items()):
                                             if not page.is_closed() and _urls_match(page.url, t_url):
                                                 matching_tab_ids.append(tab_id)
-                                        
                                         if len(matching_tab_ids) == 1:
                                             t_id = matching_tab_ids[0]
                                             self._target_ids[t_id] = target_id
                                             self._target_to_tab[target_id] = t_id
-                                            logger.debug(
-                                                f"TabRegistry: unique URL-matched activatedTarget fallback "
-                                                f"{t_id[:8]}… {t_url!r}"
-                                            )
+                                            logger.debug(f"TabRegistry: resolved activatedTarget URL fallback → {t_id[:8]}…")
                                             page_to_activate = self._pages.get(t_id)
                                         else:
                                             page_to_activate = None
-                                            if len(matching_tab_ids) > 1:
-                                                logger.debug(
-                                                    f"TabRegistry: activatedTarget fallback matched multiple pages "
-                                                    f"for {t_url!r}, skipping auto-map to avoid collision"
-                                                )
-                                    
                                     if page_to_activate:
                                         self.set_active(page_to_activate, source="cdp_target_activated_fallback")
                         except Exception as ex:
@@ -491,12 +505,11 @@ class TabRegistry:
                     except Exception:
                         pass
 
-            # ── CDP Target Info Changed Handler ───────────────────────────────
+            # CDP targetInfoChanged handler (propagates URL/title updates)
             def _on_target_info_changed(event: dict) -> None:
                 target_info = event.get("targetInfo", {})
                 if target_info.get("type") != "page":
                     return
-
                 target_id = target_info.get("targetId", "")
                 target_url = target_info.get("url", "")
                 target_title = target_info.get("title", "")
@@ -509,99 +522,154 @@ class TabRegistry:
                     last_url = self._persisted.get("active_url") if self._persisted else None
 
                 if tab_id:
-                    # If this is the active tab and the URL has navigated/changed, propagate it.
                     if is_active and target_url != last_url:
                         logger.info(f"TabRegistry: active tab URL updated via CDP → url={target_url!r}")
                         self._persist(tab_id, target_url)
                         self._broadcast_tab_changed(tab_id, target_url, target_title)
                     return
 
-                # Match this targetId to a registered Playwright page by URL matching
-                # Safety fallback only if target_id is not already mapped
-                # AND there is exactly one registered page whose URL matches target_url.
-                # If multiple pages match the URL, do NOT auto-map to avoid collision.
+                # Map targetId to registered page by URL if not mapped yet
                 with self._mu:
                     matching_tab_ids = []
-                    items = list(self._pages.items())
-                    for t_id, page in items:
+                    for t_id, page in list(self._pages.items()):
                         try:
                             if not page.is_closed() and _urls_match(page.url, target_url):
                                 matching_tab_ids.append(t_id)
                         except Exception:
                             continue
-                    
                     if len(matching_tab_ids) == 1:
                         t_id = matching_tab_ids[0]
                         self._target_ids[t_id] = target_id
                         self._target_to_tab[target_id] = t_id
-                        logger.debug(
-                            f"TabRegistry: unique URL-matched targetInfoChanged fallback "
-                            f"{t_id[:8]}… {target_url!r}"
-                        )
-                        is_now_active = (self._active_tab_id == t_id)
-                        if is_now_active:
-                            self._persist(t_id, target_url)
-                            self._broadcast_tab_changed(t_id, target_url, target_title)
-                    elif len(matching_tab_ids) > 1:
-                        logger.debug(
-                            f"TabRegistry: targetInfoChanged matched multiple pages "
-                            f"for {target_url!r}, skipping auto-map to avoid collision"
-                        )
-
-            # ── New page handler ──────────────────────────────────────────────
-            def _on_new_page_in_context(page) -> None:
-                """Auto-register new pages and seed their targetId."""
-                self.register(page)
-
-            try:
-                context.on("page", _on_new_page_in_context)
-            except Exception:
-                pass  # context may not support additional "page" listeners
+                        logger.debug(f"TabRegistry: mapped targetId {target_id[:8]}… via targetInfoChanged")
 
             cdp.on("Target.targetActivated", _on_target_activated)
             cdp.on("Target.targetCreated", _on_target_info_changed)
             cdp.on("Target.targetInfoChanged", _on_target_info_changed)
             logger.info("✅ TabRegistry: CDP Target event handlers subscribed")
 
-            # ── Seed targetId mapping ─────────────────────────────────────────
-            # Direct-seed targetId for all open pages in parallel background tasks
-            async def _seed_page(p):
-                try:
-                    tab_id = self.get_tab_id(p)
-                    if not tab_id:
-                        tab_id = self.register(p)
-                    
-                    page_cdp = await context.new_cdp_session(p)
-                    t_id = None
-                    if hasattr(page_cdp, "_impl_obj") and hasattr(page_cdp._impl_obj, "_guid"):
-                        guid = page_cdp._impl_obj._guid
-                        if "@" in guid:
-                            t_id = guid.split("@")[-1]
-                    try:
-                        await page_cdp.detach()
-                    except Exception:
-                        pass
-                    if t_id:
-                        with self._mu:
-                            self._target_ids[tab_id] = t_id
-                            self._target_to_tab[t_id] = tab_id
-                            logger.debug(f"TabRegistry: wired seed targetId for page {tab_id[:8]}… ↔ {t_id[:8]}…")
-                except Exception as p_err:
-                    logger.debug(f"TabRegistry: seeding for page failed: {p_err}")
-
-            for p in pages:
-                try:
-                    loop = asyncio.get_event_loop()
-                    if loop.is_running():
-                        asyncio.ensure_future(_seed_page(p), loop=loop)
-                except Exception:
-                    pass
+            # Start lightweight REST sync loop
+            self.start_cdp_sync_loop()
 
         except Exception as e:
             logger.warning(
                 f"TabRegistry: CDP session unavailable "
-                f"({type(e).__name__}: {e}) — falling back to visibilityState detection"
+                f"({type(e).__name__}: {e}) — falling back to URL matching"
             )
+
+    def start_cdp_sync_loop(self) -> None:
+        """Start (or restart) the CDP REST sync background task."""
+        if self._cdp_sync_task and not self._cdp_sync_task.done():
+            return  # already running
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                self._cdp_sync_task = asyncio.ensure_future(
+                    self._cdp_sync_loop(), loop=loop
+                )
+                logger.info("TabRegistry: CDP REST sync loop started")
+        except Exception as e:
+            logger.debug(f"TabRegistry: could not start CDP sync loop: {e}")
+
+    async def _cdp_sync_loop(self) -> None:
+        """
+        Lightweight background loop: polls Chrome's REST /json endpoint once per
+        second to:
+          1. Seed any missing targetId → tab_id mappings.
+          2. Detect which target is active (most-recently-focused target of type 'page')
+             and update TabRegistry when the user manually switches tabs.
+        """
+        import urllib.request
+        import json as _json
+
+        _SYSTEM_URLS = ("chrome-extension://", "devtools://", "about:", "chrome://")
+
+        logger.info("TabRegistry: _cdp_sync_loop running")
+        while True:
+            await asyncio.sleep(1.0)  # 1 s cadence
+            try:
+                # Snapshot pages under lock to avoid holding it during network I/O
+                with self._mu:
+                    pages_snapshot = list(self._pages.items())  # [(tab_id, page)]
+                    target_to_tab_snapshot = dict(self._target_to_tab)
+                    current_active_id = self._active_tab_id
+
+                if not pages_snapshot:
+                    continue
+
+                # Fetch Chrome targets via REST (no Playwright overhead)
+                def _fetch():
+                    with urllib.request.urlopen("http://127.0.0.1:9222/json", timeout=0.8) as r:
+                        return _json.loads(r.read().decode())
+
+                targets = await asyncio.to_thread(_fetch)
+
+                # Filter to user-visible page targets only
+                page_targets = [
+                    t for t in targets
+                    if t.get("type") == "page"
+                    and not any(t.get("url", "").lower().startswith(p) for p in _SYSTEM_URLS)
+                    and t.get("url", "").lower() not in ("", "about:blank")
+                    and "localhost:3000" not in t.get("url", "")
+                    and "127.0.0.1:3000" not in t.get("url", "")
+                ]
+
+                if not page_targets:
+                    continue
+
+                # --- Step 1: Seed missing targetId ↔ tab_id mappings ---
+                for t in page_targets:
+                    t_id = t.get("id") or t.get("targetId", "")
+                    t_url = t.get("url", "")
+                    if not t_id or t_id in target_to_tab_snapshot:
+                        continue  # Already mapped
+                    # Try to match by URL
+                    matches = []
+                    for tab_id, page in pages_snapshot:
+                        try:
+                            if not page.is_closed() and _urls_match(page.url, t_url):
+                                matches.append((tab_id, page))
+                        except Exception:
+                            continue
+                    if len(matches) == 1:
+                        tab_id, _ = matches[0]
+                        with self._mu:
+                            self._target_ids[tab_id] = t_id
+                            self._target_to_tab[t_id] = tab_id
+                        logger.debug(f"TabRegistry sync: seeded {tab_id[:8]}… ↔ {t_id[:8]}…")
+
+                # --- Step 2: Detect active tab from index 0 ---
+                # Chrome remote debugging orders page targets by recency (active first)
+                active_t = page_targets[0]
+                active_t_id = active_t.get("id") or active_t.get("targetId", "")
+                if not active_t_id:
+                    continue
+
+                with self._mu:
+                    mapped_tab_id = self._target_to_tab.get(active_t_id)
+
+                if not mapped_tab_id:
+                    continue  # Not yet mapped
+
+                if mapped_tab_id == current_active_id:
+                    continue  # No change
+
+                # Active tab changed — update registry
+                with self._mu:
+                    page = self._pages.get(mapped_tab_id)
+                if page:
+                    try:
+                        if not page.is_closed():
+                            self.set_active(page, source="cdp_rest_sync")
+                    except Exception:
+                        pass
+
+            except asyncio.CancelledError:
+                logger.info("TabRegistry: _cdp_sync_loop cancelled")
+                break
+            except Exception as e:
+                logger.debug(f"TabRegistry: _cdp_sync_loop error: {e}")
+
 
     # ── Internal helpers ──────────────────────────────────────────────────────
 

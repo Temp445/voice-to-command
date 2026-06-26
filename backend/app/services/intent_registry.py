@@ -698,11 +698,13 @@ async def handle_toggle_element(text: str = "", **_) -> str:
 
         result = await page.evaluate("""
             (target) => {
-                // Strategy 1: Find toggle/switch/checkbox near the target text label
+                // Strategy 1: Find toggle/switch/checkbox/radio near the target text label
                 const toggleSels = [
                     'input[type="checkbox"]',
-                    '[role="switch"]',
+                    'input[type="radio"]',
                     '[role="checkbox"]',
+                    '[role="radio"]',
+                    '[role="switch"]',
                     'button[class*="toggle" i]',
                     'button[class*="switch" i]',
                     'label[class*="toggle" i]',
@@ -711,16 +713,107 @@ async def handle_toggle_element(text: str = "", **_) -> str:
                 ];
                 const allToggles = Array.from(document.querySelectorAll(toggleSels.join(',')));
 
-                for (const t of allToggles) {
-                    let node = t.parentElement;
-                    for (let depth = 0; depth < 12; depth++) {
-                        if (!node) break;
-                        if (node.innerText?.toLowerCase().includes(target)) {
-                            t.click();
-                            return 'clicked_toggle';
-                        }
-                        node = node.parentElement;
+                function getLabelText(t) {
+                    function textOnly(el) {
+                        let s = '';
+                        for (const n of el.childNodes)
+                            if (n.nodeType === 3) s += n.textContent;
+                        return s.trim();
                     }
+                    if (t.tagName === 'INPUT') {
+                        if (t.id) {
+                            const lbl = document.querySelector(`label[for="${t.id}"]`);
+                            if (lbl) { const tx = textOnly(lbl); if (tx) return tx; }
+                        }
+                        let parent = t.parentElement;
+                        while (parent) {
+                            if (parent.tagName === 'LABEL') {
+                                const tx = textOnly(parent);
+                                if (tx) return tx;
+                                // fallback: sibling text nodes after the input
+                                let sib = t.nextSibling; let sibTxt = '';
+                                while (sib) { if (sib.nodeType === 3) sibTxt += sib.textContent; sib = sib.nextSibling; }
+                                if (sibTxt.trim()) return sibTxt.trim();
+                                return (parent.innerText || '').trim();
+                            }
+                            parent = parent.parentElement;
+                        }
+                    }
+                    return t.getAttribute('aria-label') || t.placeholder || (t.innerText || '').trim();
+                }
+
+                const targetClean = target.toLowerCase().replace(/\s+/g, ' ').trim();
+                const targetWords = targetClean.split(/\s+/).filter(Boolean);
+
+                let bestToggle = null;
+                let bestScore = -1;
+
+                for (const t of allToggles) {
+                    // Get direct text, then fallback to full innerText (covers React/span-wrapped labels)
+                    let label = getLabelText(t).toLowerCase().replace(/\s+/g, ' ').trim();
+
+                    // If getLabelText returned nothing, try scanning nearby text
+                    // (handles <label><input><span>Text</span></label> patterns)
+                    if (!label) {
+                        // Check sibling elements (span, div) for text
+                        let p = t.parentElement;
+                        for (let depth = 0; depth < 3 && p; depth++) {
+                            const innerTxt = (p.innerText || '').replace(/\s+/g, ' ').trim().toLowerCase();
+                            if (innerTxt && innerTxt.length < 80) { // avoid huge containers
+                                label = innerTxt;
+                                break;
+                            }
+                            p = p.parentElement;
+                        }
+                    }
+
+                    if (!label && t.tagName !== 'INPUT') continue;
+
+                    const labelWords = label.split(/\s+/).filter(Boolean);
+
+                    // 1. Calculate label match score
+                    let labelScore = 0;
+                    if (label) {
+                        // Whole phrase match (highest value)
+                        if (label.includes(targetClean) || targetClean.includes(label)) {
+                            labelScore += 30;
+                        } else {
+                            // Word-by-word match
+                            for (const w of targetWords) {
+                                if (labelWords.includes(w)) labelScore += 8;
+                            }
+                        }
+                    }
+
+                    // 2. Container context score (walk up parents to collect surrounding text)
+                    let containerText = '';
+                    let parent = t.parentElement;
+                    for (let depth = 0; depth < 6; depth++) {
+                        if (!parent) break;
+                        containerText += ' ' + (parent.innerText || '');
+                        parent = parent.parentElement;
+                    }
+                    containerText = containerText.toLowerCase().replace(/\s+/g, ' ');
+
+                    let containerScore = 0;
+                    if (containerText.includes(targetClean)) {
+                        containerScore += 5; // whole phrase in nearby context
+                    } else {
+                        for (const w of targetWords) {
+                            if (containerText.includes(w)) containerScore += 1;
+                        }
+                    }
+
+                    const totalScore = labelScore + containerScore;
+                    if (totalScore > bestScore) {
+                        bestScore = totalScore;
+                        bestToggle = t;
+                    }
+                }
+
+                if (bestToggle && bestScore >= 5) {
+                    bestToggle.click();
+                    return 'clicked_toggle';
                 }
 
                 // Strategy 2: Find DISABLED/ENABLED label text near the target
@@ -756,6 +849,245 @@ async def handle_toggle_element(text: str = "", **_) -> str:
         return f"Toggle result: {result}"
 
     return await _run_in_playwright(_do_toggle())
+
+
+async def handle_compound_toggle(cmd: str = "", **_) -> str:
+    """Handle compound toggle commands like:
+      'uncheck push notifications, check email notifications'
+      'enable dark mode and disable auto-sync'
+    Splits on comma/and boundaries, detects the verb for each segment,
+    then calls handle_toggle_element for each operation.
+    """
+    import re
+
+    # Verbs that introduce each operation segment
+    VERB_PATTERN = re.compile(
+        r'(?:^|(?<=\s))(uncheck|untick|unchecked|check|tick|enable|disable|toggle|activate|deactivate|turn\s+on|turn\s+off)\s+',
+        re.IGNORECASE
+    )
+
+    # Split the compound command into (verb, target) pairs
+    ops = []
+    matches = list(VERB_PATTERN.finditer(cmd))
+    for i, m in enumerate(matches):
+        verb = m.group(1).strip().lower()
+        start = m.end()
+        end = matches[i + 1].start() if i + 1 < len(matches) else len(cmd)
+        target = cmd[start:end].strip().rstrip(',').strip()
+        if target:
+            ops.append((verb, target))
+
+    if not ops:
+        # Fallback: treat the whole cmd as a single toggle
+        return await handle_toggle_element(text=cmd)
+
+    results = []
+    for verb, target in ops:
+        result = await handle_toggle_element(text=target)
+        # Provide the correct verb context in the response
+        action = "Checked" if verb in ("check", "tick", "enable", "activate", "turn on") else "Unchecked"
+        if "not found" in result.lower() or "could not" in result.lower():
+            results.append(f"⚠️ Could not find '{target}'.")
+        else:
+            results.append(f"✅ {action} '{target}'.")
+
+    return " ".join(results)
+
+
+async def handle_set_options(group: str = "", values: str = "", **_) -> str:
+    """Set option values (checkboxes or radio buttons) under a specific group/header.
+    
+    E.g. group="Notification Methods", values="Email Notifications SMS Notifications"
+    E.g. group="Priority Level", values="urgent"
+    """
+    from automation.browser.browser_engine import BrowserEngine, _run_in_playwright
+
+    group_clean = group.strip().lower()
+    values_clean = values.strip().lower()
+    
+    import re
+    raw_parts = re.split(r'\b(?:and|or)\b|[,&]', values_clean)
+    parts = [p.strip() for p in raw_parts if p.strip()]
+    if not parts:
+        parts = [values_clean]
+
+    engine = BrowserEngine()
+
+    async def _do_set():
+        page = await engine.get_active_page()
+        if not page:
+            return "No active browser tab found. Open the page first."
+
+        result = await page.evaluate("""
+            (payload) => {
+                const groupText = payload.group;
+                const parts = payload.parts;
+                const rawValues = payload.rawValues;
+
+                const headerSels = ['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'span', 'div', 'label', 'strong', 'b'];
+                const headers = Array.from(document.querySelectorAll(headerSels.join(',')));
+                
+                let bestGroupEl = null;
+                let bestGroupScore = 0;
+                
+                for (const h of headers) {
+                    const txt = (h.innerText || h.textContent || '').toLowerCase().replace(/\\s+/g, ' ').trim();
+                    if (!txt) continue;
+                    
+                    if (txt.includes(groupText)) {
+                        let score = 10;
+                        if (txt === groupText) score += 20;
+                        if (h.tagName.startsWith('H')) score += 5;
+                        
+                        if (score > bestGroupScore) {
+                            bestGroupScore = score;
+                            bestGroupEl = h;
+                        }
+                    }
+                }
+
+                let container = document.body;
+                if (bestGroupEl && bestGroupScore >= 10) {
+                    let parent = bestGroupEl.parentElement;
+                    for (let depth = 0; depth < 5; depth++) {
+                        if (!parent) break;
+                        const inputs = parent.querySelectorAll('input[type="checkbox"], input[type="radio"], [role="checkbox"], [role="radio"]');
+                        if (inputs.length >= 1) {
+                            container = parent;
+                            break;
+                        }
+                        parent = parent.parentElement;
+                    }
+                }
+
+                const optionSels = [
+                    'input[type="checkbox"]',
+                    'input[type="radio"]',
+                    '[role="checkbox"]',
+                    '[role="radio"]',
+                    '[role="switch"]'
+                ];
+                const toggles = Array.from(container.querySelectorAll(optionSels.join(',')));
+                if (toggles.length === 0 && container !== document.body) {
+                    toggles.push(...Array.from(document.body.querySelectorAll(optionSels.join(','))));
+                }
+
+                function getTextOnly(el) {
+                    // Extract only direct text nodes (no child element text)
+                    let text = '';
+                    for (const node of el.childNodes) {
+                        if (node.nodeType === 3) { // TEXT_NODE
+                            text += node.textContent;
+                        }
+                    }
+                    return text.trim();
+                }
+
+                function getLabelText(t) {
+                    // 1. Explicit label[for=id]
+                    if (t.tagName === 'INPUT' && t.id) {
+                        const lbl = document.querySelector(`label[for="${t.id}"]`);
+                        if (lbl) {
+                            const txt = getTextOnly(lbl);
+                            if (txt) return txt;
+                            // fallback: full innerText minus the input value
+                            return (lbl.innerText || '').replace(t.value || '', '').trim();
+                        }
+                    }
+                    // 2. Parent LABEL element - use only text nodes to avoid control chars
+                    if (t.tagName === 'INPUT' || ['checkbox','radio','switch'].includes(t.getAttribute('role') || '')) {
+                        let parent = t.parentElement;
+                        while (parent) {
+                            if (parent.tagName === 'LABEL') {
+                                const txt = getTextOnly(parent);
+                                if (txt) return txt;
+                                // fallback: siblings text
+                                let sibling = t.nextSibling;
+                                let sibText = '';
+                                while (sibling) {
+                                    if (sibling.nodeType === 3) sibText += sibling.textContent;
+                                    sibling = sibling.nextSibling;
+                            let clickedCount = 0;
+                const matchedLabels = [];
+                const uncheckedLabels = [];
+
+                for (const t of toggles) {
+                    const label = getLabelText(t).toLowerCase().replace(/\s+/g, ' ').trim();
+                    if (!label) continue;
+
+                    let matches = false;
+                    for (const p of parts) {
+                        if (label.includes(p) || p.includes(label)) {
+                            matches = true;
+                            break;
+                        }
+                    }
+                    if (!matches && rawValues.includes(label)) {
+                        matches = true;
+                    }
+
+                    const isRadio = t.type === 'radio' || t.getAttribute('role') === 'radio';
+                    const isChecked = t.checked || t.getAttribute('aria-checked') === 'true' || t.classList.contains('checked');
+
+                    if (matches) {
+                        if (!isChecked) {
+                            t.click();
+                            clickedCount++;
+                        }
+                        matchedLabels.push(label);
+                    } else {
+                        // For non-radio (i.e. checkbox/switch), if it's currently checked, uncheck it
+                        if (!isRadio && isChecked) {
+                            t.click();
+                            clickedCount++;
+                            uncheckedLabels.push(label);
+                        }
+                    }
+                }
+
+                if (matchedLabels.length > 0) {
+                    return {
+                        status: 'success',
+                        matched: matchedLabels,
+                        unchecked: uncheckedLabels,
+                        clickedCount: clickedCount
+                    };
+                }
+                return { status: 'not_found' };
+            }
+        """, {
+            "group": group_clean,
+            "parts": parts,
+            "rawValues": values_clean
+        })
+
+        if result["status"] == "success":
+            matched_str = ", ".join([f"'{l}'" for l in result["matched"]])
+            msg = f"Set options in '{group}' to: {matched_str}."
+            if result.get("unchecked"):
+                unchecked_str = ", ".join([f"'{l}'" for l in result["unchecked"]])
+                msg += f" Unchecked: {unchecked_str}."
+            return msg
+        else:
+            return f"Could not find options matching '{values}' under '{group}'."
+
+    return await _run_in_playwright(_do_set())ls: clickedLabels };
+                }
+                return { status: 'not_found' };
+            }
+        """, {
+            "group": group_clean,
+            "parts": parts,
+            "rawValues": values_clean
+        })
+
+        if result["status"] == "success":
+            labels_str = ", ".join([f"'{l}'" for l in result["labels"]])
+            return f"Set options in '{group}' to: {labels_str}."
+        else:
+            return f"Could not find options matching '{values}' under '{group}'."
+
+    return await _run_in_playwright(_do_set())
 
 
 async def handle_browser_date_filter(start_date: str = "", end_date: str = "", text: str = "", **kwargs) -> str:
@@ -3300,16 +3632,45 @@ def register_all_intents() -> None:
             param_names=["text"],
         ),
         Intent(
+            name="compound_toggle",
+            domain="browser",
+            patterns=[
+                # Must contain at least two toggle verbs separated by comma/and
+                r"^(?P<cmd>(?:(?:un)?check|enable|disable|toggle|activate|deactivate|turn\s+(?:on|off)|tick|untick)\s+.+?(?:\s*,\s*|\s+and\s+)(?:(?:un)?check|enable|disable|toggle|activate|deactivate|turn\s+(?:on|off)|tick|untick)\s+.+)$",
+            ],
+            handler=handle_compound_toggle,
+            description="Handle multiple check/uncheck/enable/disable operations in one command",
+            examples=[
+                "uncheck push notifications, check email notifications",
+                "enable dark mode and disable auto-sync",
+                "check email notifications and uncheck sms notifications",
+            ],
+            param_names=["cmd"],
+        ),
+        Intent(
             name="toggle_element",
             domain="browser",
             patterns=[
                 r"^(?:enable|disable|toggle|activate|deactivate)\s+(?P<text>.+)$",
                 r"^turn\s+(?:on|off)\s+(?P<text>.+)$",
+                r"^(?:check|tick)\s+(?P<text>.+)$",
+                r"^(?:uncheck|untick|unchecked)\s+(?P<text>.+)$",
             ],
             handler=handle_toggle_element,
             description="Enable, disable, or toggle a switch, checkbox, or status element on the page",
-            examples=["enable device 1", "disable device 2", "toggle background auto-sync", "turn on notifications", "deactivate user"],
+            examples=["enable device 1", "disable device 2", "toggle background auto-sync", "turn on notifications", "deactivate user", "check email notifications", "uncheck sound alerts"],
             param_names=["text"],
+        ),
+        Intent(
+            name="set_options",
+            domain="browser",
+            patterns=[
+                r"^(?P<group>.+?)\s+(?:are|is|should\s+be|set\s+to|to)\s+(?P<values>.+)$",
+            ],
+            handler=handle_set_options,
+            description="Set option values (checkboxes or radio buttons) under a specific group/header",
+            examples=["Notification Methods are Email Notifications SMS Notifications", "priority level should be urgent"],
+            param_names=["group", "values"],
         ),
     ]
 

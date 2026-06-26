@@ -317,8 +317,27 @@ class CommandService:
 
     async def parse_and_execute(self, text: str) -> dict[str, Any]:
         """
-        Main entry point.
-        Returns a dict with: intent, parameters, result, status, duration_ms.
+        Main entry point with active page snapshotting for the duration of the command.
+        """
+        from automation.browser.browser_engine import BrowserEngine
+        engine = BrowserEngine()
+        active_page = None
+        try:
+            if engine._context:
+                active_page = await engine.get_active_page()
+                if active_page:
+                    engine.set_active_page_override(active_page)
+        except Exception as e:
+            logger.debug(f"CommandService: failed to snapshot active page: {e}")
+
+        try:
+            return await self._parse_and_execute_inner(text)
+        finally:
+            engine.clear_active_page_override()
+
+    async def _parse_and_execute_inner(self, text: str) -> dict[str, Any]:
+        """
+        Internal implementation of parse_and_execute.
         """
         text = text.strip()
 
@@ -784,11 +803,36 @@ class CommandService:
                 or _lower_text.startswith("logout")
             )
 
+            # Check if this command matches the credential type pattern to skip click interception
+            _is_cred_type_pattern = False
+            try:
+                import re as _re
+                _cred_check = _re.sub(
+                    r'\b(uh|um|er|ah|like|so|well|right|okay|ok)\b[,\s]*', ' ', text, flags=_re.IGNORECASE
+                ).strip()
+                _cred_check = _re.sub(
+                    r'^(?:update|change|set|enter|fill|use|create|make|type|modify|edit)\s+'
+                    r'(?:the\s+|my\s+|a\s+|your\s+)?(?:new\s+)?',
+                    '', _cred_check, flags=_re.IGNORECASE
+                ).strip()
+                _cred_check = _re.sub(
+                    r'^(email(?:\s+(?:address|id))?|username|user\s*name|password|pass)\s*[,.:;\s]+',
+                    lambda m: m.group(1) + ' ', _cred_check, flags=_re.IGNORECASE
+                ).strip()
+                _cred_match = _re.match(
+                    r'^(email(?:\s+(?:address|id))?|username|user\s*name|password|pass)\s+(.+)$',
+                    _cred_check, _re.IGNORECASE
+                )
+                if _cred_match:
+                    _is_cred_type_pattern = True
+            except Exception:
+                pass
+
             # Layer 0.85: Snapshot-based Fast Click (cached DOM — no Playwright round-trip)
             # Reads the pre-warmed PageContextService cache and scores every visible element
             # against the voice query using text-similarity scoring.
             # Falls through to Layer 0.9 if the snapshot is stale/missing or nothing scores.
-            if not intent_name and len(text.split()) <= 7 and not _is_auth_cmd:
+            if not intent_name and len(text.split()) <= 7 and not _is_auth_cmd and not _is_cred_type_pattern:
                 try:
                     from app.services.page_context_service import (
                         page_context_service as _pcs,
@@ -854,7 +898,7 @@ class CommandService:
             # matches a visible button/link on the page, click it INSTANTLY.
             # FIX: All Playwright awaits must run on the dedicated _playwright_loop thread.
             # Calling them on the FastAPI/pipeline loop causes silent cross-loop failures.
-            if not intent_name and len(text.split()) <= 5 and not _is_auth_cmd:
+            if not intent_name and len(text.split()) <= 5 and not _is_auth_cmd and not _is_cred_type_pattern:
 
                 try:
                     from automation.browser.browser_controller import BrowserController

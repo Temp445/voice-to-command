@@ -497,6 +497,25 @@ class VoiceBrowserCommands:
 
             crm_match = _matched_url is not None
 
+            # ── Navigation bypass — always open/navigate even from non-CRM tab ──
+            # Commands like "open crm", "go to crm", "launch crm" are navigation
+            # intents — they should ALWAYS call open_crm() regardless of the active
+            # tab.  Only in-page interaction commands (create, edit, change view …)
+            # need the site-guard below.
+            _nav_only_pattern = re.compile(
+                r'^\s*(?:open|launch|start|go\s+to|goto|load|bring\s+up|navigate\s+to)\s+'
+                r'(?:my\s+)?(?:ace\s+)?crm\s*$',
+                re.IGNORECASE
+            )
+            _is_crm_navigation = bool(_nav_only_pattern.match(transcript_lower))
+
+            if crm_match and _is_crm_navigation:
+                logger.info(
+                    f"CRM navigation command detected ('{transcript}') — "
+                    f"bypassing site-guard and calling open_crm()"
+                )
+                return await self.crm.open_crm(transcript, target_url=_matched_url)
+
             # ── Explicit CRM Auth Bypass ─────────────────────────────────────────
             # "sign in crm", "log in crm", "login to crm" — these commands explicitly
             # name the CRM, so they must ALWAYS go to crm.login() regardless of which
@@ -515,7 +534,8 @@ class VoiceBrowserCommands:
                 return await self.crm.login()
 
             # ── Site-Guard ──────────────────────────────────────────────────────
-            # If the active tab is NOT a CRM page, CRM macros must not run —
+            # If the active tab is NOT a CRM page, in-page interaction commands
+            # (create, edit, change view, search …) must not run on the wrong tab —
             # instead fall through to DOMAgent on the actual active tab.
             if crm_match and not _active_tab_is_crm:
                 logger.info(

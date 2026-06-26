@@ -161,7 +161,8 @@ class BrowserEngine:
     _ACTIVE_PAGE_TTL: float = 0.15  # seconds (was 0.3 — reduced for tab-switch accuracy)
     # _last_navigated_page REMOVED — replaced by TabRegistry.get_active() which is
     # event-driven (CDP Target.activatedTarget) and never stale.
-    _active_tab_detector_task = None
+    _active_page_override = None
+    _detector_task = None
 
     def __new__(cls):
         if cls._instance is None:
@@ -275,25 +276,28 @@ class BrowserEngine:
             pass
         logger.debug(f"Active page pinned (TabRegistry, source={source}): {page.url}")
 
+    def set_active_page_override(self, page: Page) -> None:
+        self._active_page_override = page
+        logger.debug(f"BrowserEngine: locked active page override to {page.url if page else 'None'}")
+
+    def clear_active_page_override(self) -> None:
+        self._active_page_override = None
+        logger.debug("BrowserEngine: cleared active page override")
+
     async def get_active_page(self) -> Page:
         """Return the tab the user is currently looking at.
 
         Detection priority:
-          0. TabRegistry  — event-driven via CDP Target.activatedTarget (always current).
-          1. Short-lived cache (150 ms TTL) — avoids redundant CDP/JS round-trips
-             when multiple layers of a single command all need the active page.
-          2. document.visibilityState == "visible" → OS-foreground tab
-          3. document.hasFocus()                   → fallback when visibility API blocked
-          4. CDP REST /json endpoint               → works even when ACE overlay steals focus
-          5. Most-recently created non-system tab  → final fallback
-
-        NOTE: Layer 2.5 (last_navigated_page) has been REMOVED.  That sticky pointer
-        was the primary cause of commands being routed to the first-opened tab instead
-        of the user's current tab.  The TabRegistry (Layer 0) replaces it with an
-        event-driven approach that updates within ~1ms of any tab switch.
-
-        This is the SINGLE source-of-truth for every automation command.
+          0. Override active page (if set and not closed)
+          1. TabRegistry (Event-driven CDP Target.targetActivated & REST sync loop)
+          2. Fallback to last/first non-closed page in context
         """
+        # ── Override layer ───────────────────────────────────────────────────
+        if self._active_page_override is not None:
+            if not self._active_page_override.is_closed():
+                return self._active_page_override
+            self._active_page_override = None
+
         # ── Cache layer ───────────────────────────────────────────────────────
         if self._active_page_cache is not None:
             ts, cached_page = self._active_page_cache
@@ -315,191 +319,30 @@ class BrowserEngine:
             ]
 
             if not pages:
-                # No real pages — return whatever ensure_browser gives us
                 return await self.ensure_browser()
 
-            if len(pages) == 1:
-                self._page = pages[0]
-                self.pin_active_page(pages[0], source="get_active_page_single")  # register single tab in registry
-                return self._page
+            from automation.browser.tab_registry import tab_registry
 
-            # Layer 1: visibilityState — most reliable; only the OS-foreground tab
-            # returns "visible". Hidden tabs (background, minimised) return "hidden".
-            for p in pages:
-                try:
-                    state = await p.evaluate("document.visibilityState")
-                    if state == "visible":
-                        if self._page != p:
-                            logger.debug(f"Active tab (visibilityState): {p.url}")
-                        self._page = p
-                        self.pin_active_page(p, source="get_active_page_visibilityState")  # sync registry
-                        return p
-                except Exception as e:
-                    logger.debug(f"visibilityState eval failed for {p.url}: {e}")
-                    continue
-
-            # Layer 2: TabRegistry (Single Source of Truth when Chrome is in background/minimized)
+            # Priority 1: Check TabRegistry active tab
             try:
-                from automation.browser.tab_registry import tab_registry
                 reg_page = tab_registry.get_active()
                 if reg_page and not reg_page.is_closed() and reg_page in pages:
-                    if self._page != reg_page:
-                        logger.debug(f"Active tab (TabRegistry fallback): {reg_page.url}")
                     self._page = reg_page
                     return reg_page
             except Exception as e:
-                logger.debug(f"TabRegistry lookup failed, falling through: {e}")
+                logger.debug(f"TabRegistry active lookup failed: {e}")
 
-            # Layer 3: hasFocus — fires when the document has keyboard focus
-            for p in pages:
-                try:
-                    focused = await p.evaluate("document.hasFocus()")
-                    if focused:
-                        if self._page != p:
-                            logger.debug(f"Active tab (hasFocus): {p.url}")
-                        self._page = p
-                        self.pin_active_page(p, source="get_active_page_hasFocus")  # sync registry
-                        return p
-                except Exception as e:
-                    logger.debug(f"hasFocus eval failed for {p.url}: {e}")
-                    continue
-
-            # Layer 3.5: No sticky fallback here. Recuperate from registry or other layers.
-
-            # Layer 2.6: Recover from registry disk state if server restarted
-            try:
-                from automation.browser.tab_registry import tab_registry as _tr
-                recovered = _tr.recover_from_disk(pages)
-                if recovered and not recovered.is_closed():
-                    self._page = recovered
-                    logger.debug(f"Active tab (Layer 2.6 - TabRegistry disk recovery): {recovered.url}")
-                    return recovered
-            except Exception as e:
-                logger.debug(f"TabRegistry disk recovery failed: {e}")
-
-            # Layer 3: CDP /json — first try targetId lookup (O(1), SPA-safe),
-            # then fall back to URL-based matching.
-            try:
-                import urllib.request, json as _json
-                from automation.browser.tab_registry import tab_registry as _tr3
-
-                def _fetch_targets():
-                    with urllib.request.urlopen("http://localhost:9222/json", timeout=0.5) as r:
-                        return _json.loads(r.read())
-
-                targets = await asyncio.to_thread(_fetch_targets)
-
-                # /json lists tabs in LAST-ACTIVATED order when Chrome is foreground.
-                # When Chrome is background (ACE overlay has focus), we use "attached"
-                # field instead — exactly one page target is attached to the JS engine.
-                _cdp_pages = [
-                    t for t in targets
-                    if t.get("type") == "page"
-                    and not t.get("url", "").lower().startswith(("chrome-extension://", "devtools://"))
-                    and t.get("url", "").lower() not in ("about:blank", "")
-                    and "localhost:3000" not in t.get("url", "")
-                ]
-
-                # Prefer "attached" targets (the one Chrome considers active)
-                _attached = [t for t in _cdp_pages if t.get("attached") is True]
-                _ordered = _attached + [t for t in _cdp_pages if not t.get("attached")]
-
-                from urllib.parse import urlparse as _up
-
-                def _urls_match_layer3(pu_raw: str, cu_raw: str) -> bool:
-                    pu = pu_raw.rstrip("/").lower()
-                    cu = cu_raw.rstrip("/").lower()
-                    if pu == cu:
-                        return True
-                    try:
-                        pp, cp = _up(pu), _up(cu)
-                        # Same origin is sufficient — SPA may have changed path
-                        return pp.netloc == cp.netloc and bool(pp.netloc)
-                    except Exception:
-                        return False
-
-                for t in _ordered:
-                    t_id  = t.get("id") or t.get("targetId", "")   # /json uses "id"
-                    t_url = t.get("url", "")
-
-                    # Fast path: targetId already in registry
-                    if t_id and _tr3.set_active_by_target_id(t_id):
-                        p = _tr3.get_active()
-                        if p and not p.is_closed():
-                            if self._page != p:
-                                logger.debug(f"Active tab (CDP targetId fast-path): {p.url}")
-                            self._page = p
-                            return p
-
-                    # Slow path: URL-based match + seed targetId for future
-                    for p in pages:
-                        if _urls_match_layer3(p.url, t_url):
-                            if t_id:
-                                # Seed so next call uses fast path
-                                _tr3.register(p, target_id=t_id)
-                            if self._page != p:
-                                logger.debug(f"Active tab (CDP URL match): {p.url}")
-                            self._page = p
-                            self.pin_active_page(p, source="get_active_page_cdp_json")
-                            return p
-
-                    # Only try the first (most-activated) entry
-                    if _attached and t in _attached:
-                        break
-            except Exception as e:
-                logger.debug(f"CDP REST target lookup failed: {e}")
-
-            # Layer 4: Last resort — most recently created non-system tab
+            # Priority 2: Last resort fallback (most recently opened or last page)
             fallback = pages[-1]
-            if self._page != fallback:
-                logger.debug(f"Active tab (fallback most-recent): {fallback.url}")
             self._page = fallback
-            self.pin_active_page(fallback, source="get_active_page_fallback")  # sync registry
+            if tab_registry.get_active() is None:
+                self.pin_active_page(fallback, source="get_active_page_bootstrap_fallback")
             return fallback
 
         page = await _run_in_playwright(_do_get_active())
-        # Populate cache
         if page and not page.is_closed():
             self._active_page_cache = (time.time(), page)
         return page
-
-    async def _active_tab_detector_loop(self) -> None:
-        """
-        Background loop to detect manual tab switches in the headed Chrome browser.
-        Periodically checks which tab is visible (foreground tab returns "visible") and updates TabRegistry.
-        """
-        logger.info("BrowserEngine: started active tab detector loop")
-        while self._context and not getattr(self._context, 'is_closed', lambda: True)():
-            try:
-                pages = [
-                    p for p in self._context.pages
-                    if not p.is_closed()
-                    and not p.url.lower().startswith("chrome-extension://")
-                    and p.url.lower() not in ("about:blank", "")
-                    and "localhost:3000" not in p.url
-                    and "127.0.0.1:3000" not in p.url
-                ]
-                if pages:
-                    visible_page = None
-                    for p in pages:
-                        try:
-                            # Evaluate with a short timeout to prevent hanging on slow/stuck tabs
-                            state = await asyncio.wait_for(p.evaluate("document.visibilityState"), timeout=0.15)
-                            if state == "visible":
-                                visible_page = p
-                                break
-                        except Exception:
-                            continue
-                    
-                    if visible_page:
-                        from automation.browser.tab_registry import tab_registry
-                        current_active = tab_registry.get_active()
-                        if current_active != visible_page:
-                            logger.debug(f"BrowserEngine detector: manual tab switch detected → {visible_page.url}")
-                            self.pin_active_page(visible_page, source="detector_loop")
-            except Exception as e:
-                logger.debug(f"Error in active tab detector loop: {e}")
-            await asyncio.sleep(0.5)
 
     async def ensure_browser(self, background: bool = False) -> Page:
         """
@@ -608,13 +451,9 @@ class BrowserEngine:
                     # Wire CDP Target.activatedTarget for instant tab-switch detection
                     asyncio.ensure_future(_tr.wire_cdp_session(self._context))
 
-                    # Start manual active tab detector loop
-                    if hasattr(self, "_active_tab_detector_task") and self._active_tab_detector_task:
-                        try:
-                            self._active_tab_detector_task.cancel()
-                        except Exception:
-                            pass
-                    self._active_tab_detector_task = asyncio.create_task(self._active_tab_detector_loop())
+
+
+
 
                     logger.info(
                         f"✅ TabRegistry: registered {len(_real_pages)} existing tab(s), "
@@ -636,17 +475,15 @@ class BrowserEngine:
         Chrome stays alive so the next server startup can reconnect in ~50ms.
         Call kill_browser() explicitly if you actually want to terminate Chrome.
         """
-        if hasattr(self, "_active_tab_detector_task") and self._active_tab_detector_task:
-            try:
-                self._active_tab_detector_task.cancel()
-            except Exception:
-                pass
-            self._active_tab_detector_task = None
+
 
         async def _do_close():
             if self._lock is None:
                 self._lock = asyncio.Lock()
             async with self._lock:
+                if self._detector_task and not self._detector_task.done():
+                    self._detector_task.cancel()
+                    self._detector_task = None
                 if self._browser:
                     try:
                         await self._browser.close()
@@ -663,12 +500,7 @@ class BrowserEngine:
 
     async def kill_browser(self):
         """Terminate the Chrome process entirely (use only when a full restart is needed)."""
-        if hasattr(self, "_active_tab_detector_task") and self._active_tab_detector_task:
-            try:
-                self._active_tab_detector_task.cancel()
-            except Exception:
-                pass
-            self._active_tab_detector_task = None
+
 
         import psutil
         killed = False
@@ -690,6 +522,9 @@ class BrowserEngine:
         self._browser = None
         self._context = None
         self._page = None
+        if self._detector_task and not self._detector_task.done():
+            self._detector_task.cancel()
+            self._detector_task = None
         if self._playwright:
             async def _stop():
                 await self._playwright.stop()

@@ -6,6 +6,16 @@ from app.services.llm.llm_service import llm_service
 from app.config import settings
 from app.services.page_context_service import page_context_service, find_best_element, PageElement
 
+def _get_element_label(el) -> str:
+    """Get a user-friendly label for the element."""
+    label = (el.text or el.name or el.placeholder or el.el_id or "").strip()
+    label = " ".join(label.split())
+    if not label:
+        return f"{el.role or el.tag or 'element'}"
+    if len(label) > 40:
+        label = label[:37] + "..."
+    return f"'{label}'"
+
 class ActionExecutorMixin:
     async def execute_intent(self, intent_text: str) -> str:
         """
@@ -99,14 +109,15 @@ class ActionExecutorMixin:
                 if not handle:
                     continue
                     
+                lbl = _get_element_label(el)
                 if action_type == "click":
                     await handle.click()
-                    results.append(f"Clicked element {idx}")
+                    results.append(f"Clicked {lbl}")
                 elif action_type == "fill":
                     val = act.get("value", "")
                     await handle.click()
                     await handle.fill(val)
-                    results.append(f"Filled element {idx} with '{val}'")
+                    results.append(f"Entered '{val}' into {lbl}")
                 elif action_type == "select":
                     await handle.click()
                     await asyncio.sleep(0.5)
@@ -114,11 +125,11 @@ class ActionExecutorMixin:
                     loc = self.page.get_by_role("option", name=re.compile(val, re.IGNORECASE)).first
                     if await loc.count() > 0:
                         await loc.click()
-                        results.append(f"Selected option '{val}'")
+                        results.append(f"Selected option '{val}' in {lbl}")
                     else:
                         await self.page.keyboard.type(val)
                         await self.page.keyboard.press("Enter")
-                        results.append(f"Typed option '{val}'")
+                        results.append(f"Typed option '{val}' into {lbl}")
                         
             return " & ".join(results) if results else "No actions performed."
         except Exception as e:
