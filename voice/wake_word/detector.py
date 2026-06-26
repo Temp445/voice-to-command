@@ -158,7 +158,7 @@ class WakeWordDetector:
                     self._chunk_counter += 1
                     if self._chunk_counter % 50 == 0:
                         rms = np.sqrt(np.mean(chunk.astype(np.float32) ** 2))
-                        logger.info(f"🎙️ Audio Stream Active: RMS amplitude = {rms:.1f} (counter={self._chunk_counter})")
+                        # logger.info(f"🎙️ Audio Stream Active: RMS amplitude = {rms:.1f} (counter={self._chunk_counter})")
 
                     predictions = self._model.predict(chunk)
 
