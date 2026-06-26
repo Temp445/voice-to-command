@@ -49,6 +49,7 @@ class SettingsUpdate(BaseModel):
     crm_url: str | None = None
     crm_keywords: str | None = None
     crm_sites: str | None = None       # JSON: [{"url":"...","keywords":"..."}]
+    restrict_browser_automation: bool | None = None
     # LLM
     llm_enabled: bool | None = None
     llm_provider: str | None = None
@@ -83,6 +84,7 @@ class SettingsResponse(BaseModel):
     crm_url: str
     crm_keywords: str
     crm_sites: str                     # JSON: [{"url":"...","keywords":"..."}]
+    restrict_browser_automation: bool
     # LLM
     llm_enabled: bool
     llm_provider: str

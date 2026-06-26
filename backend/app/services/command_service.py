@@ -1025,6 +1025,15 @@ class CommandService:
                                 "duration_ms": int((time.perf_counter() - start) * 1000),
                                 "is_fallback": True,
                             }
+                except PermissionError as _pe:
+                    return {
+                        "intent": "implicit_browser_click",
+                        "parameters": {"text": text},
+                        "status": "failed",
+                        "result": f"🚫 {_pe}",
+                        "duration_ms": int((time.perf_counter() - start) * 1000),
+                        "is_fallback": True,
+                    }
                 except Exception as _e:
                     logger.debug(f"Implicit web click intercept failed: {_e}")
 
@@ -1437,6 +1446,15 @@ class CommandService:
                 "status": "success",
                 "result": result,
                 "duration_ms": duration_ms,
+            }
+        except PermissionError as e:
+            logger.warning(f"Automation restriction blocked '{intent_name}': {e}")
+            return {
+                "intent": intent_name,
+                "parameters": params,
+                "status": "failed",
+                "result": f"🚫 {e}",
+                "duration_ms": int((time.perf_counter() - start) * 1000),
             }
         except Exception as e:
             error_type = type(e).__name__

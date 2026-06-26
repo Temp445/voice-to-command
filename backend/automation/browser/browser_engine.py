@@ -42,7 +42,10 @@ async def _run_in_playwright(coro):
     if loop is _get_playwright_loop():
         return await coro
     future = asyncio.run_coroutine_threadsafe(coro, _get_playwright_loop())
-    return await asyncio.wrap_future(future)
+    try:
+        return await asyncio.wrap_future(future)
+    except PermissionError:
+        raise  # let caller handle restriction errors with a friendly message
 
 # Realistic user agent — prevents "HeadlessChrome" fingerprint leaking
 STANDARD_UA = (
@@ -284,7 +287,31 @@ class BrowserEngine:
         self._active_page_override = None
         logger.debug("BrowserEngine: cleared active page override")
 
-    async def get_active_page(self) -> Page:
+    def _is_shortcut_url(self, url: str) -> bool:
+        """Returns True if url matches any configured crm_sites entry."""
+        import json
+        from urllib.parse import urlparse
+        try:
+            raw = getattr(settings, "crm_sites", "[]") or "[]"
+            sites = json.loads(raw)
+            if not sites:
+                return False
+            active_host = urlparse(url).netloc.lower()
+            for site in sites:
+                site_url = site.get("url", "")
+                if not site_url:
+                    continue
+                site_host = urlparse(site_url).netloc.lower()
+                # Match on hostname (ignores path/query differences)
+                if active_host and site_host and (
+                    active_host == site_host or active_host.endswith("." + site_host)
+                ):
+                    return True
+        except Exception:
+            pass
+        return False
+
+    async def get_active_page(self, allow_restricted: bool = False) -> Page:
         """Return the tab the user is currently looking at.
 
         Detection priority:
@@ -295,53 +322,71 @@ class BrowserEngine:
         # ── Override layer ───────────────────────────────────────────────────
         if self._active_page_override is not None:
             if not self._active_page_override.is_closed():
-                return self._active_page_override
-            self._active_page_override = None
+                page = self._active_page_override
+            else:
+                self._active_page_override = None
+                page = None
+        else:
+            page = None
 
-        # ── Cache layer ───────────────────────────────────────────────────────
-        if self._active_page_cache is not None:
-            ts, cached_page = self._active_page_cache
-            if (time.time() - ts) < self._ACTIVE_PAGE_TTL and not cached_page.is_closed():
-                return cached_page
-            self._active_page_cache = None  # expired or closed
+        if page is None:
+            # ── Cache layer ───────────────────────────────────────────────────────
+            if self._active_page_cache is not None:
+                ts, cached_page = self._active_page_cache
+                if (time.time() - ts) < self._ACTIVE_PAGE_TTL and not cached_page.is_closed():
+                    page = cached_page
+                else:
+                    self._active_page_cache = None  # expired or closed
 
-        async def _do_get_active():
-            if not self._context or getattr(self._context, 'is_closed', lambda: True)():
-                return await self.ensure_browser()
+        if page is None:
+            async def _do_get_active():
+                if not self._context or getattr(self._context, 'is_closed', lambda: True)():
+                    return await self.ensure_browser()
 
-            pages = [
-                p for p in self._context.pages
-                if not p.is_closed()
-                and not p.url.lower().startswith("chrome-extension://")
-                and p.url.lower() not in ("about:blank", "")
-                and "localhost:3000" not in p.url
-                and "127.0.0.1:3000" not in p.url
-            ]
+                pages = [
+                    p for p in self._context.pages
+                    if not p.is_closed()
+                    and not p.url.lower().startswith("chrome-extension://")
+                    and p.url.lower() not in ("about:blank", "")
+                    and "localhost:3000" not in p.url
+                    and "127.0.0.1:3000" not in p.url
+                ]
 
-            if not pages:
-                return await self.ensure_browser()
+                if not pages:
+                    return await self.ensure_browser()
 
-            from automation.browser.tab_registry import tab_registry
+                from automation.browser.tab_registry import tab_registry
 
-            # Priority 1: Check TabRegistry active tab
-            try:
-                reg_page = tab_registry.get_active()
-                if reg_page and not reg_page.is_closed() and reg_page in pages:
-                    self._page = reg_page
-                    return reg_page
-            except Exception as e:
-                logger.debug(f"TabRegistry active lookup failed: {e}")
+                # Priority 1: Check TabRegistry active tab
+                try:
+                    reg_page = tab_registry.get_active()
+                    if reg_page and not reg_page.is_closed() and reg_page in pages:
+                        self._page = reg_page
+                        return reg_page
+                except Exception as e:
+                    logger.debug(f"TabRegistry active lookup failed: {e}")
 
-            # Priority 2: Last resort fallback (most recently opened or last page)
-            fallback = pages[-1]
-            self._page = fallback
-            if tab_registry.get_active() is None:
-                self.pin_active_page(fallback, source="get_active_page_bootstrap_fallback")
-            return fallback
+                # Priority 2: Last resort fallback (most recently opened or last page)
+                fallback = pages[-1]
+                self._page = fallback
+                if tab_registry.get_active() is None:
+                    self.pin_active_page(fallback, source="get_active_page_bootstrap_fallback")
+                return fallback
 
-        page = await _run_in_playwright(_do_get_active())
-        if page and not page.is_closed():
-            self._active_page_cache = (time.time(), page)
+            page = await _run_in_playwright(_do_get_active())
+            if page and not page.is_closed():
+                self._active_page_cache = (time.time(), page)
+
+        if page and not allow_restricted and getattr(settings, "restrict_browser_automation", False):
+            current_url = page.url
+            if not self._is_shortcut_url(current_url):
+                from urllib.parse import urlparse
+                host = urlparse(current_url).netloc or current_url
+                raise PermissionError(
+                    f"Automation restricted. '{host}' is not in your Website Shortcuts. "
+                    f"Disable 'Restrict Website Automation' in Settings or add this site to shortcuts."
+                )
+
         return page
 
     async def ensure_browser(self, background: bool = False) -> Page:
@@ -559,7 +604,7 @@ class BrowserEngine:
                 self.pin_active_page(new_page)
                 page = new_page
             else:
-                page = await self.get_active_page()
+                page = await self.get_active_page(allow_restricted=True)
             target = f"https://{url}" if not url.startswith(("http://", "https://")) else url
 
             # Bring to front and maximize BEFORE goto() to avoid main-thread block

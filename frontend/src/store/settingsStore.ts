@@ -32,6 +32,7 @@ interface SettingsStore {
   crmUrl: string;       // legacy: first site URL (kept for backward compat)
   crmKeywords: string;  // legacy: first site keywords
   crmSites: Array<{ url: string; keywords: string }>;
+  restrictBrowserAutomation: boolean;
 
   // LLM
   llmEnabled: boolean;
@@ -84,6 +85,7 @@ export const useSettingsStore = create<SettingsStore>()(
       crmUrl:         "",
       crmKeywords:    "",
       crmSites:       [],
+      restrictBrowserAutomation: false,
 
       // LLM Defaults
       llmEnabled:     true,

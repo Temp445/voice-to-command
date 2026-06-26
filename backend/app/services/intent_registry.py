@@ -1007,7 +1007,19 @@ async def handle_set_options(group: str = "", values: str = "", **_) -> str:
                                 while (sibling) {
                                     if (sibling.nodeType === 3) sibText += sibling.textContent;
                                     sibling = sibling.nextSibling;
-                            let clickedCount = 0;
+                                }
+                                if (sibText.trim()) return sibText.trim();
+                                // last resort: full innerText
+                                return (parent.innerText || '').trim();
+                            }
+                            parent = parent.parentElement;
+                        }
+                    }
+                    // 3. aria-label / placeholder / innerText
+                    return t.getAttribute('aria-label') || t.placeholder || (t.innerText || '').trim();
+                }
+
+                let clickedCount = 0;
                 const matchedLabels = [];
                 const uncheckedLabels = [];
 
@@ -1064,26 +1076,10 @@ async def handle_set_options(group: str = "", values: str = "", **_) -> str:
         if result["status"] == "success":
             matched_str = ", ".join([f"'{l}'" for l in result["matched"]])
             msg = f"Set options in '{group}' to: {matched_str}."
-            if result.get("unchecked"):
+            if result.get("unchecked") and len(result["unchecked"]) > 0:
                 unchecked_str = ", ".join([f"'{l}'" for l in result["unchecked"]])
                 msg += f" Unchecked: {unchecked_str}."
             return msg
-        else:
-            return f"Could not find options matching '{values}' under '{group}'."
-
-    return await _run_in_playwright(_do_set())ls: clickedLabels };
-                }
-                return { status: 'not_found' };
-            }
-        """, {
-            "group": group_clean,
-            "parts": parts,
-            "rawValues": values_clean
-        })
-
-        if result["status"] == "success":
-            labels_str = ", ".join([f"'{l}'" for l in result["labels"]])
-            return f"Set options in '{group}' to: {labels_str}."
         else:
             return f"Could not find options matching '{values}' under '{group}'."
 
