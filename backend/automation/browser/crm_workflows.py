@@ -2,6 +2,14 @@ import asyncio
 from loguru import logger
 from playwright.async_api import Page, TimeoutError as PlaywrightTimeoutError
 
+def run_on_playwright(func):
+    from functools import wraps
+    @wraps(func)
+    async def wrapper(*args, **kwargs):
+        from automation.browser.browser_engine import _run_in_playwright
+        return await _run_in_playwright(func(*args, **kwargs))
+    return wrapper
+
 
 class CRMMacros:
     """Macros for common workflows on the Acesoftcloud CRM.
@@ -24,11 +32,20 @@ class CRMMacros:
 
     def __init__(self, engine):
         self.engine = engine
+
+    @property
+    def base_url(self) -> str:
         from app.config import settings
-        self.base_url = settings.crm_url if settings.crm_url.endswith('/') else settings.crm_url + '/'
-        # Derive host for tab-matching (e.g. "crm.acesoftcloud.in")
-        self._crm_host = (
-            self.base_url
+        url = settings.crm_url or ""
+        return url if url.endswith('/') else url + '/'
+
+    @property
+    def _crm_host(self) -> str:
+        url = self.base_url
+        if not url or url == '/':
+            return ""
+        return (
+            url
             .replace("https://", "")
             .replace("http://", "")
             .split("/")[0]
@@ -51,11 +68,12 @@ class CRMMacros:
         regardless of which tab the user is currently looking at.
         """
         ctx = self.engine._context
-        if ctx and not getattr(ctx, "is_closed", lambda: True)():
+        host = self._crm_host
+        if host and ctx and not getattr(ctx, "is_closed", lambda: True)():
             for p in ctx.pages:
                 if (
                     not p.is_closed()
-                    and self._crm_host in p.url.lower()
+                    and host in p.url.lower()
                 ):
                     logger.debug(f"[CRMMacros] Found CRM tab: {p.url}")
                     return p
@@ -65,12 +83,16 @@ class CRMMacros:
 
     def _host_matches(self, url: str) -> bool:
         """True when *url* belongs to the configured CRM."""
-        return self._crm_host in url.lower()
+        host = self._crm_host
+        if not host:
+            return False
+        return host in url.lower()
 
     # ──────────────────────────────────────────────────────────────────────────
     # PUBLIC API
     # ──────────────────────────────────────────────────────────────────────────
 
+    @run_on_playwright
     async def open_crm(
         self,
         transcript: str = None,
@@ -98,7 +120,8 @@ class CRMMacros:
         # Login-specific shortcut
         if "login" in t_lower or "log in" in t_lower or "sign in" in t_lower:
             if not target_url or dest.strip('/').lower() == self.base_url.strip('/').lower():
-                await self.engine.navigate(dest, new_tab=new_tab)
+                if new_tab:
+                    await self.engine.navigate(dest, new_tab=new_tab)
                 await self.login()
                 return "Opened CRM and logged in."
             else:
@@ -127,6 +150,7 @@ class CRMMacros:
             return f"{past.capitalize()} {' '.join(words[1:]) if len(words) > 1 else 'CRM'}"
         return f"Opened {transcript or 'CRM'}"
 
+    @run_on_playwright
     async def login(self, username: str = None, password: str = None, page: Page = None):
         """Fill the CRM login form on the CRM tab.
 
@@ -150,29 +174,13 @@ class CRMMacros:
                 await page.reload(timeout=15000)
         else:
             # We're already on the CRM — navigate to /login if not already there.
-            # Check for the landing page: try clicking the "Sign In" nav link first
-            # (avoids a full page navigation if it's just a SPA route push).
             current = page.url.lower()
             if "/login" not in current and "/dashboard" not in current:
-                # Likely the marketing landing page — try the Sign In nav link first
                 try:
-                    _signin_link = page.locator(
-                        "a:has-text('Sign In'), a:has-text('Sign in'), "
-                        "a:has-text('Login'), a:has-text('Log in'), "
-                        "button:has-text('Sign In'), button:has-text('Sign in')"
-                    ).first
-                    if await _signin_link.count() > 0 and await _signin_link.is_visible():
-                        await _signin_link.click(timeout=3000)
-                        await page.wait_for_load_state("domcontentloaded", timeout=8000)
-                        logger.info(f"[CRMMacros] Clicked Sign In link, now at {page.url}")
-                    else:
-                        await page.goto(self.base_url + "login", wait_until="commit", timeout=15000)
-                except Exception as _nav_err:
-                    logger.warning(f"Sign In link click failed: {_nav_err}. Navigating to /login directly.")
-                    try:
-                        await page.goto(self.base_url + "login", wait_until="commit", timeout=15000)
-                    except PlaywrightTimeoutError:
-                        await page.reload(timeout=15000)
+                    await page.goto(self.base_url + "login", wait_until="commit", timeout=15000)
+                except PlaywrightTimeoutError:
+                    logger.warning("Network timeout navigating to CRM login. Reloading...")
+                    await page.reload(timeout=15000)
             elif "/login" not in current:
                 # On dashboard or other app page — go to login
                 try:
@@ -225,6 +233,7 @@ class CRMMacros:
 
         return "Executed login flow."
 
+    @run_on_playwright
     async def logout(self, page: Page = None):
         """Log out of the CRM using the CRM tab."""
         logger.info("Logging out of CRM...")
@@ -234,6 +243,7 @@ class CRMMacros:
         handler = LogoutHandler(page)
         return await handler.smart_logout()
 
+    @run_on_playwright
     async def navigate_to_module(self, module_name: str, page: Page = None):
         """Navigate to a CRM sidebar module, always on the CRM tab."""
         module_name = module_name.lower().strip()
@@ -297,6 +307,7 @@ class CRMMacros:
         except Exception as e:
             return f"Failed to navigate to module {module_name}: {e}"
 
+    @run_on_playwright
     async def create_entity(self, entity_name: str, page: Page = None):
         """Initiate entity creation (lead, quote, etc.) on the CRM tab."""
         entity_name = entity_name.lower().strip()
@@ -335,6 +346,7 @@ class CRMMacros:
         except Exception as e:
             return f"Failed to initiate {entity_name} creation: {e}"
 
+    @run_on_playwright
     async def search_record(self, entity_name: str, query: str, page: Page = None):
         """Navigate to a module and search for a record, always on the CRM tab."""
         logger.info(f"Searching for {query} in {entity_name}...")
@@ -363,6 +375,7 @@ class CRMMacros:
         except Exception as e:
             return f"Failed to search {entity_name}: {e}"
 
+    @run_on_playwright
     async def open_first_record(self, page: Page = None):
         """Click the first record in a data table on the CRM tab."""
         logger.info("Opening first record in data grid...")

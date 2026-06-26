@@ -16,6 +16,10 @@ interface WSStore {
   scanLastAt: string | null;
   scanAppCount: number | null;
   setScanResult: (timestamp: string, appCount: number) => void;
+  // Active tab state
+  activeTabTitle: string | null;
+  activeTabUrl: string | null;
+  setActiveTab: (title: string | null, url: string | null) => void;
 }
 export const useWSStore = create<WSStore>((set) => ({
   connected: false,
@@ -25,6 +29,9 @@ export const useWSStore = create<WSStore>((set) => ({
   scanLastAt: null,
   scanAppCount: null,
   setScanResult: (timestamp, appCount) => set({ scanLastAt: timestamp, scanAppCount: appCount }),
+  activeTabTitle: null,
+  activeTabUrl: null,
+  setActiveTab: (title, url) => set({ activeTabTitle: title, activeTabUrl: url }),
 }));
 
 export function WebSocketManager() {
@@ -56,6 +63,14 @@ export function WebSocketManager() {
       try {
         const { event, data } = JSON.parse(e.data);
         switch (event) {
+          case "connected":
+            if (data && data.active_tab) {
+              useWSStore.getState().setActiveTab(data.active_tab.title, data.active_tab.url);
+            }
+            break;
+          case "tab_changed":
+            useWSStore.getState().setActiveTab(data.title, data.url);
+            break;
           case "pipeline_state":
             setPipelineState(data.state);
             if (data.wake_word_active !== undefined) {
@@ -123,6 +138,6 @@ export function WebSocketManager() {
 }
 
 export function useWebSocket() {
-  const { connected } = useWSStore();
-  return { connected };
+  const { connected, activeTabTitle, activeTabUrl } = useWSStore();
+  return { connected, activeTabTitle, activeTabUrl };
 }

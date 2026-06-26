@@ -297,16 +297,28 @@ class VoiceBrowserCommands:
         # ── End credential-pair shortcut ─────────────────────────────────────
 
         # --- Resolve the active page ONCE per command ----------------------------
-        # This is the SINGLE source-of-truth for the entire command.
-        # get_active_page() uses a 300ms TTL cache so this is fast on repeated calls.
-        # It detects visibilityState -> hasFocus -> CDP REST -> fallback, ensuring
-        # we always target whatever tab the user is currently looking at, regardless
-        # of whether it was opened by ACE or manually by the user.
+        # TabRegistry is the SINGLE source-of-truth. It is updated within ~1ms
+        # of any tab switch (event-driven via CDP Target.activatedTarget), so
+        # this always returns the tab the user is currently looking at.
         try:
-            active_page = await self.ctrl.engine.get_active_page()
+            from automation.browser.tab_registry import tab_registry as _tab_reg
+            active_page = _tab_reg.get_active()
+            # Guard: if the registry returned a closed page, unregister it and
+            # fall back to the engine's detection pipeline.
+            if active_page is not None and active_page.is_closed():
+                _tab_reg.unregister(active_page)
+                active_page = None
         except Exception as _page_err:
-            logger.warning(f"Could not resolve active page: {_page_err}")
+            logger.warning(f"TabRegistry lookup failed in execute(): {_page_err}")
             active_page = None
+
+        # Fallback: engine heuristics (visibilityState → hasFocus → CDP REST)
+        if active_page is None:
+            try:
+                active_page = await self.ctrl.engine.get_active_page()
+            except Exception as _page_err:
+                logger.warning(f"Could not resolve active page: {_page_err}")
+                active_page = None
         active_url = active_page.url if active_page else ""
 
         # Site-guard helpers — used below to decide if CRM macros are applicable.
@@ -484,6 +496,24 @@ class VoiceBrowserCommands:
                 _matched_url = settings.crm_url   # fall back to primary for generic matches
 
             crm_match = _matched_url is not None
+
+            # ── Explicit CRM Auth Bypass ─────────────────────────────────────────
+            # "sign in crm", "log in crm", "login to crm" — these commands explicitly
+            # name the CRM, so they must ALWAYS go to crm.login() regardless of which
+            # tab is currently active.  crm.login() uses _crm_page() internally to
+            # find the CRM tab, so it never touches the Payroll tab.
+            _explicit_crm_auth = bool(re.search(
+                r'\b(?:sign\s*in|log\s*in|login|signin)\b.{0,20}\bcrm\b'
+                r'|\bcrm\b.{0,20}\b(?:sign\s*in|log\s*in|login|signin)\b',
+                transcript_lower
+            ))
+            if _explicit_crm_auth:
+                logger.info(
+                    f"Explicit CRM auth detected ('{transcript}') — "
+                    f"bypassing site-guard and routing directly to crm.login()"
+                )
+                return await self.crm.login()
+
             # ── Site-Guard ──────────────────────────────────────────────────────
             # If the active tab is NOT a CRM page, CRM macros must not run —
             # instead fall through to DOMAgent on the actual active tab.
@@ -512,8 +542,8 @@ class VoiceBrowserCommands:
                 page = active_page or await self.ctrl._ensure_page()
                 url = await self.ctrl.engine.get_url()
                 from app.config import settings
-                crm_host = settings.crm_url.replace("https://", "").replace("http://", "").split("/")[0]
-                is_on_crm = url and crm_host in url
+                crm_host = settings.crm_url.replace("https://", "").replace("http://", "").split("/")[0] if settings.crm_url else ""
+                is_on_crm = bool(url and crm_host and crm_host in url)
                 wants_crm = "crm" in transcript_lower
                 
                 if (wants_crm or is_on_crm) and not any(w in transcript for w in ["sign up", "signup", "register"]):
@@ -557,8 +587,8 @@ class VoiceBrowserCommands:
                 page = active_page or await self.ctrl._ensure_page()
                 url = await self.ctrl.engine.get_url()
                 from app.config import settings
-                crm_host = settings.crm_url.replace("https://", "").replace("http://", "").split("/")[0]
-                is_on_crm = url and crm_host in url
+                crm_host = settings.crm_url.replace("https://", "").replace("http://", "").split("/")[0] if settings.crm_url else ""
+                is_on_crm = bool(url and crm_host and crm_host in url)
                 wants_crm = "crm" in transcript_lower
 
                 if wants_crm or is_on_crm:

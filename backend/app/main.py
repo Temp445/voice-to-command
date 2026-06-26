@@ -412,10 +412,27 @@ async def test_replay_broadcast():
 async def websocket_endpoint(websocket: WebSocket):
     await ws_manager.connect(websocket)
     try:
+        # Get initial active tab info if available
+        active_tab_data = None
+        try:
+            from automation.browser.tab_registry import tab_registry
+            active_tab_id = tab_registry.get_active_tab_id()
+            if active_tab_id:
+                active_page = tab_registry.get_active()
+                if active_page:
+                    active_tab_data = {
+                        "tab_id": active_tab_id,
+                        "url": active_page.url,
+                        "title": ""
+                    }
+        except Exception as e:
+            logger.debug(f"Failed to get active tab on connect: {e}")
+
         await ws_manager.send_to(websocket, "connected", {
             "message": "ACE WebSocket connected",
             "version": settings.app_version,
             "wake_word": settings.wake_word,
+            "active_tab": active_tab_data,
         })
         while True:
             message = await websocket.receive()

@@ -17,10 +17,42 @@ const STATE_BADGE: Record<string, { bg: string; color: string; border: string }>
 
 export function TopBar() {
   const { pipelineState } = useVoiceStore();
-  const { connected } = useWebSocket();
+  const { connected, activeTabTitle, activeTabUrl } = useWebSocket();
   const badge = STATE_BADGE[pipelineState] || STATE_BADGE.idle;
   
   const [ping, setPing] = useState<string | null>(null);
+
+  // Helper to format the active tab display name
+  const getTabDisplayName = () => {
+    if (!activeTabUrl) return null;
+    
+    // Fallback/friendly title helper
+    let cleanTitle = activeTabTitle || "";
+    
+    // Check if the title is empty or is a coroutine/promise string representation
+    if (!cleanTitle || cleanTitle.includes("<coroutine") || cleanTitle.includes("[object Promise]")) {
+      try {
+        const urlObj = new URL(activeTabUrl);
+        let hostname = urlObj.hostname;
+        if (hostname.startsWith("www.")) {
+          hostname = hostname.substring(4);
+        }
+        // Capitalize first letter of domain
+        cleanTitle = hostname.charAt(0).toUpperCase() + hostname.slice(1);
+      } catch (e) {
+        cleanTitle = "Active Tab";
+      }
+    }
+    
+    // Truncate if too long
+    if (cleanTitle.length > 25) {
+      cleanTitle = cleanTitle.substring(0, 22) + "...";
+    }
+    
+    return cleanTitle;
+  };
+
+  const tabName = getTabDisplayName();
 
   useEffect(() => {
     if (!connected) {
@@ -52,8 +84,31 @@ export function TopBar() {
       borderBottom: "1px solid var(--border)", background: "var(--background)", flexShrink: 0,
       userSelect: "none"
     }}>
-      {/* Empty flex spacer to push the right items to the edge */}
-      <div style={{ flex: 1 }} />
+      {/* Active Tab Badge on the left */}
+      <div style={{ flex: 1, display: "flex", alignItems: "center" }}>
+        {tabName && connected && (
+          <div 
+            title={`Active Browser Tab: ${activeTabUrl}`}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "0.5rem",
+              padding: "0.35rem 0.75rem",
+              borderRadius: "0.5rem",
+              background: "rgba(59, 130, 246, 0.08)",
+              border: "1px solid rgba(59, 130, 246, 0.15)",
+              color: "#60a5fa",
+              fontSize: "0.75rem",
+              fontWeight: 500,
+              fontFamily: "var(--font-mono)",
+            }}
+          >
+            <span style={{ display: "inline-block", width: "0.375rem", height: "0.375rem", borderRadius: "50%", background: "#3b82f6" }} />
+            <span>Target:</span>
+            <span style={{ color: "var(--foreground)", fontWeight: 600 }}>{tabName}</span>
+          </div>
+        )}
+      </div>
 
       <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginLeft: "auto" }}>
         {/* API Ping Status */}

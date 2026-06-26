@@ -772,11 +772,23 @@ class CommandService:
 
                 pass
 
+            # Guard: do not allow early intercepts to hijack explicit auth commands
+            _lower_text = text.lower().strip()
+            _is_auth_cmd = (
+                _lower_text in ["sign in", "login", "log in", "log out", "logout", "sign out", "submit"]
+                or _lower_text.startswith("sign in")
+                or _lower_text.startswith("log in")
+                or _lower_text.startswith("sign out")
+                or _lower_text.startswith("log out")
+                or _lower_text.startswith("login")
+                or _lower_text.startswith("logout")
+            )
+
             # Layer 0.85: Snapshot-based Fast Click (cached DOM — no Playwright round-trip)
             # Reads the pre-warmed PageContextService cache and scores every visible element
             # against the voice query using text-similarity scoring.
             # Falls through to Layer 0.9 if the snapshot is stale/missing or nothing scores.
-            if not intent_name and len(text.split()) <= 7:
+            if not intent_name and len(text.split()) <= 7 and not _is_auth_cmd:
                 try:
                     from app.services.page_context_service import (
                         page_context_service as _pcs,
@@ -842,7 +854,7 @@ class CommandService:
             # matches a visible button/link on the page, click it INSTANTLY.
             # FIX: All Playwright awaits must run on the dedicated _playwright_loop thread.
             # Calling them on the FastAPI/pipeline loop causes silent cross-loop failures.
-            if not intent_name and len(text.split()) <= 5:
+            if not intent_name and len(text.split()) <= 5 and not _is_auth_cmd:
 
                 try:
                     from automation.browser.browser_controller import BrowserController

@@ -21,6 +21,11 @@ def new_uuid() -> str:
 
 # ─── Enums ──────────────────────────────────────────────────────────────────
 
+class UserRole(str, enum.Enum):
+    admin = "admin"
+    user  = "user"
+
+
 class TTSProvider(str, enum.Enum):
     piper = "piper"
     gtts = "gtts"
@@ -50,6 +55,7 @@ class User(Base):
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
     display_name: Mapped[str] = mapped_column(String(100), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    role: Mapped[str] = mapped_column(String(20), default=UserRole.user, nullable=False)
     supabase_uid: Mapped[str | None] = mapped_column(Uuid(as_uuid=False), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
@@ -172,3 +178,19 @@ class VoiceProfile(Base):
     pitch: Mapped[float] = mapped_column(default=1.0)
     is_default: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+# ─── AdminPolicy ─────────────────────────────────────────────────────────────
+
+class AdminPolicy(Base):
+    """Singleton table — one row controls which settings tabs Users can see."""
+    __tablename__ = "admin_policy"
+
+    id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True, default=new_uuid)
+    # Tab visibility — True means the tab is shown to non-admin users
+    show_voice_tab:   Mapped[bool] = mapped_column(Boolean, default=True)
+    show_tts_tab:     Mapped[bool] = mapped_column(Boolean, default=True)
+    show_ai_tab:      Mapped[bool] = mapped_column(Boolean, default=False)
+    show_browser_tab: Mapped[bool] = mapped_column(Boolean, default=True)
+    show_system_tab:  Mapped[bool] = mapped_column(Boolean, default=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)

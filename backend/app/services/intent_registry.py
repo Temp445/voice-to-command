@@ -1347,7 +1347,7 @@ async def handle_smart_logout(text: str = "", **_) -> str:
     ctrl = BrowserController()
     try:
         url = await ctrl.engine.get_url()
-        crm_host = settings.crm_url.replace("https://", "").replace("http://", "").split("/")[0]
+        crm_host = settings.crm_url.replace("https://", "").replace("http://", "").split("/")[0] if settings.crm_url else ""
         is_on_crm = bool(url and crm_host and crm_host in url)
         wants_crm = "crm" in (text or "").lower()
 
@@ -2355,7 +2355,7 @@ def register_all_intents() -> None:
         Intent(
             name="crm_login",
             domain="browser",
-            patterns=[r"^(?:log\s*in|login|sign\s*in)(?:\s+to\s+(?:the\s+)?crm)?$"],
+            patterns=[r"^(?:log\s*in|login|sign\s*in)(?:\s+(?:to\s+)?(?:the\s+)?crm)?$"],
             handler=handle_crm_action,
             description="Log into the ACE CRM system",
             examples=["log in", "login", "sign in", "login to crm", "authenticate me into the system"],

@@ -169,7 +169,27 @@ class PageContextService:
         Return a fresh (or cached) snapshot of the active browser page.
         Performs a Playwright DOM scan if the cache is stale or missing.
         All Playwright work is dispatched to _playwright_loop via _run_in_playwright.
+
+        Tab-switch safety: if the cached snapshot belongs to a different URL than
+        the current active tab, the cache is force-invalidated before scanning.
+        This prevents Layer 0.85 from clicking buttons on the wrong tab.
         """
+        # Check cached snapshot against the current active tab URL FIRST.
+        # TabRegistry is the authoritative source; fall back to engine if unavailable.
+        try:
+            from automation.browser.tab_registry import tab_registry as _tr
+            _current_page = _tr.get_active()
+            _current_url = _current_page.url if _current_page and not _current_page.is_closed() else None
+        except Exception:
+            _current_url = None
+
+        if self._snapshot and _current_url and self._snapshot.url != _current_url:
+            logger.debug(
+                f"PageContextService: active tab changed "
+                f"({self._snapshot.url!r} → {_current_url!r}) — invalidating snapshot"
+            )
+            self._snapshot = None
+
         cached = self.get_cached_snapshot()
         if cached:
             return cached
@@ -181,7 +201,16 @@ class PageContextService:
                 return None
 
             async def _scan():
-                page = await engine.get_active_page()
+                # Prefer TabRegistry for page resolution (avoids the heuristic pipeline)
+                try:
+                    from automation.browser.tab_registry import tab_registry as _tr2
+                    page = _tr2.get_active()
+                    if page and page.is_closed():
+                        page = None
+                except Exception:
+                    page = None
+                if not page:
+                    page = await engine.get_active_page()
                 if not page:
                     return None
                 try:

@@ -35,6 +35,12 @@ def _get_playwright_loop():
     return _playwright_loop
 
 async def _run_in_playwright(coro):
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+    if loop is _get_playwright_loop():
+        return await coro
     future = asyncio.run_coroutine_threadsafe(coro, _get_playwright_loop())
     return await asyncio.wrap_future(future)
 
@@ -149,13 +155,12 @@ class BrowserEngine:
     _lock = None
     # Short-lived cache for get_active_page() — avoids redundant CDP/JS calls
     # within a single command's execution pipeline (~80-150ms saved per call).
+    # TTL reduced to 150ms (was 300ms) so a quick manual tab-switch between
+    # two voice commands is reflected on the very next command.
     _active_page_cache: "tuple[float, Page] | None" = None
-    _ACTIVE_PAGE_TTL: float = 0.3  # seconds
-    # The page most recently navigated to via ACE voice command (no TTL — persists
-    # across commands). Used as Layer 2.5 fallback in get_active_page() when the
-    # command console (localhost:3000) has OS focus and visibilityState/hasFocus
-    # both fail to identify a real target tab.
-    _last_navigated_page: "Page | None" = None
+    _ACTIVE_PAGE_TTL: float = 0.15  # seconds (was 0.3 — reduced for tab-switch accuracy)
+    # _last_navigated_page REMOVED — replaced by TabRegistry.get_active() which is
+    # event-driven (CDP Target.activatedTarget) and never stale.
 
     def __new__(cls):
         if cls._instance is None:
@@ -246,48 +251,73 @@ class BrowserEngine:
         self._active_page_cache = None
 
     def pin_active_page(self, page: "Page") -> None:
-        """Forcefully set a specific page as the known active page.
-
-        Use this immediately after programmatically creating or switching to a tab
-        (e.g. new_tab navigation) so that all subsequent commands in the same pipeline
-        target the correct tab — without waiting for visibilityState/CDP detection.
-
-        We also save the URL to disk so the state survives Uvicorn server reloads.
         """
-        self._last_navigated_page = page
+        Mark *page* as the active tab in both the legacy ``_page`` slot and the
+        new ``TabRegistry``.  Named ``pin_active_page`` for backward compatibility
+        with callers across the codebase — internally it now delegates to the
+        registry, which handles persistence and WebSocket broadcast.
+        """
         self.invalidate_active_page_cache()
         self._page = page
+        # Delegate to TabRegistry — it handles UUID assignment, disk persistence,
+        # and the tab_changed WebSocket broadcast in one atomic call.
         try:
-            import os
-            with open(os.path.join(os.path.dirname(__file__), ".ace_active_tab.txt"), "w") as f:
-                f.write(page.url)
+            from automation.browser.tab_registry import tab_registry
+            tab_registry.set_active(page)
         except Exception as e:
-            logger.debug(f"Failed to persist active tab: {e}")
+            logger.debug(f"TabRegistry.set_active failed in pin_active_page: {e}")
         # Wipe page-context snapshot — it belongs to the old tab
         try:
             from app.services.page_context_service import page_context_service
             page_context_service.invalidate()
         except Exception:
             pass
-        logger.debug(f"Active page pinned: {page.url}")
+        logger.debug(f"Active page pinned (TabRegistry): {page.url}")
 
     async def get_active_page(self) -> Page:
         """Return the tab the user is currently looking at.
 
         Detection priority:
-          1. Short-lived cache (300 ms TTL) — avoids redundant CDP/JS round-trips
+          0. TabRegistry  — event-driven via CDP Target.activatedTarget (always current).
+          1. Short-lived cache (150 ms TTL) — avoids redundant CDP/JS round-trips
              when multiple layers of a single command all need the active page.
           2. document.visibilityState == "visible" → OS-foreground tab
           3. document.hasFocus()                   → fallback when visibility API blocked
-          4. Layer 2.5: Last ACE-navigated page.
-          5. CDP REST /json endpoint               → works even when ACE overlay steals focus
-          6. Most-recently created non-system tab  → final fallback
+          4. CDP REST /json endpoint               → works even when ACE overlay steals focus
+          5. Most-recently created non-system tab  → final fallback
+
+        NOTE: Layer 2.5 (last_navigated_page) has been REMOVED.  That sticky pointer
+        was the primary cause of commands being routed to the first-opened tab instead
+        of the user's current tab.  The TabRegistry (Layer 0) replaces it with an
+        event-driven approach that updates within ~1ms of any tab switch.
 
         This is the SINGLE source-of-truth for every automation command.
-        self._page is kept only for ACE-initiated navigations; never rely on it
-        to determine what the user is currently looking at.
         """
-        # ── Cache layer ──────────────────────────────────────────────────────
+        # ── Layer 0: TabRegistry (event-driven, always current) ──────────────
+        # The registry is updated by Chrome CDP ``Target.activatedTarget`` events
+        # whenever the user switches tabs — by voice OR by mouse. This replaces
+        # the old Layer 2.5 ``_last_navigated_page`` which was permanently sticky.
+        try:
+            from automation.browser.tab_registry import tab_registry
+            reg_page = tab_registry.get_active()
+            if reg_page and not reg_page.is_closed():
+                # Still honour the short-lived cache so repeated calls within one
+                # command pipeline don't pay multiple registry + is_closed() lookups.
+                if self._active_page_cache is not None:
+                    ts, cached_page = self._active_page_cache
+                    if (
+                        (time.time() - ts) < self._ACTIVE_PAGE_TTL
+                        and not cached_page.is_closed()
+                        and cached_page is reg_page  # cache is for the same tab
+                    ):
+                        return cached_page
+                self._page = reg_page
+                self._active_page_cache = (time.time(), reg_page)
+                return reg_page
+        except Exception as e:
+            logger.debug(f"TabRegistry lookup failed, falling through: {e}")
+
+        # ── Cache layer (fallback when registry is empty on cold start) ───────
         if self._active_page_cache is not None:
             ts, cached_page = self._active_page_cache
             if (time.time() - ts) < self._ACTIVE_PAGE_TTL and not cached_page.is_closed():
@@ -313,6 +343,7 @@ class BrowserEngine:
 
             if len(pages) == 1:
                 self._page = pages[0]
+                self.pin_active_page(pages[0])  # register single tab in registry
                 return self._page
 
             # Layer 1: visibilityState — most reliable; only the OS-foreground tab
@@ -324,6 +355,7 @@ class BrowserEngine:
                         if self._page != p:
                             logger.debug(f"Active tab (visibilityState): {p.url}")
                         self._page = p
+                        self.pin_active_page(p)  # sync registry
                         return p
                 except Exception as e:
                     logger.debug(f"visibilityState eval failed for {p.url}: {e}")
@@ -337,37 +369,28 @@ class BrowserEngine:
                         if self._page != p:
                             logger.debug(f"Active tab (hasFocus): {p.url}")
                         self._page = p
+                        self.pin_active_page(p)  # sync registry
                         return p
                 except Exception as e:
                     logger.debug(f"hasFocus eval failed for {p.url}: {e}")
                     continue
 
-            # Layer 2.5: Last ACE-navigated page.
-            if self._last_navigated_page and not self._last_navigated_page.is_closed():
-                if self._last_navigated_page in pages:
-                    if self._page != self._last_navigated_page:
-                        logger.debug(f"Active tab (Layer 2.5 - pinned state): {self._last_navigated_page.url}")
-                    self._page = self._last_navigated_page
-                    return self._last_navigated_page
+            # Layer 2.5 (REPLACED): previously used _last_navigated_page which was
+            # permanently sticky after first ACE navigation. Now handled by TabRegistry
+            # Layer 0 above which is event-driven. No sticky fallback here.
 
-            # Layer 2.6: Recover pinned state from disk if server restarted
+            # Layer 2.6: Recover from registry disk state if server restarted
             try:
-                import os
-                state_file = os.path.join(os.path.dirname(__file__), ".ace_active_tab.txt")
-                if os.path.exists(state_file):
-                    with open(state_file, "r") as f:
-                        pinned_url = f.read().strip()
-                    for p in pages:
-                        if p.url == pinned_url:
-                            self._last_navigated_page = p
-                            self._page = p
-                            logger.debug(f"Active tab (Layer 2.6 - recovered state): {p.url}")
-                            return p
+                from automation.browser.tab_registry import tab_registry as _tr
+                recovered = _tr.recover_from_disk(pages)
+                if recovered and not recovered.is_closed():
+                    self._page = recovered
+                    logger.debug(f"Active tab (Layer 2.6 - TabRegistry disk recovery): {recovered.url}")
+                    return recovered
             except Exception as e:
-                logger.debug(f"Failed to recover active tab state: {e}")
+                logger.debug(f"TabRegistry disk recovery failed: {e}")
 
-            # Layer 3: CDP /json — get the frontmost target by webSocketDebuggerUrl
-            # We also try /json/version which always reflects the active tab.
+            # Layer 3: CDP /json — get the frontmost target by URL matching.
             # URL matching uses substring check (not exact) to handle hash/path changes.
             try:
                 import urllib.request, json as _json
@@ -387,14 +410,11 @@ class BrowserEngine:
                     and "localhost:3000" not in t.get("url", "")
                 ]
 
-                # Match each CDP target to a Playwright page using webSocketDebuggerUrl
-                # (unique per target) and URL substring (handles path/hash changes).
                 def _urls_match(playwright_url: str, cdp_url: str) -> bool:
                     pu = playwright_url.rstrip("/").lower()
                     cu = cdp_url.rstrip("/").lower()
                     if pu == cu:
                         return True
-                    # Substring: same origin + path prefix matches (handles SPA navigation)
                     from urllib.parse import urlparse
                     try:
                         pp, cp = urlparse(pu), urlparse(cu)
@@ -411,6 +431,7 @@ class BrowserEngine:
                             if self._page != p:
                                 logger.debug(f"Active tab (CDP REST): {p.url}")
                             self._page = p
+                            self.pin_active_page(p)  # sync registry
                             return p
             except Exception as e:
                 logger.debug(f"CDP REST target lookup failed: {e}")
@@ -420,6 +441,7 @@ class BrowserEngine:
             if self._page != fallback:
                 logger.debug(f"Active tab (fallback most-recent): {fallback.url}")
             self._page = fallback
+            self.pin_active_page(fallback)  # sync registry
             return fallback
 
         page = await _run_in_playwright(_do_get_active())
@@ -487,6 +509,40 @@ class BrowserEngine:
                     except Exception as cdp_err:
                         logger.error(f"CDP connection failed: {cdp_err}")
                         raise
+
+                # ── Register all existing pages in TabRegistry ─────────────
+                # This runs on every connect (cold start OR server hot-reload).
+                try:
+                    from automation.browser.tab_registry import tab_registry as _tr
+                    _real_pages = [
+                        p for p in self._context.pages
+                        if not p.is_closed()
+                        and not p.url.lower().startswith("chrome-extension://")
+                        and p.url.lower() not in ("about:blank", "")
+                    ]
+                    for _p in _real_pages:
+                        _tr.register(_p)
+
+                    # Attach new-page hook so future tabs are auto-registered
+                    def _on_new_page(page):
+                        _tr.register(page)
+
+                    self._context.on("page", _on_new_page)
+
+                    # Recover last active tab from disk (survives server restarts)
+                    recovered = _tr.recover_from_disk(_real_pages)
+                    if not recovered and _real_pages:
+                        _tr.set_active(_real_pages[-1])
+
+                    # Wire CDP Target.activatedTarget for instant tab-switch detection
+                    asyncio.ensure_future(_tr.wire_cdp_session(self._context))
+
+                    logger.info(
+                        f"✅ TabRegistry: registered {len(_real_pages)} existing tab(s), "
+                        f"active = {_tr.get_active_tab_id()}"
+                    )
+                except Exception as _tr_err:
+                    logger.warning(f"TabRegistry init error (non-fatal): {_tr_err}")
 
                 # ── Page selection (cold start) ────────────────────────────
                 pages = self._context.pages
@@ -564,8 +620,14 @@ class BrowserEngine:
                     raise RuntimeError("Browser context not initialized.")
                 new_page = await self._context.new_page()
                 await self._apply_stealth(new_page)
+                # Register in TabRegistry BEFORE pin so the UUID exists
+                try:
+                    from automation.browser.tab_registry import tab_registry as _tr
+                    _tr.register(new_page)
+                except Exception:
+                    pass
                 # Pin this new tab as the active page immediately so all follow-on
-                # commands in the same pipeline target it — not the previous CRM tab.
+                # commands in the same pipeline target it — not the previous tab.
                 self.pin_active_page(new_page)
                 page = new_page
             else:
@@ -665,12 +727,18 @@ class BrowserEngine:
         async def _do():
             await self.ensure_browser()
             new_page = await self._context.new_page()
-            # FIX: apply stealth to every new tab immediately
+            # Apply stealth to every new tab immediately
             await self._apply_stealth(new_page)
+            # Register in TabRegistry BEFORE navigation so UUID is stable
+            try:
+                from automation.browser.tab_registry import tab_registry as _tr
+                _tr.register(new_page)
+            except Exception:
+                pass
             if url:
                 target = f"https://{url}" if not url.startswith(("http://", "https://")) else url
                 await new_page.goto(target)
-            # Pin the new tab as active
+            # Pin the new tab as active (updates registry + broadcasts)
             self.pin_active_page(new_page)
             return "Opened new tab."
         return await _run_in_playwright(_do())
@@ -678,13 +746,31 @@ class BrowserEngine:
     async def close_tab(self) -> str:
         async def _do():
             page = await self.get_active_page()
+            # Unregister BEFORE close so crash-handler doesn't fire confusingly
+            try:
+                from automation.browser.tab_registry import tab_registry as _tr
+                _tr.unregister(page)
+            except Exception:
+                pass
             await page.close()
-            pages = self._context.pages
-            if pages:
-                self.pin_active_page(pages[-1])
+            # Find next live tab from remaining pages
+            live_pages = [
+                p for p in self._context.pages
+                if not p.is_closed()
+                and not p.url.lower().startswith("chrome-extension://")
+            ]
+            if live_pages:
+                self.pin_active_page(live_pages[-1])
             else:
+                # No tabs left — open a blank tab so the engine stays healthy
+                blank = await self._context.new_page()
+                try:
+                    from automation.browser.tab_registry import tab_registry as _tr
+                    _tr.register(blank)
+                except Exception:
+                    pass
                 self.invalidate_active_page_cache()
-                self._page = None
+                self._page = blank
             return "Tab closed."
         return await _run_in_playwright(_do())
 
@@ -701,19 +787,55 @@ class BrowserEngine:
     async def get_all_tabs(self):
         async def _do():
             await self.ensure_browser()
-            return [{"index": i, "title": await p.title(), "url": p.url} for i, p in enumerate(self._context.pages)]
+            try:
+                from automation.browser.tab_registry import tab_registry as _tr
+                tab_infos = _tr.all_tabs()
+                result = []
+                for i, info in enumerate(tab_infos):
+                    page = _tr.get_page(info.tab_id)
+                    title = ""
+                    if page:
+                        try:
+                            title = await page.title()
+                        except Exception:
+                            pass
+                    result.append({
+                        "index": i,
+                        "tab_id": info.tab_id,
+                        "title": title,
+                        "url": info.url,
+                        "is_active": info.is_active,
+                    })
+                return result
+            except Exception:
+                # Fallback to legacy approach if registry unavailable
+                return [{"index": i, "tab_id": None, "title": await p.title(), "url": p.url, "is_active": False}
+                        for i, p in enumerate(self._context.pages)]
         return await _run_in_playwright(_do())
 
     async def switch_tab(self, index: int) -> str:
         async def _do():
             await self.ensure_browser()
-            pages = self._context.pages
-            if 0 <= index < len(pages):
-                target_page = pages[index]
-                await target_page.bring_to_front()
-                self.pin_active_page(target_page)
-                return f"Switched to tab {index + 1}."
-            return "Tab index out of range."
+            # Build the list from the registry so index is stable
+            try:
+                from automation.browser.tab_registry import tab_registry as _tr
+                tabs = _tr.all_tabs()
+                if 0 <= index < len(tabs):
+                    target_page = _tr.get_page(tabs[index].tab_id)
+                    if target_page and not target_page.is_closed():
+                        await target_page.bring_to_front()
+                        self.pin_active_page(target_page)
+                        return f"Switched to tab {index + 1}."
+                return "Tab index out of range."
+            except Exception:
+                # Legacy fallback
+                pages = self._context.pages
+                if 0 <= index < len(pages):
+                    target_page = pages[index]
+                    await target_page.bring_to_front()
+                    self.pin_active_page(target_page)
+                    return f"Switched to tab {index + 1}."
+                return "Tab index out of range."
         return await _run_in_playwright(_do())
 
     async def switch_tab_last(self) -> str:
@@ -1068,7 +1190,7 @@ class BrowserEngine:
     # --- Human-like Search (Anti-Bot) ---
     async def search_google(self, query: str, new_tab: bool = False) -> str:
         """
-        FIX: Navigate to google.com homepage first, then type the query like a human.
+        Navigate to google.com homepage first, then type the query like a human.
         Going directly to /search?q= is a major bot detection signal.
         """
         async def _do():
@@ -1076,10 +1198,19 @@ class BrowserEngine:
                 await self.ensure_browser()
                 if not self._context:
                     raise RuntimeError("Browser context not initialized.")
-                self._page = await self._context.new_page()
-                await self._apply_stealth(self._page)
-                page = self._page
+                new_page = await self._context.new_page()
+                await self._apply_stealth(new_page)
+                # Register + pin the new tab so all follow-on commands target it
+                try:
+                    from automation.browser.tab_registry import tab_registry as _tr
+                    _tr.register(new_page)
+                except Exception:
+                    pass
+                self.pin_active_page(new_page)
+                page = new_page
             else:
+                # Use registry to get whatever tab is currently active — NOT self._page
+                # (self._page may still point at the tab from a previous navigation)
                 page = await self.get_active_page()
             logger.info(f"[search_google] Navigating to Google homepage then typing query: '{query}'")
 
@@ -1128,7 +1259,7 @@ class BrowserEngine:
 
     async def search_youtube(self, query: str, new_tab: bool = False) -> str:
         """
-        FIX: Navigate to YouTube homepage first, then type into the search box
+        Navigate to YouTube homepage first, then type into the search box
         instead of going directly to the search results URL.
         """
         async def _do():
@@ -1136,10 +1267,18 @@ class BrowserEngine:
                 await self.ensure_browser()
                 if not self._context:
                     raise RuntimeError("Browser context not initialized.")
-                self._page = await self._context.new_page()
-                await self._apply_stealth(self._page)
-                page = self._page
+                new_page = await self._context.new_page()
+                await self._apply_stealth(new_page)
+                # Register + pin the new tab so all follow-on commands target it
+                try:
+                    from automation.browser.tab_registry import tab_registry as _tr
+                    _tr.register(new_page)
+                except Exception:
+                    pass
+                self.pin_active_page(new_page)
+                page = new_page
             else:
+                # Use registry to get whatever tab is currently active — NOT self._page
                 page = await self.get_active_page()
             logger.info(f"[search_youtube] Navigating to YouTube homepage then typing query: '{query}'")
 
