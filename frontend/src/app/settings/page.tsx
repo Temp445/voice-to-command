@@ -116,7 +116,7 @@ const PERMISSION_FIELDS = [
 
 export default function SettingsPage() {
   const settings = useSettingsStore();
-  
+
   const isVisible = (key: string) => {
     if (settings.role === "admin") return true;
     return settings.permissions[key]?.visible !== false;
@@ -1121,7 +1121,7 @@ export default function SettingsPage() {
                   { key: "minimizeToTray", label: "Minimize to tray", desc: "Keep ACE running in the background when closed" },
                 ].map(({ key, label, desc }) => {
                   const dbKey = key === "enableDesktopOverlay" ? "enable_desktop_overlay" :
-                                key === "startupOnBoot" ? "startup_on_boot" : "minimize_to_tray";
+                    key === "startupOnBoot" ? "startup_on_boot" : "minimize_to_tray";
                   if (!isVisible(dbKey)) return null;
                   const val = settings[key as "startupOnBoot" | "minimizeToTray" | "enableDesktopOverlay"];
                   const disabled = !isMutable(dbKey);
@@ -1182,39 +1182,39 @@ export default function SettingsPage() {
                     })}
                   </div>
 
-                {/* Scan Now row */}
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "1rem 1.25rem", background: "var(--secondary)", borderRadius: "0.75rem", border: "1px solid var(--border)" }}>
-                  <div>
-                    <p style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--foreground)" }}>Scan Now</p>
-                    <p style={{ fontSize: "0.75rem", color: "var(--muted-foreground)", marginTop: "0.25rem" }}>
-                      {scanLastAt
-                        ? `Last scanned: ${new Date(scanLastAt).toLocaleTimeString()} · ${scanAppCount ?? "?"} apps found`
-                        : "Not scanned yet this session"}
-                    </p>
+                  {/* Scan Now row */}
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "1rem 1.25rem", background: "var(--secondary)", borderRadius: "0.75rem", border: "1px solid var(--border)" }}>
+                    <div>
+                      <p style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--foreground)" }}>Scan Now</p>
+                      <p style={{ fontSize: "0.75rem", color: "var(--muted-foreground)", marginTop: "0.25rem" }}>
+                        {scanLastAt
+                          ? `Last scanned: ${new Date(scanLastAt).toLocaleTimeString()} · ${scanAppCount ?? "?"} apps found`
+                          : "Not scanned yet this session"}
+                      </p>
+                    </div>
+                    <button
+                      id="scan-now-btn"
+                      onClick={async () => {
+                        if (scanning) return;
+                        setScanning(true);
+                        try { await api.triggerScan(); } catch (e) { console.error(e); setScanning(false); }
+                      }}
+                      disabled={scanning}
+                      style={{
+                        display: "flex", alignItems: "center", gap: "0.5rem",
+                        padding: "0.5rem 1.25rem", borderRadius: "0.5rem",
+                        fontSize: "0.875rem", fontWeight: 600, cursor: scanning ? "not-allowed" : "pointer",
+                        background: "var(--background)", border: "1px solid var(--border)",
+                        color: "var(--foreground)", opacity: scanning ? 0.7 : 1,
+                        boxShadow: "0 1px 2px rgba(0,0,0,0.05)", transition: "all 0.2s",
+                      }}>
+                      {scanning
+                        ? <><Loader2 size={15} className="animate-spin" /> Scanning...</>
+                        : <><RefreshCw size={15} /> Scan Now</>}
+                    </button>
                   </div>
-                  <button
-                    id="scan-now-btn"
-                    onClick={async () => {
-                      if (scanning) return;
-                      setScanning(true);
-                      try { await api.triggerScan(); } catch (e) { console.error(e); setScanning(false); }
-                    }}
-                    disabled={scanning}
-                    style={{
-                      display: "flex", alignItems: "center", gap: "0.5rem",
-                      padding: "0.5rem 1.25rem", borderRadius: "0.5rem",
-                      fontSize: "0.875rem", fontWeight: 600, cursor: scanning ? "not-allowed" : "pointer",
-                      background: "var(--background)", border: "1px solid var(--border)",
-                      color: "var(--foreground)", opacity: scanning ? 0.7 : 1,
-                      boxShadow: "0 1px 2px rgba(0,0,0,0.05)", transition: "all 0.2s",
-                    }}>
-                    {scanning
-                      ? <><Loader2 size={15} className="animate-spin" /> Scanning...</>
-                      : <><RefreshCw size={15} /> Scan Now</>}
-                  </button>
                 </div>
-              </div>
-            )}
+              )}
             </div>
           </section>
         );
@@ -1251,14 +1251,14 @@ export default function SettingsPage() {
                 <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
                   {usersPolicies.filter((user) => user.role !== "admin").map((user) => (
                     <div key={user.user_id} style={{ padding: "1.5rem", background: "var(--secondary)", borderRadius: "0.75rem", border: "1px solid var(--border)" }}>
-                      
+
                       {/* User Header Info */}
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid var(--border)", paddingBottom: "1rem", marginBottom: "1rem" }}>
                         <div>
                           <p style={{ fontSize: "1rem", fontWeight: 600, color: "var(--foreground)" }}>{user.display_name || "Unnamed User"}</p>
                           <p style={{ fontSize: "0.8125rem", color: "var(--muted-foreground)" }}>{user.email} (Role: <span style={{ color: "var(--primary)", fontWeight: 600 }}>{user.role}</span>)</p>
                         </div>
-                        
+
                         {/* Save Action for this user */}
                         <button
                           onClick={() => handleUpdatePolicy(user.user_id, user.permissions, user.screen_settings_visible_to_users)}
@@ -1279,7 +1279,7 @@ export default function SettingsPage() {
                       {/* Fine-grained permissions controls */}
                       <div>
                         <p style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--foreground)", marginBottom: "0.75rem" }}>Setting Permissions Matrix</p>
-                        
+
                         <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
                           {PERMISSION_FIELDS.map((group) => (
                             <div key={group.category} style={{ border: "1px solid var(--border)", borderRadius: "0.75rem", padding: "1rem", background: "var(--background)" }}>
@@ -1290,7 +1290,7 @@ export default function SettingsPage() {
                                   return (
                                     <div key={field.key} style={{ display: "grid", gridTemplateColumns: "1.5fr 1fr 1fr", alignItems: "center", padding: "0.625rem 0.875rem", background: "var(--secondary)", borderRadius: "0.5rem", border: "1px solid var(--border)" }}>
                                       <span style={{ fontSize: "0.8125rem", fontWeight: 500, color: "var(--foreground)" }}>{field.label}</span>
-                                      
+
                                       {/* Visible Option toggle */}
                                       <div style={{ display: "flex", alignItems: "center", gap: "0.375rem" }}>
                                         <span style={{ fontSize: "0.75rem", color: "var(--muted-foreground)" }}>Visible:</span>

@@ -47,7 +47,7 @@ a = Analysis(
         # --- Massive ML frameworks (not used; pulled in by transitive deps) ---
         'torch', 'torchvision', 'torchaudio',
         'tensorflow', 'tensorboard', 'keras',
-        'sklearn', 'scipy',
+        # 'sklearn', 'scipy',  # Removed from excludes: openwakeword depends on scikit-learn and scipy
         # --- gRPC (pulled in by google-generativeai but not needed at runtime) ---
         'grpc', '_grpc', 'grpcio',
         # --- Unused test/debug utilities ---

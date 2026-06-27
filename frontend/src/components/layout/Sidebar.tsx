@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion } from "framer-motion";
-import { LayoutDashboard, Terminal, GitBranch, Activity, Settings, Mic, ChevronLeft, ChevronRight, Zap, Bot, History, User, LogOut } from "lucide-react";
+import { LayoutDashboard, Terminal, GitBranch, Activity, Settings, Mic, PanelLeftClose, PanelLeftOpen, Zap, Bot, History, User, LogOut } from "lucide-react";
 import { useState } from "react";
 import { useVoiceStore } from "@/store/voiceStore";
 import { useAuthStore } from "@/store/authStore";
@@ -57,7 +57,7 @@ export function Sidebar() {
       >
         {collapsed ? (
            logoHovered ? (
-             <ChevronRight style={{ width: "1.5rem", height: "1.5rem", color: "var(--muted-foreground)" }} />
+             <PanelLeftOpen style={{ width: "1.5rem", height: "1.5rem", color: "var(--muted-foreground)" }} />
            ) : (
              <div style={{ width: "2rem", height: "2rem", borderRadius: "0.5rem", background: "var(--foreground)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                <Zap style={{ width: "1rem", height: "1rem", color: "var(--background)" }} />
@@ -76,7 +76,7 @@ export function Sidebar() {
                 ACE
               </motion.span>
             </div>
-            <ChevronLeft style={{ width: "1.25rem", height: "1.25rem", color: "var(--muted-foreground)" }} />
+            <PanelLeftClose style={{ width: "1.25rem", height: "1.25rem", color: "var(--muted-foreground)" }} />
           </>
         )}
       </div>
