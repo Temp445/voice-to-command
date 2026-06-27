@@ -40,19 +40,18 @@
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1",
     "tailwind-merge": "^2.3.0",
-    "tw-animate-css": "^1.3.4",
     "zustand": "^4.5.2"
   },
   "devDependencies": {
-    "@tailwindcss/postcss": "latest",
+    "@tailwindcss/postcss": "^4.3.1",
     "@tauri-apps/cli": "2.0.0",
     "@types/node": "^20.14.2",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
     "eslint": "^9.0.0",
     "eslint-config-next": "^16.0.0",
-    "postcss": "latest",
-    "tailwindcss": "latest",
+    "postcss": "^8.5.15",
+    "tailwindcss": "^4.3.1",
     "typescript": "^5.4.5"
   }
 }

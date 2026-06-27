@@ -42,7 +42,7 @@ CREATE TABLE IF NOT EXISTS public.settings (
     listen_shortcut             TEXT DEFAULT 'Alt+S',
     crm_url                     TEXT DEFAULT 'https://crm.acesoftcloud.in/',
     crm_keywords                TEXT DEFAULT 'open my crm, open crm, open ace crm',
-    restrict_browser_automation BOOLEAN DEFAULT FALSE,
+    restrict_browser_automation BOOLEAN DEFAULT TRUE,
     llm_enabled                 BOOLEAN DEFAULT FALSE,
     llm_provider                TEXT DEFAULT 'groq',
     llm_model                   TEXT DEFAULT 'llama-3.3-70b-versatile',

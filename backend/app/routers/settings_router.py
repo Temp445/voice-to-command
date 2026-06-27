@@ -33,7 +33,7 @@ _DEFAULTS = {
     "minimize_to_tray": True,
     "browser_animations_enabled": True,
     "enable_desktop_overlay": True,
-    "restrict_browser_automation": False,
+    "restrict_browser_automation": True,
     "overlay_shortcut": "Alt+A",
     "listen_shortcut": "Alt+S",
     "crm_url": "",
@@ -189,15 +189,22 @@ async def get_settings(request: Request, user_id: str = Depends(get_current_user
     policy_res = await sb_run(lambda: supabase_admin.table("user_policies").select("permissions").eq("user_id", user_id).execute())
     permissions = policy_res.data[0].get("permissions") if policy_res.data else {}
     
-    restricted_keys = {
-        "enable_desktop_overlay",
-        "browser_animations_enabled",
-        "overlay_shortcut",
-        "listen_shortcut"
-    }
-    
     final_permissions = {}
     for key in _DEFAULTS.keys():
+        final_permissions[key] = {"visible": True, "mutable": True}
+        
+    # Virtual permission keys that do not map directly to a database column
+    virtual_keys = {
+        "tab_voice",
+        "tab_tts",
+        "tab_ai",
+        "tab_browser",
+        "tab_system",
+        "elevenlabs_api_key",
+        "deepgram_api_key",
+        "llm_api_key"
+    }
+    for key in virtual_keys:
         final_permissions[key] = {"visible": True, "mutable": True}
         
     for key, val in permissions.items():
@@ -205,19 +212,12 @@ async def get_settings(request: Request, user_id: str = Depends(get_current_user
             final_permissions[key]["visible"] = val.get("visible", True)
             final_permissions[key]["mutable"] = val.get("mutable", True)
             
-    if role != "admin" and not s.get("screen_settings_visible_to_users", True):
-        for rk in restricted_keys:
-            final_permissions[rk] = {"visible": False, "mutable": False}
-            
+
     s_filtered = {**s}
     if role != "admin":
         for key, val in final_permissions.items():
             if not val.get("visible", True) and key in s_filtered:
                 s_filtered[key] = _DEFAULTS.get(key)
-        if s_filtered.get("stt_provider") == "deepgram" and not final_permissions.get("deepgram_api_key", {}).get("visible", True):
-            s_filtered["stt_provider"] = "whisper"
-        elif s_filtered.get("stt_provider") == "elevenlabs" and not final_permissions.get("elevenlabs_api_key", {}).get("visible", True):
-            s_filtered["stt_provider"] = "whisper"
                 
     return _build_response(s_filtered, role=role, permissions=final_permissions)
 
@@ -237,15 +237,22 @@ async def update_settings(
     policy_res = await sb_run(lambda: supabase_admin.table("user_policies").select("permissions").eq("user_id", user_id).execute())
     permissions = policy_res.data[0].get("permissions") if policy_res.data else {}
     
-    restricted_keys = {
-        "enable_desktop_overlay",
-        "browser_animations_enabled",
-        "overlay_shortcut",
-        "listen_shortcut"
-    }
-    
     final_permissions = {}
     for key in _DEFAULTS.keys():
+        final_permissions[key] = {"visible": True, "mutable": True}
+        
+    # Virtual permission keys that do not map directly to a database column
+    virtual_keys = {
+        "tab_voice",
+        "tab_tts",
+        "tab_ai",
+        "tab_browser",
+        "tab_system",
+        "elevenlabs_api_key",
+        "deepgram_api_key",
+        "llm_api_key"
+    }
+    for key in virtual_keys:
         final_permissions[key] = {"visible": True, "mutable": True}
         
     for key, val in permissions.items():
@@ -253,10 +260,7 @@ async def update_settings(
             final_permissions[key]["visible"] = val.get("visible", True)
             final_permissions[key]["mutable"] = val.get("mutable", True)
             
-    if role != "admin" and not s.get("screen_settings_visible_to_users", True):
-        for rk in restricted_keys:
-            final_permissions[rk] = {"visible": False, "mutable": False}
-            
+
     # Perform mutable checks on fields being updated
     patch_dict = body.model_dump(exclude_none=True)
     if role != "admin":
@@ -427,10 +431,6 @@ async def update_settings(
         for key, val in final_permissions.items():
             if not val.get("visible", True) and key in s_filtered:
                 s_filtered[key] = _DEFAULTS.get(key)
-        if s_filtered.get("stt_provider") == "deepgram" and not final_permissions.get("deepgram_api_key", {}).get("visible", True):
-            s_filtered["stt_provider"] = "whisper"
-        elif s_filtered.get("stt_provider") == "elevenlabs" and not final_permissions.get("elevenlabs_api_key", {}).get("visible", True):
-            s_filtered["stt_provider"] = "whisper"
 
     return _build_response(s_filtered, role=role, permissions=final_permissions)
 

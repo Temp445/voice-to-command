@@ -211,6 +211,31 @@ export default function SettingsPage() {
 
   useEffect(() => {
     if (!initialLoaded) return;
+    if (settings.role !== "admin") {
+      const currentTabVisible = settings.permissions[`tab_${activeTab}`]?.visible !== false;
+      if (!currentTabVisible) {
+        const firstVisible = TABS.find(tab => settings.permissions[`tab_${tab.id}`]?.visible !== false);
+        if (firstVisible) {
+          setActiveTab(firstVisible.id);
+        }
+      }
+    }
+  }, [settings.permissions, settings.role, activeTab, initialLoaded]);
+
+  useEffect(() => {
+    if (!initialLoaded) return;
+    if (settings.role !== "admin") {
+      if (settings.sttProvider === "elevenlabs" && !isVisible("elevenlabs_api_key")) {
+        settings.update({ sttProvider: "whisper" });
+      }
+      if (settings.sttProvider === "deepgram" && !isVisible("deepgram_api_key")) {
+        settings.update({ sttProvider: "whisper" });
+      }
+    }
+  }, [settings.permissions, settings.role, settings.sttProvider, initialLoaded]);
+
+  useEffect(() => {
+    if (!initialLoaded) return;
 
     // Sync the Start on Boot setting with the OS registry
     if (typeof window !== 'undefined' && '__TAURI_IPC__' in window) {
@@ -420,6 +445,18 @@ export default function SettingsPage() {
   };
 
   const renderTabContent = () => {
+    if (settings.role !== "admin" && settings.permissions[`tab_${activeTab}`]?.visible === false) {
+      return (
+        <section style={card}>
+          <div style={body}>
+            <p style={{ color: "var(--muted-foreground)", textAlign: "center", padding: "2rem", fontSize: "0.9375rem", fontWeight: 500 }}>
+              🔒 This tab has been disabled by your administrator.
+            </p>
+          </div>
+        </section>
+      );
+    }
+
     switch (activeTab) {
       case "voice":
         return (
@@ -453,11 +490,15 @@ export default function SettingsPage() {
                     {!isMutable("stt_provider") && <span title="Locked by Administrator">🔒</span>}
                   </p>
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "1rem", marginBottom: "1.5rem" }}>
-                    {([
+                    {[
                       { key: "whisper", label: "Whisper", desc: "Private, works offline" },
-                      isVisible("elevenlabs_api_key") ? { key: "elevenlabs", label: "ElevenLabs STT", desc: "Scribe v2 cloud, highly accurate" } : null,
-                      isVisible("deepgram_api_key") ? { key: "deepgram", label: "Deepgram STT", desc: "Nova-3 cloud, blazing fast" } : null,
-                    ].filter((x): x is { key: string; label: string; desc: string } => x !== null)).map(({ key, label, desc }) => {
+                      { key: "elevenlabs", label: "ElevenLabs STT", desc: "Scribe v2 cloud, highly accurate" },
+                      { key: "deepgram", label: "Deepgram STT", desc: "Nova-3 cloud, blazing fast" },
+                    ].filter(({ key }) => {
+                      if (key === "elevenlabs") return isVisible("elevenlabs_api_key");
+                      if (key === "deepgram") return isVisible("deepgram_api_key");
+                      return true;
+                    }).map(({ key, label, desc }) => {
                       const active = settings.sttProvider === key;
                       return (
                         <button key={key}
@@ -1208,7 +1249,7 @@ export default function SettingsPage() {
                 </div>
               ) : (
                 <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
-                  {usersPolicies.map((user) => (
+                  {usersPolicies.filter((user) => user.role !== "admin").map((user) => (
                     <div key={user.user_id} style={{ padding: "1.5rem", background: "var(--secondary)", borderRadius: "0.75rem", border: "1px solid var(--border)" }}>
                       
                       {/* User Header Info */}
@@ -1233,23 +1274,6 @@ export default function SettingsPage() {
                             <><Loader2 size={14} className="animate-spin" /> Saving...</>
                           ) : "Save Changes"}
                         </button>
-                      </div>
-
-                      {/* General settings visibility */}
-                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0.75rem 1rem", background: "var(--background)", borderRadius: "0.5rem", marginBottom: "1rem" }}>
-                        <div>
-                          <p style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--foreground)" }}>Screen Settings Visibility</p>
-                          <p style={{ fontSize: "0.75rem", color: "var(--muted-foreground)" }}>If enabled, user can view &amp; edit system/screen settings tabs. Otherwise, hidden.</p>
-                        </div>
-                        <Toggle
-                          checked={user.screen_settings_visible_to_users}
-                          onChange={() => {
-                            const newVisible = !user.screen_settings_visible_to_users;
-                            const updated = usersPolicies.map(u => u.user_id === user.user_id ? { ...u, screen_settings_visible_to_users: newVisible } : u);
-                            setUsersPolicies(updated);
-                            handleUpdatePolicy(user.user_id, user.permissions, newVisible);
-                          }}
-                        />
                       </div>
 
                       {/* Fine-grained permissions controls */}
@@ -1316,7 +1340,7 @@ export default function SettingsPage() {
                     </div>
                   ))}
 
-                  {usersPolicies.length === 0 && (
+                  {usersPolicies.filter((user) => user.role !== "admin").length === 0 && (
                     <p style={{ textAlign: "center", color: "var(--muted-foreground)", fontSize: "0.875rem", padding: "2rem" }}>
                       No users found.
                     </p>

@@ -5,4 +5,4 @@
 -- ============================================================
 
 ALTER TABLE public.settings
-    ADD COLUMN IF NOT EXISTS restrict_browser_automation BOOLEAN DEFAULT FALSE;
+    ADD COLUMN IF NOT EXISTS restrict_browser_automation BOOLEAN DEFAULT TRUE;

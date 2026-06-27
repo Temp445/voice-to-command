@@ -92,7 +92,7 @@ class Settings(BaseSettings):
     browser_type: str = "chromium"  # chromium | firefox | webkit
     browser_animations_enabled: bool = True
     enable_desktop_overlay: bool = True
-    restrict_browser_automation: bool = False
+    restrict_browser_automation: bool = True
 
     # --- Logging ---
     log_level: str = "INFO"

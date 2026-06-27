@@ -1,6 +1,5 @@
 // Zustand settings store
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
 
 interface SettingsStore {
   wakeWord: string;
@@ -53,6 +52,7 @@ interface SettingsStore {
 
   setTtsProvider: (p: "piper" | "gtts") => void;
   update: (patch: Partial<SettingsStore>) => void;
+  resetSettings: () => void;
 }
 
 /** Push the persisted minimizeToTray value to the Rust backend on startup */
@@ -66,72 +66,117 @@ export function syncTrayStateOnBoot(minimizeToTray: boolean) {
   }
 }
 
-export const useSettingsStore = create<SettingsStore>()(
-  persist(
-    (set) => ({
-      wakeWord:       "alexa",
-      sttProvider:    "whisper",
-      sttNoiseCancellation: true,
-      whisperModel:   "base",
-      activeModeTimeout: 120,
-      requireWakeWordAlways: true,
-      ttsProvider:    "piper",
-      piperVoice:     "en_US-lessac-medium",
-      theme:          "dark",
-      browserType:    "chromium",
-      startupOnBoot:  true,
-      minimizeToTray: true,
-      browserAnimationsEnabled: true,
-      enableDesktopOverlay: true,
-      overlayShortcut: "Alt+A",
-      listenShortcut: "Alt+S",
-      replySound: true,
-      speechRate: 1.0,
-      screenSettingsVisibleToUsers: true,
-      role: "user",
-      permissions: {},
+export const useSettingsStore = create<SettingsStore>((set) => ({
+  wakeWord:       "alexa",
+  sttProvider:    "whisper",
+  sttNoiseCancellation: true,
+  whisperModel:   "base",
+  activeModeTimeout: 120,
+  requireWakeWordAlways: true,
+  ttsProvider:    "piper",
+  piperVoice:     "en_US-lessac-medium",
+  theme:          "dark",
+  browserType:    "chromium",
+  startupOnBoot:  true,
+  minimizeToTray: true,
+  browserAnimationsEnabled: true,
+  enableDesktopOverlay: true,
+  overlayShortcut: "Alt+A",
+  listenShortcut: "Alt+S",
+  replySound: true,
+  speechRate: 1.0,
+  screenSettingsVisibleToUsers: true,
+  role: "user",
+  permissions: {},
 
-      // CRM / Website Shortcuts (empty by default — users add their own)
-      crmUrl:         "",
-      crmKeywords:    "",
-      crmSites:       [],
-      restrictBrowserAutomation: false,
+  // CRM / Website Shortcuts (empty by default — users add their own)
+  crmUrl:         "",
+  crmKeywords:    "",
+  crmSites:       [],
+  restrictBrowserAutomation: true,
 
-      // LLM Defaults
-      llmEnabled:     true,
-      llmProvider:    "groq",
-      llmModel:       "llama-3.3-70b-versatile",
-      llmApiKey:      "",
-      llmMode:        "fallback",
-      llmTemperature: 0.7,
-      llmSystemError: null,
+  // LLM Defaults
+  llmEnabled:     true,
+  llmProvider:    "groq",
+  llmModel:       "llama-3.3-70b-versatile",
+  llmApiKey:      "",
+  llmMode:        "fallback",
+  llmTemperature: 0.7,
+  llmSystemError: null,
 
-      // Scanning
-      scanMode:       "auto",
+  // Scanning
+  scanMode:       "auto",
 
-      // ElevenLabs
-      elevenlabsApiKey: "",
-      elevenlabsConfigured: false,
+  // ElevenLabs
+  elevenlabsApiKey: "",
+  elevenlabsConfigured: false,
 
-      // Deepgram
-      deepgramApiKey: "",
-      deepgramConfigured: false,
+  // Deepgram
+  deepgramApiKey: "",
+  deepgramConfigured: false,
 
-      setTtsProvider: (p) => set({ ttsProvider: p }),
-      update: (patch) => {
-        set(patch);
-        // Sync tray state to Rust backend whenever it changes
-        if (patch.minimizeToTray !== undefined) {
-          if (typeof window !== "undefined" && (window as any).__TAURI_INTERNALS__) {
-            import("@tauri-apps/api/core").then((tauriCore) => {
-              if (tauriCore && typeof tauriCore.invoke === "function") {
-                tauriCore.invoke("sync_minimize_to_tray", { value: patch.minimizeToTray }).catch(console.error);
-              }
-            }).catch(() => {});
+  setTtsProvider: (p) => set({ ttsProvider: p }),
+  update: (patch) => {
+    set(patch);
+    // Sync tray state to Rust backend whenever it changes
+    if (patch.minimizeToTray !== undefined) {
+      if (typeof window !== "undefined" && (window as any).__TAURI_INTERNALS__) {
+        import("@tauri-apps/api/core").then((tauriCore) => {
+          if (tauriCore && typeof tauriCore.invoke === "function") {
+            tauriCore.invoke("sync_minimize_to_tray", { value: patch.minimizeToTray }).catch(console.error);
           }
-        }
-      },
-    }),
-    { name: "ace-settings" }
-  )
-);
+        }).catch(() => {});
+      }
+    }
+  },
+  resetSettings: () => set({
+    wakeWord:       "alexa",
+    sttProvider:    "whisper",
+    sttNoiseCancellation: true,
+    whisperModel:   "base",
+    activeModeTimeout: 120,
+    requireWakeWordAlways: true,
+    ttsProvider:    "piper",
+    piperVoice:     "en_US-lessac-medium",
+    theme:          "dark",
+    browserType:    "chromium",
+    startupOnBoot:  true,
+    minimizeToTray: true,
+    browserAnimationsEnabled: true,
+    enableDesktopOverlay: true,
+    overlayShortcut: "Alt+A",
+    listenShortcut: "Alt+S",
+    replySound: true,
+    speechRate: 1.0,
+    screenSettingsVisibleToUsers: true,
+    role: "user",
+    permissions: {},
+
+    // CRM / Website Shortcuts
+    crmUrl:         "",
+    crmKeywords:    "",
+    crmSites:       [],
+    restrictBrowserAutomation: false,
+
+    // LLM Defaults
+    llmEnabled:     true,
+    llmProvider:    "groq",
+    llmModel:       "llama-3.3-70b-versatile",
+    llmApiKey:      "",
+    llmMode:        "fallback",
+    llmTemperature: 0.7,
+    llmSystemError: null,
+
+    // Scanning
+    scanMode:       "auto",
+
+    // ElevenLabs
+    elevenlabsApiKey: "",
+    elevenlabsConfigured: false,
+
+    // Deepgram
+    deepgramApiKey: "",
+    deepgramConfigured: false,
+  }),
+}));
+

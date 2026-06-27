@@ -2,6 +2,9 @@ import { create } from "zustand";
 import { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
 import { api } from "@/lib/api";
+import { useSettingsStore } from "@/store/settingsStore";
+import { useChatStore } from "@/store/chatStore";
+import { useCommandStore } from "@/store/commandStore";
 
 interface AuthState {
   session: Session | null;
@@ -24,6 +27,17 @@ export const useAuthStore = create<AuthState>((set) => ({
   signOut: async () => {
     await supabase.auth.signOut();
     set({ session: null, user: null });
+    
+    // Clear all user-related state and localStorage
+    useSettingsStore.getState().resetSettings();
+    useChatStore.getState().clear();
+    useCommandStore.getState().clear();
+    try {
+      localStorage.removeItem("ace-local-token");
+      localStorage.removeItem("ace-settings");
+      localStorage.removeItem("chat-history-storage");
+      localStorage.removeItem("command-history-storage");
+    } catch (e) {}
   },
   initializeAuth: () => {
     const syncWithBackend = async (token: string, retries = 5, delay = 1000) => {
@@ -49,8 +63,18 @@ export const useAuthStore = create<AuthState>((set) => ({
       if (session) {
         syncWithBackend(session.access_token);
       } else {
-        localStorage.removeItem("ace-local-token");
+        // Clear all user-related state and localStorage on logout/expiry
+        useSettingsStore.getState().resetSettings();
+        useChatStore.getState().clear();
+        useCommandStore.getState().clear();
+        try {
+          localStorage.removeItem("ace-local-token");
+          localStorage.removeItem("ace-settings");
+          localStorage.removeItem("chat-history-storage");
+          localStorage.removeItem("command-history-storage");
+        } catch (e) {}
       }
     });
   },
 }));
+
