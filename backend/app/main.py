@@ -380,7 +380,7 @@ register_exception_handlers(app)
 # ─── Routers ─────────────────────────────────────────────────────────────────
 
 from app.routers import auth, voice, commands, automation, settings_router  # noqa: E402
-from app.routers import llm_router  # noqa: E402
+from app.routers import llm_router, policy_router  # noqa: E402
 
 app.include_router(auth.router,            prefix="/api/auth",       tags=["Auth"])
 app.include_router(voice.router,           prefix="/api/voice",      tags=["Voice"])
@@ -388,6 +388,7 @@ app.include_router(commands.router,        prefix="/api/commands",   tags=["Comm
 app.include_router(automation.router,      prefix="/api/automation", tags=["Automation"])
 app.include_router(settings_router.router, prefix="/api/settings",   tags=["Settings"])
 app.include_router(llm_router.router,      prefix="/api/llm",        tags=["AI Assistant"])
+app.include_router(policy_router.router,   prefix="/api/admin/policies", tags=["Admin Policies"])
 
 
 # ─── Test Endpoints (Dev only) ───────────────────────────────────────────────

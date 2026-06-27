@@ -50,6 +50,7 @@ _DEFAULTS = {
     "deepgram_api_key_encrypted": None,
     "reply_sound": True,
     "speech_rate": 1.0,
+    "screen_settings_visible_to_users": True,
 }
 
 
@@ -104,7 +105,7 @@ async def _get_or_create_settings(user_id: str) -> dict:
         return new_row  # Return in-memory defaults as safe fallback
 
 
-def _build_response(s: dict) -> SettingsResponse:
+def _build_response(s: dict, role: str = "user", permissions: dict = None) -> SettingsResponse:
     return SettingsResponse(
         wake_word=s.get("wake_word", "alexa"),
         whisper_model=s.get("whisper_model", "base"),
@@ -138,6 +139,9 @@ def _build_response(s: dict) -> SettingsResponse:
         deepgram_configured=bool(s.get("deepgram_api_key_encrypted")),
         reply_sound=s.get("reply_sound", True),
         speech_rate=s.get("speech_rate", 1.0),
+        screen_settings_visible_to_users=s.get("screen_settings_visible_to_users", True),
+        role=role,
+        permissions=permissions or {},
     )
 
 
@@ -178,7 +182,44 @@ async def get_settings(request: Request, user_id: str = Depends(get_current_user
             )
             logger.info("🖥️ Desktop Overlay started dynamically after login")
             
-    return _build_response(s)
+    # --- RBAC and Policies Logic ---
+    user_res = await sb_run(lambda: supabase_admin.table("users").select("role").eq("id", user_id).execute())
+    role = user_res.data[0].get("role") if user_res.data else "user"
+    
+    policy_res = await sb_run(lambda: supabase_admin.table("user_policies").select("permissions").eq("user_id", user_id).execute())
+    permissions = policy_res.data[0].get("permissions") if policy_res.data else {}
+    
+    restricted_keys = {
+        "enable_desktop_overlay",
+        "browser_animations_enabled",
+        "overlay_shortcut",
+        "listen_shortcut"
+    }
+    
+    final_permissions = {}
+    for key in _DEFAULTS.keys():
+        final_permissions[key] = {"visible": True, "mutable": True}
+        
+    for key, val in permissions.items():
+        if isinstance(val, dict) and key in final_permissions:
+            final_permissions[key]["visible"] = val.get("visible", True)
+            final_permissions[key]["mutable"] = val.get("mutable", True)
+            
+    if role != "admin" and not s.get("screen_settings_visible_to_users", True):
+        for rk in restricted_keys:
+            final_permissions[rk] = {"visible": False, "mutable": False}
+            
+    s_filtered = {**s}
+    if role != "admin":
+        for key, val in final_permissions.items():
+            if not val.get("visible", True) and key in s_filtered:
+                s_filtered[key] = _DEFAULTS.get(key)
+        if s_filtered.get("stt_provider") == "deepgram" and not final_permissions.get("deepgram_api_key", {}).get("visible", True):
+            s_filtered["stt_provider"] = "whisper"
+        elif s_filtered.get("stt_provider") == "elevenlabs" and not final_permissions.get("elevenlabs_api_key", {}).get("visible", True):
+            s_filtered["stt_provider"] = "whisper"
+                
+    return _build_response(s_filtered, role=role, permissions=final_permissions)
 
 
 @router.patch("", response_model=SettingsResponse)
@@ -188,6 +229,48 @@ async def update_settings(
     user_id: str = Depends(get_current_user_id),
 ):
     s = await _get_or_create_settings(user_id)
+    
+    # --- RBAC and Policies Logic ---
+    user_res = await sb_run(lambda: supabase_admin.table("users").select("role").eq("id", user_id).execute())
+    role = user_res.data[0].get("role") if user_res.data else "user"
+    
+    policy_res = await sb_run(lambda: supabase_admin.table("user_policies").select("permissions").eq("user_id", user_id).execute())
+    permissions = policy_res.data[0].get("permissions") if policy_res.data else {}
+    
+    restricted_keys = {
+        "enable_desktop_overlay",
+        "browser_animations_enabled",
+        "overlay_shortcut",
+        "listen_shortcut"
+    }
+    
+    final_permissions = {}
+    for key in _DEFAULTS.keys():
+        final_permissions[key] = {"visible": True, "mutable": True}
+        
+    for key, val in permissions.items():
+        if isinstance(val, dict) and key in final_permissions:
+            final_permissions[key]["visible"] = val.get("visible", True)
+            final_permissions[key]["mutable"] = val.get("mutable", True)
+            
+    if role != "admin" and not s.get("screen_settings_visible_to_users", True):
+        for rk in restricted_keys:
+            final_permissions[rk] = {"visible": False, "mutable": False}
+            
+    # Perform mutable checks on fields being updated
+    patch_dict = body.model_dump(exclude_none=True)
+    if role != "admin":
+        if "screen_settings_visible_to_users" in patch_dict:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Modification forbidden: Only administrators can toggle settings visibility."
+            )
+        for field in patch_dict.keys():
+            if field in final_permissions and not final_permissions[field].get("mutable", True):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=f"Modification forbidden: Settings key '{field}' is read-only or restricted."
+                )
     from app.config import settings as global_settings
     global_settings.owner_user_id = user_id
     updates: dict = {}
@@ -339,7 +422,17 @@ async def update_settings(
         "enable_desktop_overlay": s.get("enable_desktop_overlay"),
     })
 
-    return _build_response(s)
+    s_filtered = {**s}
+    if role != "admin":
+        for key, val in final_permissions.items():
+            if not val.get("visible", True) and key in s_filtered:
+                s_filtered[key] = _DEFAULTS.get(key)
+        if s_filtered.get("stt_provider") == "deepgram" and not final_permissions.get("deepgram_api_key", {}).get("visible", True):
+            s_filtered["stt_provider"] = "whisper"
+        elif s_filtered.get("stt_provider") == "elevenlabs" and not final_permissions.get("elevenlabs_api_key", {}).get("visible", True):
+            s_filtered["stt_provider"] = "whisper"
+
+    return _build_response(s_filtered, role=role, permissions=final_permissions)
 
 
 def _apply_llm_settings(s: dict) -> None:

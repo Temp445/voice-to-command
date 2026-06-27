@@ -19,12 +19,13 @@ const inp = { width: "100%", background: "var(--input)", border: "1px solid var(
 const btnA = { padding: "0.5rem 1rem", borderRadius: "0.5rem", fontSize: "0.8125rem", fontWeight: 600, cursor: "pointer", border: "1px solid var(--ring)", background: "var(--primary)", color: "var(--primary-foreground)", transition: "all 0.15s", boxShadow: "0 2px 4px rgba(0,0,0,0.1)" } as React.CSSProperties;
 const btnI = { padding: "0.5rem 1rem", borderRadius: "0.5rem", fontSize: "0.8125rem", fontWeight: 500, cursor: "pointer", border: "1px solid var(--border)", background: "var(--secondary)", color: "var(--muted-foreground)", transition: "all 0.15s" } as React.CSSProperties;
 
-const Toggle = ({ checked, onChange }: { checked: boolean, onChange: () => void }) => (
-  <button onClick={onChange}
+const Toggle = ({ checked, onChange, disabled }: { checked: boolean, onChange: () => void, disabled?: boolean }) => (
+  <button onClick={disabled ? undefined : onChange}
     style={{
       width: "2.75rem", height: "1.5rem", borderRadius: "9999px",
       background: checked ? "var(--primary)" : "var(--border)",
-      border: "none", position: "relative", flexShrink: 0, cursor: "pointer",
+      border: "none", position: "relative", flexShrink: 0, cursor: disabled ? "not-allowed" : "pointer",
+      opacity: disabled ? 0.6 : 1,
       transition: "background 0.3s ease",
     }}>
     <span style={{
@@ -46,8 +47,86 @@ const TABS = [
   { id: "system", label: "System Preferences", icon: Shield }
 ];
 
+const PERMISSION_FIELDS = [
+  {
+    category: "Page Tabs (Visibility only)",
+    items: [
+      { key: "tab_voice", label: "Voice Recognition Tab", hideMutable: true },
+      { key: "tab_tts", label: "Text-to-Speech Tab", hideMutable: true },
+      { key: "tab_ai", label: "AI Assistant Tab", hideMutable: true },
+      { key: "tab_browser", label: "Browser Automation Tab", hideMutable: true },
+      { key: "tab_system", label: "System Preferences Tab", hideMutable: true },
+    ]
+  },
+  {
+    category: "Voice Recognition Settings",
+    items: [
+      { key: "wake_word", label: "Wake Word Selection" },
+      { key: "stt_provider", label: "STT Provider Selection" },
+      { key: "elevenlabs_api_key", label: "ElevenLabs API Key" },
+      { key: "deepgram_api_key", label: "Deepgram API Key" },
+      { key: "whisper_model", label: "Whisper Model Selection" },
+      { key: "stt_noise_cancellation", label: "STT Noise Cancellation Toggle" },
+      { key: "require_wake_word_always", label: "Interaction Mode (Always Wake Word)" },
+      { key: "active_mode_timeout", label: "Active Mode Timeout Slider" },
+      { key: "overlay_shortcut", label: "Overlay Shortcut Key Input" },
+      { key: "listen_shortcut", label: "Listen Shortcut Key Input" },
+    ]
+  },
+  {
+    category: "Text-to-Speech Settings",
+    items: [
+      { key: "tts_provider", label: "TTS Provider Selection" },
+      { key: "piper_voice", label: "Piper Voice Model Selection" },
+      { key: "reply_sound", label: "Reply Sound Toggle" },
+      { key: "speech_rate", label: "Speech Speed Select" },
+    ]
+  },
+  {
+    category: "AI Assistant Settings",
+    items: [
+      { key: "llm_enabled", label: "AI Assistant Enabled Toggle" },
+      { key: "llm_provider", label: "LLM Provider Selection" },
+      { key: "llm_model", label: "LLM Model Selection" },
+      { key: "llm_api_key_encrypted", label: "LLM API Key Input" },
+      { key: "llm_mode", label: "Processing Mode Selection" },
+      { key: "llm_temperature", label: "Temperature Slider" },
+    ]
+  },
+  {
+    category: "Browser Automation Settings",
+    items: [
+      { key: "browser_type", label: "Browser Engine Selection" },
+      { key: "browser_animations_enabled", label: "Browser Animations Toggle" },
+      { key: "restrict_browser_automation", label: "Restrict Website Automation Toggle" },
+      { key: "crm_sites", label: "Website Shortcuts List" },
+    ]
+  },
+  {
+    category: "System Preferences Settings",
+    items: [
+      { key: "theme", label: "Theme Mode Selection" },
+      { key: "enable_desktop_overlay", label: "Desktop Overlay Toggle" },
+      { key: "startup_on_boot", label: "Start on Boot Toggle" },
+      { key: "minimize_to_tray", label: "Minimize to Tray Toggle" },
+      { key: "scan_mode", label: "App & File Scan Mode Selector" },
+    ]
+  }
+];
+
 export default function SettingsPage() {
   const settings = useSettingsStore();
+  
+  const isVisible = (key: string) => {
+    if (settings.role === "admin") return true;
+    return settings.permissions[key]?.visible !== false;
+  };
+
+  const isMutable = (key: string) => {
+    if (settings.role === "admin") return true;
+    return settings.permissions[key]?.mutable !== false;
+  };
+
   const { connected, scanLastAt, scanAppCount } = useWSStore();
   const [activeTab, setActiveTab] = useState("voice");
   const [saving, setSaving] = useState(false);
@@ -59,6 +138,13 @@ export default function SettingsPage() {
   const [showApiKey, setShowApiKey] = useState(false);
   const [testingLlm, setTestingLlm] = useState(false);
   const [testResult, setTestResult] = useState<{ ok: boolean; msg: string } | null>(null);
+
+  // Admin Panel State
+  const [usersPolicies, setUsersPolicies] = useState<any[]>([]);
+  const [loadingPolicies, setLoadingPolicies] = useState(false);
+  const [adminSavingUser, setAdminSavingUser] = useState<string | null>(null);
+  const [adminError, setAdminError] = useState<string | null>(null);
+  const [adminSuccess, setAdminSuccess] = useState<string | null>(null);
 
   // STT Tester State
   const [sttTestActive, setSttTestActive] = useState(false);
@@ -85,6 +171,8 @@ export default function SettingsPage() {
   useEffect(() => {
     api.getLLMProviders().then((data: any) => setProviders(data)).catch(err => console.error(err));
     api.getSettings().then((data: any) => {
+      const role = data.role || "user";
+      const permissions = data.permissions || {};
       settings.update({
         wakeWord: data.wake_word, sttProvider: data.stt_provider, sttNoiseCancellation: data.stt_noise_cancellation,
         whisperModel: data.whisper_model, ttsProvider: data.tts_provider, piperVoice: data.piper_voice,
@@ -103,8 +191,21 @@ export default function SettingsPage() {
         deepgramConfigured: data.deepgram_configured || false,
         replySound: data.reply_sound !== undefined ? data.reply_sound : true,
         speechRate: data.speech_rate !== undefined ? data.speech_rate : 1.0,
+        screenSettingsVisibleToUsers: data.screen_settings_visible_to_users !== undefined ? data.screen_settings_visible_to_users : true,
+        role: role,
+        permissions: permissions,
       });
       setInitialLoaded(true);
+
+      if (role !== "admin") {
+        const currentTabVisible = permissions[`tab_voice`]?.visible !== false;
+        if (!currentTabVisible) {
+          const firstVisible = TABS.find(tab => permissions[`tab_${tab.id}`]?.visible !== false);
+          if (firstVisible) {
+            setActiveTab(firstVisible.id);
+          }
+        }
+      }
     }).catch(err => console.error(err));
   }, []);
 
@@ -127,8 +228,48 @@ export default function SettingsPage() {
     settings.crmUrl, settings.crmKeywords, JSON.stringify(settings.crmSites), settings.restrictBrowserAutomation,
     settings.llmEnabled, settings.llmProvider, settings.llmModel, settings.llmMode,
     settings.llmTemperature, settings.llmApiKey, settings.scanMode, settings.elevenlabsApiKey, settings.deepgramApiKey,
-    settings.replySound, settings.speechRate
+    settings.replySound, settings.speechRate, settings.screenSettingsVisibleToUsers
   ]);
+
+  useEffect(() => {
+    if (activeTab === "admin" && settings.role === "admin") {
+      setLoadingPolicies(true);
+      api.listPolicies()
+        .then((data: any[]) => {
+          const allKeys = PERMISSION_FIELDS.flatMap(group => group.items.map(item => item.key));
+          const normalized = data.map((u) => {
+            const perms = { ...u.permissions };
+            allKeys.forEach((k) => {
+              if (!perms[k]) perms[k] = { visible: true, mutable: true };
+            });
+            return { ...u, permissions: perms };
+          });
+          setUsersPolicies(normalized);
+        })
+        .catch(err => {
+          console.error(err);
+          setAdminError("Failed to load user policies.");
+        })
+        .finally(() => setLoadingPolicies(false));
+    }
+  }, [activeTab, settings.role]);
+
+  const handleUpdatePolicy = async (userId: string, permissions: any, screenVisible: boolean) => {
+    setAdminSavingUser(userId);
+    setAdminError(null);
+    setAdminSuccess(null);
+    try {
+      await api.updateUserPolicy(userId, permissions, screenVisible);
+      setAdminSuccess("User policy updated successfully!");
+      // Update local state list
+      setUsersPolicies(prev => prev.map(u => u.user_id === userId ? { ...u, permissions, screen_settings_visible_to_users: screenVisible } : u));
+      setTimeout(() => setAdminSuccess(null), 3000);
+    } catch (err: any) {
+      setAdminError(err.message || "Failed to update user policy.");
+    } finally {
+      setAdminSavingUser(null);
+    }
+  };
 
   const handleTestLlm = async () => {
     setTestingLlm(true); setTestResult(null);
@@ -268,6 +409,7 @@ export default function SettingsPage() {
         scan_mode: settings.scanMode,
         reply_sound: settings.replySound,
         speech_rate: settings.speechRate,
+        screen_settings_visible_to_users: settings.screenSettingsVisibleToUsers,
       };
       if (settings.llmApiKey) patch.llm_api_key = settings.llmApiKey;
       if (settings.elevenlabsApiKey) patch.elevenlabs_api_key = settings.elevenlabsApiKey;
@@ -287,46 +429,63 @@ export default function SettingsPage() {
               <span style={{ fontSize: "1rem", fontWeight: 600, color: "var(--foreground)" }}>Voice Recognition</span>
             </div>
             <div style={body}>
-              <div>
-                <p style={lbl}>Wake Word</p>
-                <select style={inp} value={settings.wakeWord}
-                  onChange={(e) => settings.update({ wakeWord: e.target.value })}>
-                  <option value="alexa">Alexa</option>
-                  <option value="hey_jarvis">Hey Jarvis</option>
-                  <option value="hey_mycroft">Hey Mycroft</option>
-                  <option value="hey_rhasspy">Hey Rhasspy</option>
-                </select>
-                <p style={sub}>Currently: <span style={{ color: "var(--foreground)", fontFamily: "var(--font-mono)" }}>&quot;{settings.wakeWord}&quot;</span></p>
-              </div>
-              <div>
-                <p style={lbl}>STT Provider</p>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "1rem", marginBottom: "1.5rem" }}>
-                  {[
-                    { key: "whisper", label: "Whisper", desc: "Private, works offline" },
-                    { key: "elevenlabs", label: "ElevenLabs STT", desc: "Scribe v2 cloud, highly accurate" },
-                    { key: "deepgram", label: "Deepgram STT", desc: "Nova-3 cloud, blazing fast" },
-                  ].map(({ key, label, desc }) => {
-                    const active = settings.sttProvider === key;
-                    return (
-                      <button key={key} onClick={() => settings.update({ sttProvider: key as "whisper" | "elevenlabs" | "deepgram" })}
-                        style={{ textAlign: "left", padding: "1.25rem", borderRadius: "0.75rem", cursor: "pointer", transition: "all 0.2s ease", background: active ? "var(--secondary)" : "transparent", border: active ? "2px solid var(--primary)" : "1px solid var(--border)", boxShadow: active ? "0 4px 12px rgba(0,0,0,0.05)" : "none" }}>
-                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.5rem" }}>
-                          <span style={{ fontSize: "0.9375rem", fontWeight: 600, color: "var(--foreground)" }}>{label}</span>
-                        </div>
-                        <p style={{ fontSize: "0.8125rem", color: "var(--muted-foreground)" }}>{desc}</p>
-                        {active && <div style={{ marginTop: "0.75rem", display: "flex", alignItems: "center", gap: "0.25rem", color: "var(--primary)", fontSize: "0.75rem", fontWeight: 600 }}><CheckCircle2 style={{ width: "0.875rem", height: "0.875rem" }} /> Selected</div>}
-                      </button>
-                    );
-                  })}
+              {isVisible("wake_word") && (
+                <div style={{ opacity: isMutable("wake_word") ? 1 : 0.6 }}>
+                  <p style={{ ...lbl, display: "flex", alignItems: "center", gap: "0.375rem" }}>
+                    Wake Word
+                    {!isMutable("wake_word") && <span title="Locked by Administrator">🔒</span>}
+                  </p>
+                  <select style={inp} value={settings.wakeWord} disabled={!isMutable("wake_word")}
+                    onChange={(e) => settings.update({ wakeWord: e.target.value })}>
+                    <option value="alexa">Alexa</option>
+                    <option value="hey_jarvis">Hey Jarvis</option>
+                    <option value="hey_mycroft">Hey Mycroft</option>
+                    <option value="hey_rhasspy">Hey Rhasspy</option>
+                  </select>
+                  <p style={sub}>Currently: <span style={{ color: "var(--foreground)", fontFamily: "var(--font-mono)" }}>&quot;{settings.wakeWord}&quot;</span></p>
                 </div>
-              </div>
+              )}
 
-              {settings.sttProvider === "elevenlabs" && (
-                <div style={{ marginBottom: "1.5rem" }}>
-                  <p style={lbl}>ElevenLabs API Key</p>
+              {isVisible("stt_provider") && (
+                <div style={{ opacity: isMutable("stt_provider") ? 1 : 0.6 }}>
+                  <p style={{ ...lbl, display: "flex", alignItems: "center", gap: "0.375rem" }}>
+                    STT Provider
+                    {!isMutable("stt_provider") && <span title="Locked by Administrator">🔒</span>}
+                  </p>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "1rem", marginBottom: "1.5rem" }}>
+                    {([
+                      { key: "whisper", label: "Whisper", desc: "Private, works offline" },
+                      isVisible("elevenlabs_api_key") ? { key: "elevenlabs", label: "ElevenLabs STT", desc: "Scribe v2 cloud, highly accurate" } : null,
+                      isVisible("deepgram_api_key") ? { key: "deepgram", label: "Deepgram STT", desc: "Nova-3 cloud, blazing fast" } : null,
+                    ].filter((x): x is { key: string; label: string; desc: string } => x !== null)).map(({ key, label, desc }) => {
+                      const active = settings.sttProvider === key;
+                      return (
+                        <button key={key}
+                          disabled={!isMutable("stt_provider")}
+                          onClick={() => settings.update({ sttProvider: key as "whisper" | "elevenlabs" | "deepgram" })}
+                          style={{ textAlign: "left", padding: "1.25rem", borderRadius: "0.75rem", cursor: !isMutable("stt_provider") ? "not-allowed" : "pointer", transition: "all 0.2s ease", background: active ? "var(--secondary)" : "transparent", border: active ? "2px solid var(--primary)" : "1px solid var(--border)", boxShadow: active ? "0 4px 12px rgba(0,0,0,0.05)" : "none" }}>
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.5rem" }}>
+                            <span style={{ fontSize: "0.9375rem", fontWeight: 600, color: "var(--foreground)" }}>{label}</span>
+                          </div>
+                          <p style={{ fontSize: "0.8125rem", color: "var(--muted-foreground)" }}>{desc}</p>
+                          {active && <div style={{ marginTop: "0.75rem", display: "flex", alignItems: "center", gap: "0.25rem", color: "var(--primary)", fontSize: "0.75rem", fontWeight: 600 }}><CheckCircle2 style={{ width: "0.875rem", height: "0.875rem" }} /> Selected</div>}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {settings.sttProvider === "elevenlabs" && isVisible("elevenlabs_api_key") && (
+                <div style={{ marginBottom: "1.5rem", opacity: isMutable("elevenlabs_api_key") ? 1 : 0.6 }}>
+                  <p style={{ ...lbl, display: "flex", alignItems: "center", gap: "0.375rem" }}>
+                    ElevenLabs API Key
+                    {!isMutable("elevenlabs_api_key") && <span title="Locked by Administrator">🔒</span>}
+                  </p>
                   <div style={{ position: "relative", maxWidth: "24rem" }}>
                     <input
                       type={showApiKey ? "text" : "password"}
+                      disabled={!isMutable("elevenlabs_api_key")}
                       style={{ ...inp, paddingRight: "3.5rem" }}
                       placeholder={settings.elevenlabsConfigured ? "••••••••••••••••••••••••" : "Enter ElevenLabs API Key"}
                       value={settings.elevenlabsApiKey}
@@ -343,12 +502,16 @@ export default function SettingsPage() {
                 </div>
               )}
 
-              {settings.sttProvider === "deepgram" && (
-                <div style={{ marginBottom: "1.5rem" }}>
-                  <p style={lbl}>Deepgram API Key</p>
+              {settings.sttProvider === "deepgram" && isVisible("deepgram_api_key") && (
+                <div style={{ marginBottom: "1.5rem", opacity: isMutable("deepgram_api_key") ? 1 : 0.6 }}>
+                  <p style={{ ...lbl, display: "flex", alignItems: "center", gap: "0.375rem" }}>
+                    Deepgram API Key
+                    {!isMutable("deepgram_api_key") && <span title="Locked by Administrator">🔒</span>}
+                  </p>
                   <div style={{ position: "relative", maxWidth: "24rem" }}>
                     <input
                       type={showApiKey ? "text" : "password"}
+                      disabled={!isMutable("deepgram_api_key")}
                       style={{ ...inp, paddingRight: "3.5rem" }}
                       placeholder={settings.deepgramConfigured ? "••••••••••••••••••••••••" : "Enter Deepgram API Key"}
                       value={settings.deepgramApiKey}
@@ -365,12 +528,18 @@ export default function SettingsPage() {
                 </div>
               )}
 
-              {settings.sttProvider === "whisper" && (
-                <div>
-                  <p style={lbl}>Whisper Model</p>
+              {settings.sttProvider === "whisper" && isVisible("whisper_model") && (
+                <div style={{ opacity: isMutable("whisper_model") ? 1 : 0.6 }}>
+                  <p style={{ ...lbl, display: "flex", alignItems: "center", gap: "0.375rem" }}>
+                    Whisper Model
+                    {!isMutable("whisper_model") && <span title="Locked by Administrator">🔒</span>}
+                  </p>
                   <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
                     {(["tiny", "base", "small", "medium"] as const).map((m) => (
-                      <button key={m} onClick={() => settings.update({ whisperModel: m })} style={settings.whisperModel === m ? btnA : btnI}>
+                      <button key={m}
+                        disabled={!isMutable("whisper_model")}
+                        onClick={() => settings.update({ whisperModel: m })}
+                        style={settings.whisperModel === m ? btnA : btnI}>
                         {m.charAt(0).toUpperCase() + m.slice(1)}
                       </button>
                     ))}
@@ -379,45 +548,61 @@ export default function SettingsPage() {
                 </div>
               )}
 
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "1rem", padding: "1.25rem", background: "var(--secondary)", borderRadius: "0.75rem" }}>
-                <div>
-                  <p style={{ fontSize: "0.9375rem", fontWeight: 600, color: "var(--foreground)" }}>Noise Cancellation</p>
-                  <p style={{ fontSize: "0.8125rem", color: "var(--muted-foreground)", marginTop: "0.25rem" }}>Aggressively filter background noise using VAD</p>
+              {isVisible("stt_noise_cancellation") && (
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "1rem", padding: "1.25rem", background: "var(--secondary)", borderRadius: "0.75rem", opacity: isMutable("stt_noise_cancellation") ? 1 : 0.6 }}>
+                  <div>
+                    <p style={{ fontSize: "0.9375rem", fontWeight: 600, color: "var(--foreground)", display: "flex", alignItems: "center", gap: "0.375rem" }}>
+                      Noise Cancellation
+                      {!isMutable("stt_noise_cancellation") && <span title="Locked by Administrator">🔒</span>}
+                    </p>
+                    <p style={{ fontSize: "0.8125rem", color: "var(--muted-foreground)", marginTop: "0.25rem" }}>Aggressively filter background noise using VAD</p>
+                  </div>
+                  <Toggle checked={settings.sttNoiseCancellation} disabled={!isMutable("stt_noise_cancellation")} onChange={() => settings.update({ sttNoiseCancellation: !settings.sttNoiseCancellation })} />
                 </div>
-                <Toggle checked={settings.sttNoiseCancellation} onChange={() => settings.update({ sttNoiseCancellation: !settings.sttNoiseCancellation })} />
-              </div>
+              )}
 
-              <div>
-                <p style={lbl}>Interaction Mode</p>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
-                  {[
-                    { key: "require", label: "Require Wake Word", desc: "Say the wake word for every task" },
-                    { key: "continuous", label: "Continuous Listening", desc: "Stay awake for follow-up commands" },
-                  ].map(({ key, label, desc }) => {
-                    const active = (key === "require" && settings.requireWakeWordAlways) || (key === "continuous" && !settings.requireWakeWordAlways);
-                    return (
-                      <button key={key} onClick={() => settings.update({ requireWakeWordAlways: key === "require" })}
-                        style={{ textAlign: "left", padding: "1.25rem", borderRadius: "0.75rem", cursor: "pointer", transition: "all 0.2s ease", background: active ? "var(--secondary)" : "transparent", border: active ? "2px solid var(--primary)" : "1px solid var(--border)", boxShadow: active ? "0 4px 12px rgba(0,0,0,0.05)" : "none" }}>
-                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.5rem" }}>
-                          <span style={{ fontSize: "0.9375rem", fontWeight: 600, color: "var(--foreground)" }}>{label}</span>
-                        </div>
-                        <p style={{ fontSize: "0.8125rem", color: "var(--muted-foreground)" }}>{desc}</p>
-                        {active && <div style={{ marginTop: "0.75rem", display: "flex", alignItems: "center", gap: "0.25rem", color: "var(--primary)", fontSize: "0.75rem", fontWeight: 600 }}><CheckCircle2 style={{ width: "0.875rem", height: "0.875rem" }} /> Selected</div>}
-                      </button>
-                    );
-                  })}
+              {isVisible("require_wake_word_always") && (
+                <div style={{ opacity: isMutable("require_wake_word_always") ? 1 : 0.6 }}>
+                  <p style={{ ...lbl, display: "flex", alignItems: "center", gap: "0.375rem" }}>
+                    Interaction Mode
+                    {!isMutable("require_wake_word_always") && <span title="Locked by Administrator">🔒</span>}
+                  </p>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
+                    {[
+                      { key: "require", label: "Require Wake Word", desc: "Say the wake word for every task" },
+                      { key: "continuous", label: "Continuous Listening", desc: "Stay awake for follow-up commands" },
+                    ].map(({ key, label, desc }) => {
+                      const active = (key === "require" && settings.requireWakeWordAlways) || (key === "continuous" && !settings.requireWakeWordAlways);
+                      return (
+                        <button key={key}
+                          disabled={!isMutable("require_wake_word_always")}
+                          onClick={() => settings.update({ requireWakeWordAlways: key === "require" })}
+                          style={{ textAlign: "left", padding: "1.25rem", borderRadius: "0.75rem", cursor: !isMutable("require_wake_word_always") ? "not-allowed" : "pointer", transition: "all 0.2s ease", background: active ? "var(--secondary)" : "transparent", border: active ? "2px solid var(--primary)" : "1px solid var(--border)", boxShadow: active ? "0 4px 12px rgba(0,0,0,0.05)" : "none" }}>
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.5rem" }}>
+                            <span style={{ fontSize: "0.9375rem", fontWeight: 600, color: "var(--foreground)" }}>{label}</span>
+                          </div>
+                          <p style={{ fontSize: "0.8125rem", color: "var(--muted-foreground)" }}>{desc}</p>
+                          {active && <div style={{ marginTop: "0.75rem", display: "flex", alignItems: "center", gap: "0.25rem", color: "var(--primary)", fontSize: "0.75rem", fontWeight: 600 }}><CheckCircle2 style={{ width: "0.875rem", height: "0.875rem" }} /> Selected</div>}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
+              )}
 
-              {!settings.requireWakeWordAlways && (
-                <div style={{ marginTop: "1rem", padding: "1.25rem", background: "var(--secondary)", borderRadius: "0.75rem", border: "1px solid var(--border)" }}>
-                  <p style={{ fontSize: "0.9375rem", fontWeight: 600, color: "var(--foreground)", marginBottom: "1rem" }}>Active Mode Timeout (Seconds)</p>
+              {!settings.requireWakeWordAlways && isVisible("active_mode_timeout") && (
+                <div style={{ marginTop: "1rem", padding: "1.25rem", background: "var(--secondary)", borderRadius: "0.75rem", border: "1px solid var(--border)", opacity: isMutable("active_mode_timeout") ? 1 : 0.6 }}>
+                  <p style={{ fontSize: "0.9375rem", fontWeight: 600, color: "var(--foreground)", marginBottom: "1rem", display: "flex", alignItems: "center", gap: "0.375rem" }}>
+                    Active Mode Timeout (Seconds)
+                    {!isMutable("active_mode_timeout") && <span title="Locked by Administrator">🔒</span>}
+                  </p>
                   <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
                     <input
                       type="range"
                       min="10"
                       max="600"
                       step="10"
+                      disabled={!isMutable("active_mode_timeout")}
                       value={settings.activeModeTimeout || 120}
                       onChange={(e) => settings.update({ activeModeTimeout: parseInt(e.target.value) })}
                       style={{ flex: 1, accentColor: "var(--primary)" }}
@@ -430,34 +615,48 @@ export default function SettingsPage() {
                 </div>
               )}
 
-              <div style={{ marginTop: "1rem", padding: "1.25rem", background: "var(--secondary)", borderRadius: "0.75rem", border: "1px solid var(--border)" }}>
-                <p style={{ fontSize: "0.9375rem", fontWeight: 600, color: "var(--foreground)", marginBottom: "1rem" }}>Global Keyboard Shortcuts</p>
+              {(isVisible("overlay_shortcut") || isVisible("listen_shortcut")) && (
+                <div style={{ marginTop: "1rem", padding: "1.25rem", background: "var(--secondary)", borderRadius: "0.75rem", border: "1px solid var(--border)" }}>
+                  <p style={{ fontSize: "0.9375rem", fontWeight: 600, color: "var(--foreground)", marginBottom: "1rem" }}>Global Keyboard Shortcuts</p>
 
-                <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-                  <div>
-                    <p style={{ fontSize: "0.8125rem", fontWeight: 600, color: "var(--foreground)", marginBottom: "0.25rem" }}>Toggle Desktop Overlay</p>
-                    <input
-                      type="text"
-                      value={settings.overlayShortcut}
-                      onChange={(e) => settings.update({ overlayShortcut: e.target.value })}
-                      placeholder="e.g. Alt+A"
-                      style={{ width: "100%", padding: "0.5rem 0.75rem", borderRadius: "0.5rem", border: "1px solid var(--border)", background: "var(--background)", color: "var(--foreground)", fontSize: "0.875rem", outline: "none" }}
-                    />
-                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+                    {isVisible("overlay_shortcut") && (
+                      <div>
+                        <p style={{ fontSize: "0.8125rem", fontWeight: 600, color: "var(--foreground)", marginBottom: "0.25rem", display: "flex", alignItems: "center", gap: "0.375rem" }}>
+                          Toggle Desktop Overlay
+                          {!isMutable("overlay_shortcut") && <span title="Locked by Administrator">🔒</span>}
+                        </p>
+                        <input
+                          type="text"
+                          disabled={!isMutable("overlay_shortcut")}
+                          value={settings.overlayShortcut}
+                          onChange={(e) => settings.update({ overlayShortcut: e.target.value })}
+                          placeholder="e.g. Alt+A"
+                          style={{ width: "100%", padding: "0.5rem 0.75rem", borderRadius: "0.5rem", border: "1px solid var(--border)", background: "var(--background)", color: "var(--foreground)", fontSize: "0.875rem", outline: "none", opacity: isMutable("overlay_shortcut") ? 1 : 0.6 }}
+                        />
+                      </div>
+                    )}
 
-                  <div>
-                    <p style={{ fontSize: "0.8125rem", fontWeight: 600, color: "var(--foreground)", marginBottom: "0.25rem" }}>Skip Wake Word (Trigger Listen)</p>
-                    <input
-                      type="text"
-                      value={settings.listenShortcut}
-                      onChange={(e) => settings.update({ listenShortcut: e.target.value })}
-                      placeholder="e.g. Alt+S"
-                      style={{ width: "100%", padding: "0.5rem 0.75rem", borderRadius: "0.5rem", border: "1px solid var(--border)", background: "var(--background)", color: "var(--foreground)", fontSize: "0.875rem", outline: "none" }}
-                    />
+                    {isVisible("listen_shortcut") && (
+                      <div>
+                        <p style={{ fontSize: "0.8125rem", fontWeight: 600, color: "var(--foreground)", marginBottom: "0.25rem", display: "flex", alignItems: "center", gap: "0.375rem" }}>
+                          Skip Wake Word (Trigger Listen)
+                          {!isMutable("listen_shortcut") && <span title="Locked by Administrator">🔒</span>}
+                        </p>
+                        <input
+                          type="text"
+                          disabled={!isMutable("listen_shortcut")}
+                          value={settings.listenShortcut}
+                          onChange={(e) => settings.update({ listenShortcut: e.target.value })}
+                          placeholder="e.g. Alt+S"
+                          style={{ width: "100%", padding: "0.5rem 0.75rem", borderRadius: "0.5rem", border: "1px solid var(--border)", background: "var(--background)", color: "var(--foreground)", fontSize: "0.875rem", outline: "none", opacity: isMutable("listen_shortcut") ? 1 : 0.6 }}
+                        />
+                      </div>
+                    )}
                   </div>
+                  <p style={{ fontSize: "0.75rem", color: "var(--muted-foreground)", marginTop: "0.75rem" }}>Use modifiers like <code>CommandOrControl</code>, <code>Alt</code>, <code>Shift</code>, <code>Super</code> + Letter (e.g. <code>Alt+A</code>). Applies system-wide while ACE is running.</p>
                 </div>
-                <p style={{ fontSize: "0.75rem", color: "var(--muted-foreground)", marginTop: "0.75rem" }}>Use modifiers like <code>CommandOrControl</code>, <code>Alt</code>, <code>Shift</code>, <code>Super</code> + Letter (e.g. <code>Alt+A</code>). Applies system-wide while ACE is running.</p>
-              </div>
+              )}
 
               <div style={{ marginTop: "1rem", padding: "1.25rem", background: "var(--secondary)", borderRadius: "0.75rem", border: "1px solid var(--border)" }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1rem" }}>
@@ -491,32 +690,43 @@ export default function SettingsPage() {
               <span style={{ fontSize: "1rem", fontWeight: 600, color: "var(--foreground)" }}>Text-to-Speech Engine</span>
             </div>
             <div style={body}>
-              <div>
-                <p style={lbl}>TTS Provider</p>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
-                  {[
-                    { key: "piper", label: "Piper TTS", desc: "Fully offline · Fast" },
-                    { key: "gtts", label: "Google TTS", desc: "High quality · Requires internet" },
-                  ].map(({ key, label, desc }) => {
-                    const active = settings.ttsProvider === key;
-                    return (
-                      <button key={key} onClick={() => settings.setTtsProvider(key as "piper" | "gtts")}
-                        style={{ textAlign: "left", padding: "1.25rem", borderRadius: "0.75rem", cursor: "pointer", transition: "all 0.2s", background: active ? "var(--secondary)" : "transparent", border: active ? "2px solid var(--primary)" : "1px solid var(--border)", boxShadow: active ? "0 4px 12px rgba(0,0,0,0.05)" : "none" }}>
-                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.5rem" }}>
-                          <span style={{ fontSize: "0.9375rem", fontWeight: 600, color: "var(--foreground)" }}>{label}</span>
-                        </div>
-                        <p style={{ fontSize: "0.8125rem", color: "var(--muted-foreground)" }}>{desc}</p>
-                        {active && <div style={{ marginTop: "0.75rem", display: "flex", alignItems: "center", gap: "0.25rem", color: "var(--primary)", fontSize: "0.75rem", fontWeight: 600 }}><CheckCircle2 style={{ width: "0.875rem", height: "0.875rem" }} /> Selected</div>}
-                      </button>
-                    );
-                  })}
+              {isVisible("tts_provider") && (
+                <div style={{ opacity: isMutable("tts_provider") ? 1 : 0.6 }}>
+                  <p style={{ ...lbl, display: "flex", alignItems: "center", gap: "0.375rem" }}>
+                    TTS Provider
+                    {!isMutable("tts_provider") && <span title="Locked by Administrator">🔒</span>}
+                  </p>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
+                    {[
+                      { key: "piper", label: "Piper TTS", desc: "Fully offline · Fast" },
+                      { key: "gtts", label: "Google TTS", desc: "High quality · Requires internet" },
+                    ].map(({ key, label, desc }) => {
+                      const active = settings.ttsProvider === key;
+                      return (
+                        <button key={key}
+                          disabled={!isMutable("tts_provider")}
+                          onClick={() => settings.setTtsProvider(key as "piper" | "gtts")}
+                          style={{ textAlign: "left", padding: "1.25rem", borderRadius: "0.75rem", cursor: !isMutable("tts_provider") ? "not-allowed" : "pointer", transition: "all 0.2s", background: active ? "var(--secondary)" : "transparent", border: active ? "2px solid var(--primary)" : "1px solid var(--border)", boxShadow: active ? "0 4px 12px rgba(0,0,0,0.05)" : "none" }}>
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.5rem" }}>
+                            <span style={{ fontSize: "0.9375rem", fontWeight: 600, color: "var(--foreground)" }}>{label}</span>
+                          </div>
+                          <p style={{ fontSize: "0.8125rem", color: "var(--muted-foreground)" }}>{desc}</p>
+                          {active && <div style={{ marginTop: "0.75rem", display: "flex", alignItems: "center", gap: "0.25rem", color: "var(--primary)", fontSize: "0.75rem", fontWeight: 600 }}><CheckCircle2 style={{ width: "0.875rem", height: "0.875rem" }} /> Selected</div>}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
+              )}
 
-              {settings.ttsProvider === "piper" && (
-                <div>
-                  <p style={lbl}>Piper Voice</p>
-                  <select style={{ ...inp, maxWidth: "24rem" }} value={settings.piperVoice} onChange={(e) => settings.update({ piperVoice: e.target.value })}>
+              {settings.ttsProvider === "piper" && isVisible("piper_voice") && (
+                <div style={{ opacity: isMutable("piper_voice") ? 1 : 0.6 }}>
+                  <p style={{ ...lbl, display: "flex", alignItems: "center", gap: "0.375rem" }}>
+                    Piper Voice
+                    {!isMutable("piper_voice") && <span title="Locked by Administrator">🔒</span>}
+                  </p>
+                  <select style={{ ...inp, maxWidth: "24rem" }} value={settings.piperVoice} disabled={!isMutable("piper_voice")}
+                    onChange={(e) => settings.update({ piperVoice: e.target.value })}>
                     <option value="en_US-lessac-medium">Lessac (Female)</option>
                     <option value="en_US-ryan-medium">Ryan (Male)</option>
                     <option value="en_US-hfc_female-medium">HFC Female (Female)</option>
@@ -524,23 +734,35 @@ export default function SettingsPage() {
                 </div>
               )}
 
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "1.5rem", padding: "1.25rem", background: "var(--secondary)", borderRadius: "0.75rem" }}>
-                <div>
-                  <p style={{ fontSize: "0.9375rem", fontWeight: 600, color: "var(--foreground)" }}>Reply Sound</p>
-                  <p style={{ fontSize: "0.8125rem", color: "var(--muted-foreground)", marginTop: "0.25rem" }}>Play audio response voice when executing commands</p>
+              {isVisible("reply_sound") && (
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "1.5rem", padding: "1.25rem", background: "var(--secondary)", borderRadius: "0.75rem", opacity: isMutable("reply_sound") ? 1 : 0.6 }}>
+                  <div>
+                    <p style={{ fontSize: "0.9375rem", fontWeight: 600, color: "var(--foreground)", display: "flex", alignItems: "center", gap: "0.375rem" }}>
+                      Reply Sound
+                      {!isMutable("reply_sound") && <span title="Locked by Administrator">🔒</span>}
+                    </p>
+                    <p style={{ fontSize: "0.8125rem", color: "var(--muted-foreground)", marginTop: "0.25rem" }}>Play audio response voice when executing commands</p>
+                  </div>
+                  <Toggle checked={settings.replySound} disabled={!isMutable("reply_sound")} onChange={() => settings.update({ replySound: !settings.replySound })} />
                 </div>
-                <Toggle checked={settings.replySound} onChange={() => settings.update({ replySound: !settings.replySound })} />
-              </div>
+              )}
 
-              <div style={{ marginTop: "1.5rem" }}>
-                <p style={lbl}>Speech Speed</p>
-                <select style={{ ...inp, maxWidth: "24rem" }} value={settings.speechRate}
-                  onChange={(e) => settings.update({ speechRate: parseFloat(e.target.value) })}>
-                  <option value={1.0}>1x (Normal)</option>
-                  <option value={1.5}>1.5x (Fast)</option>
-                </select>
-                <p style={sub}>Adjust the speed rate of voice speech responses.</p>
-              </div>
+              {isVisible("speech_rate") && (
+                <div style={{ marginTop: "1.5rem", opacity: isMutable("speech_rate") ? 1 : 0.6 }}>
+                  <p style={{ ...lbl, display: "flex", alignItems: "center", gap: "0.375rem" }}>
+                    Speech Speed
+                    {!isMutable("speech_rate") && <span title="Locked by Administrator">🔒</span>}
+                  </p>
+                  <select style={{ ...inp, maxWidth: "24rem" }} value={settings.speechRate} disabled={!isMutable("speech_rate")}
+                    onChange={(e) => settings.update({ speechRate: parseFloat(e.target.value) })}>
+                    <option value={0.5}>0.5x (Slow)</option>
+                    <option value={1.0}>1x (Normal)</option>
+                    <option value={1.5}>1.5x (Fast)</option>
+                    <option value={2.0}>2x (Double)</option>
+                  </select>
+                  <p style={sub}>Adjust the speed rate of voice speech responses.</p>
+                </div>
+              )}
 
               <div style={{ marginTop: "1.5rem", padding: "1.5rem", background: "var(--secondary)", borderRadius: "0.75rem", border: "1px solid var(--border)" }}>
                 <p style={{ fontSize: "0.9375rem", fontWeight: 600, color: "var(--foreground)", marginBottom: "0.25rem" }}>Test Voice Output</p>
@@ -562,13 +784,18 @@ export default function SettingsPage() {
       case "ai":
         return (
           <section style={card}>
-            <div style={{ ...hdr, justifyContent: "space-between" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-                <Bot style={{ width: "1.25rem", height: "1.25rem", color: "var(--primary)" }} />
-                <span style={{ fontSize: "1rem", fontWeight: 600, color: "var(--foreground)" }}>AI Assistant</span>
+            {isVisible("llm_enabled") && (
+              <div style={{ ...hdr, justifyContent: "space-between", opacity: isMutable("llm_enabled") ? 1 : 0.6 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+                  <Bot style={{ width: "1.25rem", height: "1.25rem", color: "var(--primary)" }} />
+                  <span style={{ fontSize: "1rem", fontWeight: 600, color: "var(--foreground)", display: "flex", alignItems: "center", gap: "0.375rem" }}>
+                    AI Assistant
+                    {!isMutable("llm_enabled") && <span title="Locked by Administrator">🔒</span>}
+                  </span>
+                </div>
+                <Toggle checked={settings.llmEnabled} disabled={!isMutable("llm_enabled")} onChange={() => settings.update({ llmEnabled: !settings.llmEnabled })} />
               </div>
-              <Toggle checked={settings.llmEnabled} onChange={() => settings.update({ llmEnabled: !settings.llmEnabled })} />
-            </div>
+            )}
 
             {settings.llmEnabled && (() => {
               const getBillingLink = (p: string) => p === "openai" ? "https://platform.openai.com/account/billing" : p === "groq" ? "https://console.groq.com/settings/billing" : p === "claude" ? "https://console.anthropic.com/settings/billing" : p === "gemini" ? "https://aistudio.google.com/app/billing" : p === "deepseek" ? "https://platform.deepseek.com/usage" : null;
@@ -581,60 +808,87 @@ export default function SettingsPage() {
                     </div>
                   )}
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1.5rem" }}>
-                    <div>
-                      <p style={lbl}>Provider</p>
-                      <select style={inp} value={settings.llmProvider || ""}
-                        onChange={(e) => {
-                          const prov = e.target.value;
-                          if (!prov) return settings.update({ llmProvider: "", llmModel: "" });
-                          const pObj = providers.find(p => p.id === prov);
-                          settings.update({ llmProvider: prov, llmModel: pObj?.models[0] || "" });
-                        }}>
-                        <option value="">None</option>
-                        {providers.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                      </select>
-                      {settings.llmProvider && getBillingLink(settings.llmProvider) && (
-                        <a href={getBillingLink(settings.llmProvider)!} target="_blank" rel="noreferrer" style={{ fontSize: "0.75rem", color: "var(--primary)", marginTop: "0.5rem", display: "inline-block", textDecoration: "underline" }}>Manage Billing & Quota ↗</a>
-                      )}
-                    </div>
-                    <div>
-                      <p style={lbl}>Model</p>
-                      <select style={inp} value={settings.llmModel || ""} onChange={(e) => settings.update({ llmModel: e.target.value })}>
-                        <option value="">None</option>
-                        {providers.find(p => p.id === settings.llmProvider)?.models.map(m => <option key={m} value={m}>{m}</option>)}
-                      </select>
-                    </div>
+                    {isVisible("llm_provider") && (
+                      <div style={{ opacity: isMutable("llm_provider") ? 1 : 0.6 }}>
+                        <p style={{ ...lbl, display: "flex", alignItems: "center", gap: "0.375rem" }}>
+                          Provider
+                          {!isMutable("llm_provider") && <span title="Locked by Administrator">🔒</span>}
+                        </p>
+                        <select style={inp} value={settings.llmProvider || ""} disabled={!isMutable("llm_provider")}
+                          onChange={(e) => {
+                            const prov = e.target.value;
+                            if (!prov) return settings.update({ llmProvider: "", llmModel: "" });
+                            const pObj = providers.find(p => p.id === prov);
+                            settings.update({ llmProvider: prov, llmModel: pObj?.models[0] || "" });
+                          }}>
+                          <option value="">None</option>
+                          {providers.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                        </select>
+                        {settings.llmProvider && getBillingLink(settings.llmProvider) && (
+                          <a href={getBillingLink(settings.llmProvider)!} target="_blank" rel="noreferrer" style={{ fontSize: "0.75rem", color: "var(--primary)", marginTop: "0.5rem", display: "inline-block", textDecoration: "underline" }}>Manage Billing & Quota ↗</a>
+                        )}
+                      </div>
+                    )}
+                    {isVisible("llm_model") && (
+                      <div style={{ opacity: isMutable("llm_model") ? 1 : 0.6 }}>
+                        <p style={{ ...lbl, display: "flex", alignItems: "center", gap: "0.375rem" }}>
+                          Model
+                          {!isMutable("llm_model") && <span title="Locked by Administrator">🔒</span>}
+                        </p>
+                        <select style={inp} value={settings.llmModel || ""} disabled={!isMutable("llm_model")}
+                          onChange={(e) => settings.update({ llmModel: e.target.value })}>
+                          <option value="">None</option>
+                          {providers.find(p => p.id === settings.llmProvider)?.models.map(m => <option key={m} value={m}>{m}</option>)}
+                        </select>
+                      </div>
+                    )}
                   </div>
 
-                  <div>
-                    <p style={lbl}>API Key</p>
-                    <div style={{ position: "relative" }}>
-                      <input type={showApiKey ? "text" : "password"} style={{ ...inp, paddingRight: "3.5rem" }}
-                        placeholder="••••••••••••••••••••••••" value={settings.llmApiKey} onChange={(e) => settings.update({ llmApiKey: e.target.value })} />
-                      <button onClick={() => setShowApiKey(!showApiKey)}
-                        style={{ position: "absolute", right: "1rem", top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "var(--muted-foreground)" }}>
-                        {showApiKey ? <EyeOff size={18} /> : <Eye size={18} />}
-                      </button>
+                  {isVisible("llm_api_key_encrypted") && (
+                    <div style={{ opacity: isMutable("llm_api_key_encrypted") ? 1 : 0.6 }}>
+                      <p style={{ ...lbl, display: "flex", alignItems: "center", gap: "0.375rem" }}>
+                        API Key
+                        {!isMutable("llm_api_key_encrypted") && <span title="Locked by Administrator">🔒</span>}
+                      </p>
+                      <div style={{ position: "relative" }}>
+                        <input type={showApiKey ? "text" : "password"} style={{ ...inp, paddingRight: "3.5rem" }}
+                          disabled={!isMutable("llm_api_key_encrypted")}
+                          placeholder="••••••••••••••••••••••••" value={settings.llmApiKey} onChange={(e) => settings.update({ llmApiKey: e.target.value })} />
+                        <button onClick={() => setShowApiKey(!showApiKey)}
+                          style={{ position: "absolute", right: "1rem", top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "var(--muted-foreground)" }}>
+                          {showApiKey ? <EyeOff size={18} /> : <Eye size={18} />}
+                        </button>
+                      </div>
+                      <p style={sub}>Only required if changing. Saved securely in the database.</p>
                     </div>
-                    <p style={sub}>Only required if changing. Saved securely in the database.</p>
-                  </div>
+                  )}
 
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1.5rem" }}>
-                    <div>
-                      <p style={lbl}>Processing Mode</p>
-                      <div style={{ display: "flex", gap: "0.5rem" }}>
-                        <button onClick={() => settings.update({ llmMode: "fallback" })} style={settings.llmMode === "fallback" ? btnA : btnI}>Fallback</button>
-                        <button onClick={() => settings.update({ llmMode: "always_on" })} style={settings.llmMode === "always_on" ? btnA : btnI}>Always-On</button>
+                    {isVisible("llm_mode") && (
+                      <div style={{ opacity: isMutable("llm_mode") ? 1 : 0.6 }}>
+                        <p style={{ ...lbl, display: "flex", alignItems: "center", gap: "0.375rem" }}>
+                          Processing Mode
+                          {!isMutable("llm_mode") && <span title="Locked by Administrator">🔒</span>}
+                        </p>
+                        <div style={{ display: "flex", gap: "0.5rem" }}>
+                          <button disabled={!isMutable("llm_mode")} onClick={() => settings.update({ llmMode: "fallback" })} style={settings.llmMode === "fallback" ? btnA : btnI}>Fallback</button>
+                          <button disabled={!isMutable("llm_mode")} onClick={() => settings.update({ llmMode: "always_on" })} style={settings.llmMode === "always_on" ? btnA : btnI}>Always-On</button>
+                        </div>
+                        <p style={sub}>{settings.llmMode === "fallback" ? "Low Token Usage: Calls AI only if intent matches fail" : "High Token Usage: Routes every command to AI"}</p>
                       </div>
-                      <p style={sub}>{settings.llmMode === "fallback" ? "Low Token Usage: Calls AI only if intent matches fail" : "High Token Usage: Routes every command to AI"}</p>
-                    </div>
-                    <div>
-                      <p style={lbl}>Temperature: {settings.llmTemperature}</p>
-                      <input type="range" min="0" max="1" step="0.1" value={settings.llmTemperature} onChange={(e) => settings.update({ llmTemperature: parseFloat(e.target.value) })} style={{ width: "100%", marginTop: "0.5rem", accentColor: "var(--primary)" }} />
-                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.75rem", color: "var(--muted-foreground)", marginTop: "0.25rem", fontWeight: 500 }}>
-                        <span>Precise</span><span>Creative</span>
+                    )}
+                    {isVisible("llm_temperature") && (
+                      <div style={{ opacity: isMutable("llm_temperature") ? 1 : 0.6 }}>
+                        <p style={{ ...lbl, display: "flex", alignItems: "center", gap: "0.375rem" }}>
+                          Temperature: {settings.llmTemperature}
+                          {!isMutable("llm_temperature") && <span title="Locked by Administrator">🔒</span>}
+                        </p>
+                        <input type="range" min="0" max="1" step="0.1" value={settings.llmTemperature} disabled={!isMutable("llm_temperature")} onChange={(e) => settings.update({ llmTemperature: parseFloat(e.target.value) })} style={{ width: "100%", marginTop: "0.5rem", accentColor: "var(--primary)" }} />
+                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.75rem", color: "var(--muted-foreground)", marginTop: "0.25rem", fontWeight: 500 }}>
+                          <span>Precise</span><span>Creative</span>
+                        </div>
                       </div>
-                    </div>
+                    )}
                   </div>
 
                   <div style={{ marginTop: "1rem", padding: "1.25rem", background: "var(--secondary)", borderRadius: "0.75rem", border: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
@@ -667,106 +921,130 @@ export default function SettingsPage() {
               <span style={{ fontSize: "1rem", fontWeight: 600, color: "var(--foreground)" }}>Browser Automation</span>
             </div>
             <div style={body}>
-              <div>
-                <p style={lbl}>Browser Engine</p>
-                <div style={{ display: "flex", gap: "0.75rem" }}>
-                  {(["chromium", "firefox", "webkit"] as const).map((b) => (
-                    <button key={b} onClick={() => settings.update({ browserType: b })} style={settings.browserType === b ? btnA : btnI}>
-                      {b.charAt(0).toUpperCase() + b.slice(1)}
-                    </button>
-                  ))}
+              {isVisible("browser_type") && (
+                <div style={{ opacity: isMutable("browser_type") ? 1 : 0.6 }}>
+                  <p style={{ ...lbl, display: "flex", alignItems: "center", gap: "0.375rem" }}>
+                    Browser Engine
+                    {!isMutable("browser_type") && <span title="Locked by Administrator">🔒</span>}
+                  </p>
+                  <div style={{ display: "flex", gap: "0.75rem" }}>
+                    {(["chromium", "firefox", "webkit"] as const).map((b) => (
+                      <button key={b} disabled={!isMutable("browser_type")} onClick={() => settings.update({ browserType: b })} style={settings.browserType === b ? btnA : btnI}>
+                        {b.charAt(0).toUpperCase() + b.slice(1)}
+                      </button>
+                    ))}
+                  </div>
+                  <p style={sub}>Chromium is highly recommended for stability.</p>
                 </div>
-                <p style={sub}>Chromium is highly recommended for stability.</p>
-              </div>
+              )}
 
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "1rem", padding: "1.25rem", background: "var(--secondary)", borderRadius: "0.75rem" }}>
-                <div>
-                  <p style={{ fontSize: "0.9375rem", fontWeight: 600, color: "var(--foreground)" }}>Browser Animations</p>
-                  <p style={{ fontSize: "0.8125rem", color: "var(--muted-foreground)", marginTop: "0.25rem" }}>Show visual feedback (animated cursor, element highlights) during automation</p>
+              {isVisible("browser_animations_enabled") && (
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "1rem", padding: "1.25rem", background: "var(--secondary)", borderRadius: "0.75rem", opacity: isMutable("browser_animations_enabled") ? 1 : 0.6 }}>
+                  <div>
+                    <p style={{ fontSize: "0.9375rem", fontWeight: 600, color: "var(--foreground)", display: "flex", alignItems: "center", gap: "0.375rem" }}>
+                      Browser Animations
+                      {!isMutable("browser_animations_enabled") && <span title="Locked by Administrator">🔒</span>}
+                    </p>
+                    <p style={{ fontSize: "0.8125rem", color: "var(--muted-foreground)", marginTop: "0.25rem" }}>Show visual feedback (animated cursor, element highlights) during automation</p>
+                  </div>
+                  <Toggle checked={settings.browserAnimationsEnabled} disabled={!isMutable("browser_animations_enabled")} onChange={() => settings.update({ browserAnimationsEnabled: !settings.browserAnimationsEnabled })} />
                 </div>
-                <Toggle checked={settings.browserAnimationsEnabled} onChange={() => settings.update({ browserAnimationsEnabled: !settings.browserAnimationsEnabled })} />
-              </div>
+              )}
 
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "1rem", padding: "1.25rem", background: "var(--secondary)", borderRadius: "0.75rem" }}>
-                <div>
-                  <p style={{ fontSize: "0.9375rem", fontWeight: 600, color: "var(--foreground)" }}>Restrict Website Automation</p>
-                  <p style={{ fontSize: "0.8125rem", color: "var(--muted-foreground)", marginTop: "0.25rem" }}>Only allow browser automation on sites added to Website Shortcuts</p>
+              {isVisible("restrict_browser_automation") && (
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "1rem", padding: "1.25rem", background: "var(--secondary)", borderRadius: "0.75rem", opacity: isMutable("restrict_browser_automation") ? 1 : 0.6 }}>
+                  <div>
+                    <p style={{ fontSize: "0.9375rem", fontWeight: 600, color: "var(--foreground)", display: "flex", alignItems: "center", gap: "0.375rem" }}>
+                      Restrict Website Automation
+                      {!isMutable("restrict_browser_automation") && <span title="Locked by Administrator">🔒</span>}
+                    </p>
+                    <p style={{ fontSize: "0.8125rem", color: "var(--muted-foreground)", marginTop: "0.25rem" }}>Only allow browser automation on sites added to Website Shortcuts</p>
+                  </div>
+                  <Toggle checked={settings.restrictBrowserAutomation} disabled={!isMutable("restrict_browser_automation")} onChange={() => settings.update({ restrictBrowserAutomation: !settings.restrictBrowserAutomation })} />
                 </div>
-                <Toggle checked={settings.restrictBrowserAutomation} onChange={() => settings.update({ restrictBrowserAutomation: !settings.restrictBrowserAutomation })} />
-              </div>
+              )}
 
               {/* ── Website Shortcuts ── */}
-              <div style={{ marginTop: "1rem", paddingTop: "1.5rem", borderTop: "1px solid var(--border)" }}>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.5rem" }}>
-                  <div>
-                    <p style={{ fontSize: "1rem", fontWeight: 600, color: "var(--foreground)" }}>Website Shortcuts</p>
-                    <p style={{ fontSize: "0.8rem", color: "var(--muted-foreground)", marginTop: "0.2rem" }}>Say a keyword to instantly open any website — CRM, dashboards, tools, anything.</p>
-                  </div>
-                  <button
-                    id="add-website-shortcut-btn"
-                    onClick={() => settings.update({ crmSites: [...settings.crmSites, { url: "", keywords: "" }] })}
-                    style={{ display: "flex", alignItems: "center", gap: "0.375rem", padding: "0.375rem 0.875rem", borderRadius: "0.5rem", fontSize: "0.8125rem", fontWeight: 600, cursor: "pointer", background: "var(--primary)", color: "var(--primary-foreground, #fff)", border: "none", flexShrink: 0 }}>
-                    + Add Website
-                  </button>
-                </div>
-
-                <div style={{ display: "flex", flexDirection: "column", gap: "0.875rem" }}>
-                  {settings.crmSites.map((site, idx) => (
-                    <div key={idx} style={{ background: "var(--secondary)", borderRadius: "0.75rem", padding: "1rem", border: "1px solid var(--border)" }}>
-                      {/* Site header */}
-                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.75rem" }}>
-                        <span style={{ fontSize: "0.8125rem", fontWeight: 600, color: "var(--muted-foreground)" }}>Website {idx + 1}</span>
-                        {settings.crmSites.length > 1 && (
-                          <button
-                            onClick={() => {
-                              const updated = settings.crmSites.filter((_, i) => i !== idx);
-                              settings.update({ crmSites: updated, crmUrl: updated[0]?.url || "", crmKeywords: updated[0]?.keywords || "" });
-                            }}
-                            style={{ background: "none", border: "none", cursor: "pointer", color: "var(--muted-foreground)", fontSize: "1rem", padding: "0 0.25rem", lineHeight: 1 }}
-                            title="Remove this website">
-                            ✕
-                          </button>
-                        )}
-                      </div>
-
-                      {/* URL row */}
-                      <div style={{ marginBottom: "0.625rem" }}>
-                        <p style={{ ...lbl, marginBottom: "0.375rem" }}>Website URL</p>
-                        <input
-                          style={inp}
-                          value={site.url}
-                          placeholder="https://example.com/"
-                          onChange={(e) => {
-                            const updated = settings.crmSites.map((s, i) => i === idx ? { ...s, url: e.target.value } : s);
-                            settings.update({ crmSites: updated, ...(idx === 0 ? { crmUrl: e.target.value } : {}) });
-                          }}
-                        />
-                      </div>
-
-                      {/* Keywords row */}
-                      <div>
-                        <p style={{ ...lbl, marginBottom: "0.375rem" }}>Voice Keywords <span style={{ fontWeight: 400, color: "var(--muted-foreground)" }}>(comma separated)</span></p>
-                        <input
-                          style={inp}
-                          value={site.keywords}
-                          placeholder="open my dashboard, open analytics"
-                          onChange={(e) => {
-                            const updated = settings.crmSites.map((s, i) => i === idx ? { ...s, keywords: e.target.value } : s);
-                            settings.update({ crmSites: updated, ...(idx === 0 ? { crmKeywords: e.target.value } : {}) });
-                          }}
-                        />
-                        <p style={sub}>Say any of these phrases to instantly open this website.</p>
-                      </div>
+              {isVisible("crm_sites") && (
+                <div style={{ marginTop: "1rem", paddingTop: "1.5rem", borderTop: "1px solid var(--border)", opacity: isMutable("crm_sites") ? 1 : 0.6 }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.5rem" }}>
+                    <div>
+                      <p style={{ fontSize: "1rem", fontWeight: 600, color: "var(--foreground)", display: "flex", alignItems: "center", gap: "0.375rem" }}>
+                        Website Shortcuts
+                        {!isMutable("crm_sites") && <span title="Locked by Administrator">🔒</span>}
+                      </p>
+                      <p style={{ fontSize: "0.8rem", color: "var(--muted-foreground)", marginTop: "0.2rem" }}>Say a keyword to instantly open any website — CRM, dashboards, tools, anything.</p>
                     </div>
-                  ))}
+                    {isMutable("crm_sites") && (
+                      <button
+                        id="add-website-shortcut-btn"
+                        onClick={() => settings.update({ crmSites: [...settings.crmSites, { url: "", keywords: "" }] })}
+                        style={{ display: "flex", alignItems: "center", gap: "0.375rem", padding: "0.375rem 0.875rem", borderRadius: "0.5rem", fontSize: "0.8125rem", fontWeight: 600, cursor: "pointer", background: "var(--primary)", color: "var(--primary-foreground, #fff)", border: "none", flexShrink: 0 }}>
+                        + Add Website
+                      </button>
+                    )}
+                  </div>
 
-                  {settings.crmSites.length === 0 && (
-                    <p style={{ fontSize: "0.875rem", color: "var(--muted-foreground)", textAlign: "center", padding: "1rem" }}>
-                      No websites configured. Click <strong>+ Add Website</strong> to add your first shortcut.
-                    </p>
-                  )}
+                  <div style={{ display: "flex", flexDirection: "column", gap: "0.875rem" }}>
+                    {settings.crmSites.map((site, idx) => (
+                      <div key={idx} style={{ background: "var(--secondary)", borderRadius: "0.75rem", padding: "1rem", border: "1px solid var(--border)" }}>
+                        {/* Site header */}
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.75rem" }}>
+                          <span style={{ fontSize: "0.8125rem", fontWeight: 600, color: "var(--muted-foreground)" }}>Website {idx + 1}</span>
+                          {settings.crmSites.length > 1 && isMutable("crm_sites") && (
+                            <button
+                              onClick={() => {
+                                const updated = settings.crmSites.filter((_, i) => i !== idx);
+                                settings.update({ crmSites: updated, crmUrl: updated[0]?.url || "", crmKeywords: updated[0]?.keywords || "" });
+                              }}
+                              style={{ background: "none", border: "none", cursor: "pointer", color: "var(--muted-foreground)", fontSize: "1rem", padding: "0 0.25rem", lineHeight: 1 }}
+                              title="Remove this website">
+                              ✕
+                            </button>
+                          )}
+                        </div>
+
+                        {/* URL row */}
+                        <div style={{ marginBottom: "0.625rem" }}>
+                          <p style={{ ...lbl, marginBottom: "0.375rem" }}>Website URL</p>
+                          <input
+                            style={inp}
+                            disabled={!isMutable("crm_sites")}
+                            value={site.url}
+                            placeholder="https://example.com/"
+                            onChange={(e) => {
+                              const updated = settings.crmSites.map((s, i) => i === idx ? { ...s, url: e.target.value } : s);
+                              settings.update({ crmSites: updated, ...(idx === 0 ? { crmUrl: e.target.value } : {}) });
+                            }}
+                          />
+                        </div>
+
+                        {/* Keywords row */}
+                        <div>
+                          <p style={{ ...lbl, marginBottom: "0.375rem" }}>Voice Keywords <span style={{ fontWeight: 400, color: "var(--muted-foreground)" }}>(comma separated)</span></p>
+                          <input
+                            style={inp}
+                            disabled={!isMutable("crm_sites")}
+                            value={site.keywords}
+                            placeholder="open my dashboard, open analytics"
+                            onChange={(e) => {
+                              const updated = settings.crmSites.map((s, i) => i === idx ? { ...s, keywords: e.target.value } : s);
+                              settings.update({ crmSites: updated, ...(idx === 0 ? { crmKeywords: e.target.value } : {}) });
+                            }}
+                          />
+                          <p style={sub}>Say any of these phrases to instantly open this website.</p>
+                        </div>
+                      </div>
+                    ))}
+
+                    {settings.crmSites.length === 0 && (
+                      <p style={{ fontSize: "0.875rem", color: "var(--muted-foreground)", textAlign: "center", padding: "1rem" }}>
+                        No websites configured.
+                      </p>
+                    )}
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           </section>
         );
@@ -779,16 +1057,21 @@ export default function SettingsPage() {
               <span style={{ fontSize: "1rem", fontWeight: 600, color: "var(--foreground)" }}>System Preferences</span>
             </div>
             <div style={body}>
-              <div>
-                <p style={lbl}>Theme</p>
-                <div style={{ display: "flex", gap: "0.75rem" }}>
-                  {(["dark", "light"] as const).map((t) => (
-                    <button key={t} onClick={() => settings.update({ theme: t })} style={settings.theme === t ? btnA : btnI}>
-                      {t.charAt(0).toUpperCase() + t.slice(1)} Mode
-                    </button>
-                  ))}
+              {isVisible("theme") && (
+                <div style={{ opacity: isMutable("theme") ? 1 : 0.6 }}>
+                  <p style={{ ...lbl, display: "flex", alignItems: "center", gap: "0.375rem" }}>
+                    Theme
+                    {!isMutable("theme") && <span title="Locked by Administrator">🔒</span>}
+                  </p>
+                  <div style={{ display: "flex", gap: "0.75rem" }}>
+                    {(["dark", "light"] as const).map((t) => (
+                      <button key={t} disabled={!isMutable("theme")} onClick={() => settings.update({ theme: t })} style={settings.theme === t ? btnA : btnI}>
+                        {t.charAt(0).toUpperCase() + t.slice(1)} Mode
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
 
               <div style={{ display: "flex", flexDirection: "column", gap: "1rem", marginTop: "1rem" }}>
                 {[
@@ -796,56 +1079,67 @@ export default function SettingsPage() {
                   { key: "startupOnBoot", label: "Start on boot", desc: "Launch ACE automatically when Windows starts" },
                   { key: "minimizeToTray", label: "Minimize to tray", desc: "Keep ACE running in the background when closed" },
                 ].map(({ key, label, desc }) => {
+                  const dbKey = key === "enableDesktopOverlay" ? "enable_desktop_overlay" :
+                                key === "startupOnBoot" ? "startup_on_boot" : "minimize_to_tray";
+                  if (!isVisible(dbKey)) return null;
                   const val = settings[key as "startupOnBoot" | "minimizeToTray" | "enableDesktopOverlay"];
+                  const disabled = !isMutable(dbKey);
                   return (
-                    <div key={key} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "1.25rem", background: "var(--secondary)", borderRadius: "0.75rem" }}>
+                    <div key={key} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "1.25rem", background: "var(--secondary)", borderRadius: "0.75rem", opacity: disabled ? 0.6 : 1 }}>
                       <div>
-                        <p style={{ fontSize: "0.9375rem", fontWeight: 600, color: "var(--foreground)" }}>{label}</p>
+                        <p style={{ fontSize: "0.9375rem", fontWeight: 600, color: "var(--foreground)", display: "flex", alignItems: "center", gap: "0.375rem" }}>
+                          {label}
+                          {disabled && <span title="Locked by Administrator">🔒</span>}
+                        </p>
                         <p style={{ fontSize: "0.8125rem", color: "var(--muted-foreground)", marginTop: "0.25rem" }}>{desc}</p>
                       </div>
-                      <Toggle checked={val} onChange={() => settings.update({ [key]: !val })} />
+                      <Toggle checked={val} disabled={disabled} onChange={() => settings.update({ [key]: !val })} />
                     </div>
                   );
                 })}
               </div>
 
               {/* ── App & File Scanning ── */}
-              <div style={{ marginTop: "1.5rem", paddingTop: "1.5rem", borderTop: "1px solid var(--border)" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "0.625rem", marginBottom: "1rem" }}>
-                  <HardDrive style={{ width: "1.125rem", height: "1.125rem", color: "var(--primary)" }} />
-                  <p style={{ fontSize: "0.9375rem", fontWeight: 600, color: "var(--foreground)" }}>App &amp; File Scanning</p>
-                </div>
+              {isVisible("scan_mode") && (
+                <div style={{ marginTop: "1.5rem", paddingTop: "1.5rem", borderTop: "1px solid var(--border)", opacity: isMutable("scan_mode") ? 1 : 0.6 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.625rem", marginBottom: "1rem" }}>
+                    <HardDrive style={{ width: "1.125rem", height: "1.125rem", color: "var(--primary)" }} />
+                    <p style={{ fontSize: "0.9375rem", fontWeight: 600, color: "var(--foreground)", display: "flex", alignItems: "center", gap: "0.375rem" }}>
+                      App &amp; File Scanning
+                      {!isMutable("scan_mode") && <span title="Locked by Administrator">🔒</span>}
+                    </p>
+                  </div>
 
-                {/* Mode selector */}
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginBottom: "1.25rem" }}>
-                  {([
-                    { key: "auto", label: "Auto", desc: "Scan on startup and refresh automatically", icon: "🔄" },
-                    { key: "manual", label: "Manual", desc: "Only scan when you click the button below", icon: "🖐" },
-                  ] as const).map(({ key, label, desc, icon }) => {
-                    const active = settings.scanMode === key;
-                    return (
-                      <button key={key} onClick={() => settings.update({ scanMode: key })}
-                        style={{
-                          textAlign: "left", padding: "1.125rem", borderRadius: "0.75rem",
-                          cursor: "pointer", transition: "all 0.2s ease",
-                          background: active ? "var(--secondary)" : "transparent",
-                          border: active ? "2px solid var(--primary)" : "1px solid var(--border)",
-                          boxShadow: active ? "0 4px 12px rgba(0,0,0,0.05)" : "none",
-                        }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.375rem" }}>
-                          <span style={{ fontSize: "1.1rem" }}>{icon}</span>
-                          <span style={{ fontSize: "0.9375rem", fontWeight: 600, color: "var(--foreground)" }}>{label}</span>
-                        </div>
-                        <p style={{ fontSize: "0.8125rem", color: "var(--muted-foreground)" }}>{desc}</p>
-                        {active && (
-                          <div style={{ marginTop: "0.625rem", display: "flex", alignItems: "center", gap: "0.25rem", color: "var(--primary)", fontSize: "0.75rem", fontWeight: 600 }}>
-                            <CheckCircle2 style={{ width: "0.875rem", height: "0.875rem" }} /> Selected
+                  {/* Mode selector */}
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginBottom: "1.25rem" }}>
+                    {([
+                      { key: "auto", label: "Auto", desc: "Scan on startup and refresh automatically", icon: "🔄" },
+                      { key: "manual", label: "Manual", desc: "Only scan when you click the button below", icon: "🖐" },
+                    ] as const).map(({ key, label, desc, icon }) => {
+                      const active = settings.scanMode === key;
+                      return (
+                        <button key={key} disabled={!isMutable("scan_mode")} onClick={() => settings.update({ scanMode: key })}
+                          style={{
+                            textAlign: "left", padding: "1.125rem", borderRadius: "0.75rem",
+                            cursor: !isMutable("scan_mode") ? "not-allowed" : "pointer", transition: "all 0.2s ease",
+                            background: active ? "var(--secondary)" : "transparent",
+                            border: active ? "2px solid var(--primary)" : "1px solid var(--border)",
+                            boxShadow: active ? "0 4px 12px rgba(0,0,0,0.05)" : "none",
+                          }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.375rem" }}>
+                            <span style={{ fontSize: "1.1rem" }}>{icon}</span>
+                            <span style={{ fontSize: "0.9375rem", fontWeight: 600, color: "var(--foreground)" }}>{label}</span>
                           </div>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
+                          <p style={{ fontSize: "0.8125rem", color: "var(--muted-foreground)" }}>{desc}</p>
+                          {active && (
+                            <div style={{ marginTop: "0.625rem", display: "flex", alignItems: "center", gap: "0.25rem", color: "var(--primary)", fontSize: "0.75rem", fontWeight: 600 }}>
+                              <CheckCircle2 style={{ width: "0.875rem", height: "0.875rem" }} /> Selected
+                            </div>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
 
                 {/* Scan Now row */}
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "1rem 1.25rem", background: "var(--secondary)", borderRadius: "0.75rem", border: "1px solid var(--border)" }}>
@@ -879,6 +1173,156 @@ export default function SettingsPage() {
                   </button>
                 </div>
               </div>
+            )}
+            </div>
+          </section>
+        );
+      case "admin":
+        return (
+          <section style={card}>
+            <div style={hdr}>
+              <Shield style={{ width: "1.25rem", height: "1.25rem", color: "var(--primary)" }} />
+              <span style={{ fontSize: "1rem", fontWeight: 600, color: "var(--foreground)" }}>Policy Administration</span>
+            </div>
+            <div style={body}>
+              <p style={{ fontSize: "0.875rem", color: "var(--muted-foreground)", marginBottom: "1.5rem" }}>
+                Configure screen settings visibility and modify fine-grained permissions for each user.
+              </p>
+
+              {adminError && (
+                <div style={{ padding: "1rem", borderRadius: "0.5rem", background: "rgba(239,68,68,0.1)", color: "#dc2626", border: "1px solid rgba(239,68,68,0.2)", fontSize: "0.875rem", fontWeight: 500, marginBottom: "1rem" }}>
+                  {adminError}
+                </div>
+              )}
+
+              {adminSuccess && (
+                <div style={{ padding: "1rem", borderRadius: "0.5rem", background: "rgba(34,197,94,0.1)", color: "#16a34a", border: "1px solid rgba(34,197,94,0.2)", fontSize: "0.875rem", fontWeight: 500, marginBottom: "1rem" }}>
+                  {adminSuccess}
+                </div>
+              )}
+
+              {loadingPolicies ? (
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "10rem", gap: "0.5rem", color: "var(--muted-foreground)" }}>
+                  <Loader2 size={20} className="animate-spin" />
+                  <span>Loading user policies...</span>
+                </div>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
+                  {usersPolicies.map((user) => (
+                    <div key={user.user_id} style={{ padding: "1.5rem", background: "var(--secondary)", borderRadius: "0.75rem", border: "1px solid var(--border)" }}>
+                      
+                      {/* User Header Info */}
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid var(--border)", paddingBottom: "1rem", marginBottom: "1rem" }}>
+                        <div>
+                          <p style={{ fontSize: "1rem", fontWeight: 600, color: "var(--foreground)" }}>{user.display_name || "Unnamed User"}</p>
+                          <p style={{ fontSize: "0.8125rem", color: "var(--muted-foreground)" }}>{user.email} (Role: <span style={{ color: "var(--primary)", fontWeight: 600 }}>{user.role}</span>)</p>
+                        </div>
+                        
+                        {/* Save Action for this user */}
+                        <button
+                          onClick={() => handleUpdatePolicy(user.user_id, user.permissions, user.screen_settings_visible_to_users)}
+                          disabled={adminSavingUser === user.user_id}
+                          style={{
+                            display: "flex", alignItems: "center", gap: "0.375rem",
+                            padding: "0.5rem 1rem", borderRadius: "0.5rem",
+                            fontSize: "0.8125rem", fontWeight: 600, cursor: adminSavingUser === user.user_id ? "not-allowed" : "pointer",
+                            background: "var(--primary)", color: "var(--primary-foreground)", border: "none"
+                          }}
+                        >
+                          {adminSavingUser === user.user_id ? (
+                            <><Loader2 size={14} className="animate-spin" /> Saving...</>
+                          ) : "Save Changes"}
+                        </button>
+                      </div>
+
+                      {/* General settings visibility */}
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0.75rem 1rem", background: "var(--background)", borderRadius: "0.5rem", marginBottom: "1rem" }}>
+                        <div>
+                          <p style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--foreground)" }}>Screen Settings Visibility</p>
+                          <p style={{ fontSize: "0.75rem", color: "var(--muted-foreground)" }}>If enabled, user can view &amp; edit system/screen settings tabs. Otherwise, hidden.</p>
+                        </div>
+                        <Toggle
+                          checked={user.screen_settings_visible_to_users}
+                          onChange={() => {
+                            const newVisible = !user.screen_settings_visible_to_users;
+                            const updated = usersPolicies.map(u => u.user_id === user.user_id ? { ...u, screen_settings_visible_to_users: newVisible } : u);
+                            setUsersPolicies(updated);
+                            handleUpdatePolicy(user.user_id, user.permissions, newVisible);
+                          }}
+                        />
+                      </div>
+
+                      {/* Fine-grained permissions controls */}
+                      <div>
+                        <p style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--foreground)", marginBottom: "0.75rem" }}>Setting Permissions Matrix</p>
+                        
+                        <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+                          {PERMISSION_FIELDS.map((group) => (
+                            <div key={group.category} style={{ border: "1px solid var(--border)", borderRadius: "0.75rem", padding: "1rem", background: "var(--background)" }}>
+                              <p style={{ fontSize: "0.8125rem", fontWeight: 700, color: "var(--primary)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "0.75rem" }}>{group.category}</p>
+                              <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                                {group.items.map((field) => {
+                                  const perm = user.permissions[field.key] || { visible: true, mutable: true };
+                                  return (
+                                    <div key={field.key} style={{ display: "grid", gridTemplateColumns: "1.5fr 1fr 1fr", alignItems: "center", padding: "0.625rem 0.875rem", background: "var(--secondary)", borderRadius: "0.5rem", border: "1px solid var(--border)" }}>
+                                      <span style={{ fontSize: "0.8125rem", fontWeight: 500, color: "var(--foreground)" }}>{field.label}</span>
+                                      
+                                      {/* Visible Option toggle */}
+                                      <div style={{ display: "flex", alignItems: "center", gap: "0.375rem" }}>
+                                        <span style={{ fontSize: "0.75rem", color: "var(--muted-foreground)" }}>Visible:</span>
+                                        <Toggle
+                                          checked={perm.visible}
+                                          onChange={() => {
+                                            const updatedPerms = {
+                                              ...user.permissions,
+                                              [field.key]: { ...perm, visible: !perm.visible }
+                                            };
+                                            setUsersPolicies(usersPolicies.map(u => u.user_id === user.user_id ? { ...u, permissions: updatedPerms } : u));
+                                            handleUpdatePolicy(user.user_id, updatedPerms, user.screen_settings_visible_to_users);
+                                          }}
+                                        />
+                                      </div>
+
+                                      {/* Mutable Option toggle */}
+                                      <div style={{ display: "flex", alignItems: "center", gap: "0.375rem" }}>
+                                        {!(field as any).hideMutable ? (
+                                          <>
+                                            <span style={{ fontSize: "0.75rem", color: "var(--muted-foreground)" }}>Editable:</span>
+                                            <Toggle
+                                              checked={perm.mutable}
+                                              onChange={() => {
+                                                const updatedPerms = {
+                                                  ...user.permissions,
+                                                  [field.key]: { ...perm, mutable: !perm.mutable }
+                                                };
+                                                setUsersPolicies(usersPolicies.map(u => u.user_id === user.user_id ? { ...u, permissions: updatedPerms } : u));
+                                                handleUpdatePolicy(user.user_id, updatedPerms, user.screen_settings_visible_to_users);
+                                              }}
+                                            />
+                                          </>
+                                        ) : (
+                                          <span style={{ fontSize: "0.75rem", color: "var(--muted-foreground)", fontStyle: "italic" }}>N/A</span>
+                                        )}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                    </div>
+                  ))}
+
+                  {usersPolicies.length === 0 && (
+                    <p style={{ textAlign: "center", color: "var(--muted-foreground)", fontSize: "0.875rem", padding: "2rem" }}>
+                      No users found.
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
           </section>
         );
@@ -903,24 +1347,35 @@ export default function SettingsPage() {
                 </h1>
               </div>
 
-              {TABS.map((tab) => {
-                const isActive = activeTab === tab.id;
-                const Icon = tab.icon;
-                return (
-                  <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-                    style={{
-                      display: "flex", alignItems: "center", gap: "0.875rem",
-                      width: "100%", padding: "0.875rem 1rem", borderRadius: "0.5rem",
-                      border: "none", background: isActive ? "var(--secondary)" : "transparent",
-                      color: isActive ? "var(--foreground)" : "var(--muted-foreground)",
-                      fontWeight: isActive ? 600 : 500, fontSize: "0.9375rem",
-                      cursor: "pointer", transition: "all 0.2s ease", textAlign: "left",
-                    }}>
-                    <Icon size={18} style={{ color: isActive ? "var(--primary)" : "inherit" }} />
-                    {tab.label}
-                  </button>
-                );
-              })}
+              {(() => {
+                let visibleTabs = TABS;
+                if (settings.role !== "admin") {
+                  visibleTabs = TABS.filter((tab) => {
+                    const perm = settings.permissions[`tab_${tab.id}`];
+                    return perm?.visible !== false;
+                  });
+                } else {
+                  visibleTabs = [...TABS, { id: "admin", label: "Admin Panel", icon: Shield }];
+                }
+                return visibleTabs.map((tab) => {
+                  const isActive = activeTab === tab.id;
+                  const Icon = tab.icon;
+                  return (
+                    <button key={tab.id} onClick={() => setActiveTab(tab.id)}
+                      style={{
+                        display: "flex", alignItems: "center", gap: "0.875rem",
+                        width: "100%", padding: "0.875rem 1rem", borderRadius: "0.5rem",
+                        border: "none", background: isActive ? "var(--secondary)" : "transparent",
+                        color: isActive ? "var(--foreground)" : "var(--muted-foreground)",
+                        fontWeight: isActive ? 600 : 500, fontSize: "0.9375rem",
+                        cursor: "pointer", transition: "all 0.2s ease", textAlign: "left",
+                      }}>
+                      <Icon size={18} style={{ color: isActive ? "var(--primary)" : "inherit" }} />
+                      {tab.label}
+                    </button>
+                  );
+                });
+              })()}
 
               <div style={{ marginTop: "2rem", paddingTop: "2rem", borderTop: "1px solid var(--border)", display: "flex", flexDirection: "column", gap: "1rem" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", color: "var(--muted-foreground)", fontSize: "0.875rem" }}>

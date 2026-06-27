@@ -14,9 +14,10 @@ from voice.tts.base import TTSProvider
 from app.config import settings, _ROOT
 
 try:
-    from piper import PiperVoice
+    from piper import PiperVoice, SynthesisConfig
 except ImportError:
     PiperVoice = None
+    SynthesisConfig = None
 
 
 class PiperSynthesizer(TTSProvider):
@@ -81,8 +82,9 @@ class PiperSynthesizer(TTSProvider):
 
         # Synthesize directly to an in-memory WAV buffer
         wav_io = io.BytesIO()
+        config = SynthesisConfig(length_scale=length_scale) if SynthesisConfig else None
         with wave.open(wav_io, "wb") as wav_file:
-            self._piper_voice.synthesize_wav(text, wav_file, length_scale=length_scale)
+            self._piper_voice.synthesize_wav(text, wav_file, syn_config=config)
             
         return wav_io.getvalue()
 

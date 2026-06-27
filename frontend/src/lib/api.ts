@@ -106,6 +106,11 @@ export const api = {
     request("/settings", { method: "PATCH", body: JSON.stringify(patch) }),
   triggerScan:     () => request("/settings/scan", { method: "POST" }),
 
+  // Admin Policies
+  listPolicies:    () => request<any[]>("/admin/policies"),
+  updateUserPolicy: (userId: string, permissions: Record<string, any>, screenSettingsVisibleToUsers?: boolean) =>
+    request(`/admin/policies/${userId}`, { method: "PATCH", body: JSON.stringify({ permissions, screen_settings_visible_to_users: screenSettingsVisibleToUsers }) }),
+
   // Workflows
   listWorkflows:   () => request("/workflows"),
   createWorkflow:  (body: unknown) =>

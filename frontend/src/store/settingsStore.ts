@@ -21,6 +21,9 @@ interface SettingsStore {
   listenShortcut: string;
   replySound: boolean;
   speechRate: number;
+  screenSettingsVisibleToUsers: boolean;
+  role: string;
+  permissions: Record<string, { visible: boolean; mutable: boolean }>;
   
   // ElevenLabs
   elevenlabsApiKey: string;
@@ -84,6 +87,9 @@ export const useSettingsStore = create<SettingsStore>()(
       listenShortcut: "Alt+S",
       replySound: true,
       speechRate: 1.0,
+      screenSettingsVisibleToUsers: true,
+      role: "user",
+      permissions: {},
 
       // CRM / Website Shortcuts (empty by default — users add their own)
       crmUrl:         "",

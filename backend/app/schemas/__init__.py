@@ -64,6 +64,7 @@ class SettingsUpdate(BaseModel):
     deepgram_api_key: str | None = None
     reply_sound: bool | None = None
     speech_rate: float | None = None
+    screen_settings_visible_to_users: bool | None = None
 
 
 class SettingsResponse(BaseModel):
@@ -101,6 +102,9 @@ class SettingsResponse(BaseModel):
     deepgram_configured: bool
     reply_sound: bool
     speech_rate: float
+    screen_settings_visible_to_users: bool
+    role: str | None = None
+    permissions: dict[str, Any] | None = None
 
 
 

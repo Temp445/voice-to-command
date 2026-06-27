@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS public.users (
     email           TEXT UNIQUE NOT NULL,
     hashed_password TEXT NOT NULL,
     display_name    TEXT,
+    role            TEXT DEFAULT 'user',
     is_active       BOOLEAN DEFAULT TRUE,
     supabase_uid    UUID REFERENCES auth.users(id) ON DELETE SET NULL,
     created_at      TIMESTAMPTZ DEFAULT NOW(),
@@ -53,6 +54,7 @@ CREATE TABLE IF NOT EXISTS public.settings (
     deepgram_api_key_encrypted   TEXT,
     reply_sound                 BOOLEAN DEFAULT TRUE,
     speech_rate                 DOUBLE PRECISION DEFAULT 1.0,
+    screen_settings_visible_to_users BOOLEAN DEFAULT TRUE,
     updated_at                  TIMESTAMPTZ DEFAULT NOW(),
     UNIQUE(user_id)
 );
@@ -107,6 +109,15 @@ CREATE TABLE IF NOT EXISTS public.voice_profiles (
     created_at      TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- ─── User Policies ───────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS public.user_policies (
+    id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id     UUID NOT NULL UNIQUE REFERENCES public.users(id) ON DELETE CASCADE,
+    permissions JSONB NOT NULL DEFAULT '{}',
+    created_at  TIMESTAMPTZ DEFAULT NOW(),
+    updated_at  TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- ─── Row-Level Security ──────────────────────────────────────
 ALTER TABLE public.users            ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.settings         ENABLE ROW LEVEL SECURITY;
@@ -115,6 +126,7 @@ ALTER TABLE public.command_history  ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.automation_logs  ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.shortcuts        ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.voice_profiles   ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.user_policies    ENABLE ROW LEVEL SECURITY;
 
 -- Users can only see their own data
 CREATE POLICY "Users own data" ON public.settings
@@ -131,6 +143,15 @@ CREATE POLICY "Users own shortcuts" ON public.shortcuts
 
 CREATE POLICY "Users own voice profiles" ON public.voice_profiles
     FOR ALL USING (auth.uid() = (SELECT supabase_uid FROM public.users WHERE id = user_id));
+
+-- User policies permissions
+CREATE POLICY "Users read own policy" ON public.user_policies
+    FOR SELECT USING (auth.uid() = (SELECT supabase_uid FROM public.users WHERE id = user_id));
+
+CREATE POLICY "Admins full control user policies" ON public.user_policies
+    FOR ALL USING (
+        (SELECT role FROM public.users WHERE supabase_uid = auth.uid()) = 'admin'
+    );
 
 -- ─── Indexes ─────────────────────────────────────────────────
 CREATE INDEX idx_command_history_user   ON public.command_history(user_id, executed_at DESC);
@@ -149,6 +170,10 @@ $$ LANGUAGE plpgsql;
 
 CREATE TRIGGER trg_settings_updated_at
     BEFORE UPDATE ON public.settings
+    FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
+
+CREATE TRIGGER trg_user_policies_updated_at
+    BEFORE UPDATE ON public.user_policies
     FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
 
 -- ─── Auto-Sync Auth Users to Public Users ────────────────────
@@ -170,6 +195,9 @@ BEGIN
   -- Auto-create default voice profile
   INSERT INTO public.voice_profiles (user_id, name, voice_id, is_default)
   VALUES (NEW.id, 'Default Voice', 'en_US-lessac-medium', TRUE);
+
+  -- Auto-create default user policy
+  INSERT INTO public.user_policies (user_id) VALUES (NEW.id);
 
   RETURN NEW;
 END;
