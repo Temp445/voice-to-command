@@ -12,6 +12,15 @@ import warnings
 
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+    # Patch to prevent "RuntimeError: Event loop is closed" on Windows during shutdown/reloads
+    from asyncio.proactor_events import _ProactorBasePipeTransport
+    _orig_del = _ProactorBasePipeTransport.__del__
+    def _patched_del(self):
+        try:
+            _orig_del(self)
+        except (RuntimeError, AttributeError):
+            pass
+    _ProactorBasePipeTransport.__del__ = _patched_del
 
 from pathlib import Path
 _ROOT = Path(__file__).resolve().parent.parent.parent
@@ -491,10 +500,14 @@ async def readiness_check():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(
-        "app.main:app",
-        host=settings.backend_host,
-        port=settings.backend_port,
-        reload=settings.debug,
-        log_level=settings.log_level.lower(),
-    )
+    try:
+        uvicorn.run(
+            "app.main:app",
+            host=settings.backend_host,
+            port=settings.backend_port,
+            reload=settings.debug,
+            log_level=settings.log_level.lower(),
+        )
+    except RuntimeError as e:
+        if "Event loop is closed" not in str(e):
+            raise
