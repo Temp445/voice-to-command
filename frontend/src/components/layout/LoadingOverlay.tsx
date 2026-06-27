@@ -21,22 +21,7 @@ export function LoadingOverlay() {
 
   return (
     <div
-      style={{
-        position: "fixed",
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        zIndex: 9999,
-        background: "var(--background)",
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "center",
-        opacity: connected ? 0 : 1,
-        transition: "opacity 0.5s ease-out",
-        pointerEvents: connected ? "none" : "all",
-      }}
+      className={`fixed inset-0 z-[9999] bg-[var(--background)] flex flex-col items-center justify-center transition-opacity duration-500 ease-out ${connected ? "opacity-0 pointer-events-none" : "opacity-100 pointer-events-auto"}`}
     >
       <style dangerouslySetInnerHTML={{__html: `
         @keyframes soundwave {
@@ -59,36 +44,10 @@ export function LoadingOverlay() {
         .ai-wave-bar:nth-child(5) { animation-delay: 0.6s; height: 25px; }
       `}} />
 
-      <div
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          gap: "2rem",
-          padding: "3.5rem 4rem",
-          // borderRadius: "2rem",
-          // background: "rgba(255, 255, 255, 0.02)",
-          // border: "1px solid rgba(255, 255, 255, 0.05)",
-          backdropFilter: "blur(20px)",
-          // boxShadow: "0 30px 60px rgba(0, 0, 0, 0.4)",
-        }}
-      >
-        <div style={{ position: "relative", height: "55px", display: "flex", alignItems: "center", gap: "8px" }}>
+      <div className="flex flex-col items-center gap-8 py-14 px-16 backdrop-blur-xl">
+        <div className="relative h-[55px] flex items-center gap-2">
           {/* Glowing orb effect behind the waves */}
-          <div
-            style={{
-              position: "absolute",
-              top: "50%",
-              left: "50%",
-              transform: "translate(-50%, -50%)",
-              width: "5rem",
-              height: "5rem",
-              background: "var(--primary)",
-              borderRadius: "50%",
-              filter: "blur(30px)",
-              opacity: 0.15,
-            }}
-          />
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-20 h-20 bg-[var(--primary)] rounded-full blur-[30px] opacity-15" />
           
           {/* Soundwave Bars */}
           <div className="ai-wave-bar" />
@@ -98,8 +57,8 @@ export function LoadingOverlay() {
           <div className="ai-wave-bar" />
         </div>
         
-        <div style={{ textAlign: "center", display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-          <h2 style={{ fontSize: "1.25rem", fontWeight: 600, color: "var(--foreground)", paddingTop: 30, letterSpacing: "-0.01em" }}>
+        <div className="text-center flex flex-col gap-2">
+          <h2 className="text-xl font-semibold text-[var(--foreground)] pt-[30px] tracking-tight">
             Connecting to Server
           </h2>
         </div>

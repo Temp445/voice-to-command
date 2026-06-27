@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion } from "framer-motion";
-import { LayoutDashboard, Terminal, GitBranch, Activity, Settings, Mic, PanelLeftClose, PanelLeftOpen, Zap, Bot, History, User, LogOut } from "lucide-react";
+import { LayoutDashboard, Terminal, Settings, PanelLeftClose, PanelLeftOpen, Zap, Bot, History, User, LogOut } from "lucide-react";
 import { useState } from "react";
 import { useVoiceStore } from "@/store/voiceStore";
 import { useAuthStore } from "@/store/authStore";
@@ -13,17 +13,8 @@ const NAV_ITEMS = [
   { href: "/chat",       icon: Bot,              label: "Chat"       },
   { href: "/console",    icon: Terminal,         label: "Console"    },
   { href: "/history",    icon: History,          label: "History"    },
-  // { href: "/automation", icon: Activity,         label: "Automation" },
   { href: "/settings",   icon: Settings,         label: "Settings"   },
 ];
-
-const STATE_COLOR: Record<string, string> = {
-  idle:       "var(--state-idle)",
-  listening:  "var(--state-listening)",
-  processing: "var(--state-processing)",
-  speaking:   "var(--state-speaking)",
-  error:      "var(--state-error)",
-};
 
 export function Sidebar() {
   const pathname = usePathname();
@@ -37,9 +28,9 @@ export function Sidebar() {
 
   return (
     <motion.aside
-      className="glass-strong"
+      className="glass-strong flex flex-col h-full border-r border-[var(--border)]"
       initial={false}
-      style={{ display: "flex", flexDirection: "column", height: "100%", borderRight: "1px solid var(--border)", width: collapsed ? 64 : 240 }}
+      style={{ width: collapsed ? 64 : 240 }}
       animate={{ width: collapsed ? 64 : 240 }}
       transition={{ duration: 0.22, ease: "easeInOut" }}
     >
@@ -48,73 +39,67 @@ export function Sidebar() {
         onClick={toggleCollapse}
         onMouseEnter={() => setLogoHovered(true)}
         onMouseLeave={() => setLogoHovered(false)}
-        style={{ 
-          display: "flex", alignItems: "center", padding: collapsed ? "1.25rem 0" : "1.25rem", 
-          borderBottom: "1px solid var(--border)", flexShrink: 0, cursor: "pointer",
-          justifyContent: collapsed ? "center" : "space-between"
-        }}
+        className={`flex items-center border-b border-[var(--border)] shrink-0 cursor-pointer ${collapsed ? "py-5 px-0 justify-center" : "p-5 justify-between"}`}
         title={collapsed ? "Expand Sidebar" : "Collapse Sidebar"}
       >
         {collapsed ? (
            logoHovered ? (
-             <PanelLeftOpen style={{ width: "1.5rem", height: "1.5rem", color: "var(--muted-foreground)" }} />
+             <PanelLeftOpen className="w-6 h-6 text-zinc-500" />
            ) : (
-             <div style={{ width: "2rem", height: "2rem", borderRadius: "0.5rem", background: "var(--foreground)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-               <Zap style={{ width: "1rem", height: "1rem", color: "var(--background)" }} />
+             <div className="w-8 h-8 rounded-lg bg-[var(--foreground)] flex items-center justify-center shrink-0">
+               <Zap className="w-4 h-4 text-[var(--background)]" />
              </div>
            )
         ) : (
           <>
-            <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-              <div style={{ width: "2rem", height: "2rem", borderRadius: "0.5rem", background: "var(--foreground)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                <Zap style={{ width: "1rem", height: "1rem", color: "var(--background)" }} />
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-[var(--foreground)] flex items-center justify-center shrink-0">
+                <Zap className="w-4 h-4 text-[var(--background)]" />
               </div>
               <motion.span
                 initial={false} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                style={{ fontWeight: 800, color: "var(--foreground)", fontSize: "1.125rem", letterSpacing: "0.02em" }}
+                className="font-extrabold text-[var(--foreground)] text-lg tracking-wide"
               >
                 ACE
               </motion.span>
             </div>
-            <PanelLeftClose style={{ width: "1.25rem", height: "1.25rem", color: "var(--muted-foreground)" }} />
+            <PanelLeftClose className="w-5 h-5 text-zinc-500" />
           </>
         )}
       </div>
 
       {/* Nav */}
-      <nav style={{ flex: 1, padding: "1rem 0.75rem", display: "flex", flexDirection: "column", gap: "0.25rem" }}>
+      <nav className="flex-1 py-4 px-3 flex flex-col gap-1">
         {NAV_ITEMS.map(({ href, icon: Icon, label }) => {
           const active = pathname === href;
           return (
             <Link
               key={href}
               href={href}
-              className={`sidebar-link ${active ? "active" : ""}`}
-              style={collapsed ? { justifyContent: "center", padding: "0.75rem" } : { padding: "0.75rem 1rem", gap: "0.875rem" }}
+              className={`sidebar-link ${active ? "active" : ""} ${collapsed ? "justify-center p-3" : "px-4 py-3 gap-3.5"}`}
               title={collapsed ? label : undefined}
             >
-              <Icon style={{ width: "1.125rem", height: "1.125rem", flexShrink: 0 }} />
-              {!collapsed && <span style={{ fontSize: "0.9375rem" }}>{label}</span>}
+              <Icon className="w-4.5 h-4.5 shrink-0" />
+              {!collapsed && <span className="text-[15px]">{label}</span>}
             </Link>
           );
         })}
       </nav>
 
       {/* Profile & Logout */}
-      <div style={{ display: "flex", flexDirection: "column", padding: "0.75rem", borderTop: "1px solid var(--border)", gap: "0.25rem" }}>
+      <div className="flex flex-col p-3 border-t border-[var(--border)] gap-1">
         <Link
           href="/profile"
-          className={`sidebar-link ${pathname === "/profile" ? "active" : ""}`}
-          style={collapsed ? { justifyContent: "center", padding: "0.75rem", cursor: "pointer" } : { padding: "0.75rem 1rem", gap: "0.875rem", cursor: "pointer" }}
+          className={`sidebar-link cursor-pointer ${pathname === "/profile" ? "active" : ""} ${collapsed ? "justify-center p-3" : "px-4 py-3 gap-3.5"}`}
           title={collapsed ? "Profile" : undefined}
         >
-          <User style={{ width: "1.125rem", height: "1.125rem", flexShrink: 0, color: pathname === "/profile" ? "var(--primary)" : "var(--muted-foreground)" }} />
+          <User className={`w-4.5 h-4.5 shrink-0 ${pathname === "/profile" ? "text-[var(--primary)]" : "text-zinc-500"}`} />
           {!collapsed && (
-            <div style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }}>
-              <span style={{ fontSize: "0.875rem", fontWeight: 500, color: "var(--foreground)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+            <div className="flex flex-col flex-1 overflow-hidden">
+              <span className="text-sm font-medium text-[var(--foreground)] truncate">
                 {user?.user_metadata?.display_name || "ACE User"}
               </span>
-              <span style={{ fontSize: "0.75rem", color: "var(--muted-foreground)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              <span className="text-xs text-zinc-500 truncate">
                 {user?.email}
               </span>
             </div>
@@ -123,17 +108,11 @@ export function Sidebar() {
         
         <button
           onClick={() => signOut()}
-          className="sidebar-link"
-          style={{
-            ...(collapsed ? { justifyContent: "center", padding: "0.75rem" } : { padding: "0.75rem 1rem", gap: "0.875rem" }),
-            border: "none", background: "transparent", color: "var(--state-error)", width: "100%", cursor: "pointer", textAlign: "left"
-          }}
+          className={`sidebar-link border-none bg-transparent text-[var(--state-error)] w-full cursor-pointer text-left hover:bg-[var(--secondary)] transition-all ${collapsed ? "justify-center p-3" : "px-4 py-3 gap-3.5"}`}
           title={collapsed ? "Logout" : undefined}
-          onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "var(--secondary)"; }}
-          onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "transparent"; }}
         >
-          <LogOut style={{ width: "1.125rem", height: "1.125rem", flexShrink: 0 }} />
-          {!collapsed && <span style={{ fontSize: "0.9375rem", fontWeight: 500 }}>Logout</span>}
+          <LogOut className="w-4.5 h-4.5 shrink-0" />
+          {!collapsed && <span className="text-[15px] font-medium">Logout</span>}
         </button>
       </div>
 

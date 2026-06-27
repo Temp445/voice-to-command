@@ -29,7 +29,6 @@ export default function HistoryPage() {
   const fetchHistory = async () => {
     setLoading(true);
     try {
-      // Fetch up to 100 items for the history view
       const data = await api.getHistory(100) as CommandHistoryEntry[];
       setHistory(data);
     } catch (e) {
@@ -91,40 +90,36 @@ export default function HistoryPage() {
   });
 
   return (
-    <div style={{ display: "flex", height: "100vh", overflow: "hidden", background: "var(--background)" }}>
+    <div className="flex h-screen overflow-hidden bg-[var(--background)]">
       {/* --- Clear Confirmation Modal --- */}
       {showClearConfirm && (
-        <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.5)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", backdropFilter: "blur(4px)" }}>
+        <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center backdrop-blur-[4px]">
           <motion.div 
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
-            style={{ background: "var(--card)", padding: "1.5rem", borderRadius: "1rem", border: "1px solid var(--border)", width: "100%", maxWidth: "400px", boxShadow: "0 10px 25px -5px rgba(0,0,0,0.5)" }}
+            className="bg-[var(--card)] p-6 rounded-2xl border border-[var(--border)] w-full max-w-[400px] shadow-[0_10px_25px_-5px_rgba(0,0,0,0.5)]"
           >
-            <div style={{ display: "flex", gap: "1rem", marginBottom: "1.5rem" }}>
-              <div style={{ background: "rgba(239, 68, 68, 0.1)", color: "#ef4444", padding: "0.75rem", borderRadius: "9999px", height: "fit-content", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <AlertCircle style={{ width: "1.5rem", height: "1.5rem" }} />
+            <div className="flex gap-4 mb-6">
+              <div className="bg-red-500/10 text-red-500 p-3 rounded-full h-fit flex items-center justify-center">
+                <AlertCircle className="w-6 h-6" />
               </div>
               <div>
-                <h2 style={{ fontSize: "1.125rem", fontWeight: 600, color: "var(--foreground)", margin: "0 0 0.375rem 0" }}>Clear All History</h2>
-                <p style={{ color: "var(--muted-foreground)", fontSize: "0.875rem", margin: 0, lineHeight: 1.5 }}>
+                <h2 className="text-lg font-semibold text-[var(--foreground)] mb-1.5">Clear All History</h2>
+                <p className="text-zinc-500 text-sm m-0 leading-relaxed">
                   Are you absolutely sure you want to delete all command history? This action cannot be undone and will permanently erase these records from the database.
                 </p>
               </div>
             </div>
-            <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.75rem" }}>
+            <div className="flex justify-end gap-3">
               <button 
                 onClick={() => setShowClearConfirm(false)}
-                style={{ padding: "0.5rem 1rem", borderRadius: "0.5rem", background: "transparent", border: "1px solid var(--border)", color: "var(--foreground)", fontSize: "0.875rem", fontWeight: 500, cursor: "pointer", transition: "all 0.15s" }}
-                onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "var(--secondary)"; }}
-                onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "transparent"; }}
+                className="px-4 py-2 rounded-lg bg-transparent border border-[var(--border)] text-[var(--foreground)] text-sm font-medium cursor-pointer transition-all duration-150 hover:bg-[var(--secondary)] active:scale-[0.98]"
               >
                 Cancel
               </button>
               <button 
                 onClick={() => { setShowClearConfirm(false); confirmClearHistory(); }}
-                style={{ padding: "0.5rem 1rem", borderRadius: "0.5rem", background: "#ef4444", border: "none", color: "white", fontSize: "0.875rem", fontWeight: 500, cursor: "pointer", transition: "all 0.15s" }}
-                onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "#dc2626"; }}
-                onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "#ef4444"; }}
+                className="px-4 py-2 rounded-lg bg-red-500 border-none text-white text-sm font-medium cursor-pointer transition-all duration-150 hover:bg-red-600 active:scale-[0.98]"
               >
                 Yes, Clear History
               </button>
@@ -134,36 +129,34 @@ export default function HistoryPage() {
       )}
 
       <Sidebar />
-      <div style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }}>
+      <div className="flex flex-col flex-1 overflow-hidden">
         <TopBar />
-        <main style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", padding: "1.75rem", gap: "1rem" }}>
+        <main className="flex-1 flex flex-col overflow-hidden p-7 gap-4">
           
           {/* Header */}
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
+          <div className="flex items-center justify-between shrink-0">
             <div>
-              <h1 style={{ fontSize: "1.75rem", fontWeight: 600, color: "var(--foreground)", letterSpacing: "-0.02em", display: "flex", alignItems: "center", gap: "0.625rem" }}>
-                <History style={{ width: "1.5rem", height: "1.5rem" }} /> Command History
+              <h1 className="text-3xl font-semibold text-[var(--foreground)] tracking-tight flex items-center gap-2.5">
+                <History className="w-6 h-6" /> Command History
               </h1>
-              <p style={{ color: "var(--muted-foreground)", fontSize: "0.875rem", marginTop: "0.25rem" }}>Review your past voice and text commands</p>
+              <p className="text-zinc-500 text-sm mt-1">Review your past voice and text commands</p>
             </div>
             
-            <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
+            <div className="flex items-center gap-4">
               <button 
                 onClick={fetchHistory}
                 disabled={loading}
-                style={{ display: "flex", alignItems: "center", gap: "0.375rem", padding: "0.45rem 1rem", borderRadius: "0.5rem", border: "1px solid var(--border)", background: "var(--background)", color: "var(--foreground)", fontSize: "0.875rem", fontWeight: 500, cursor: loading ? "not-allowed" : "pointer", transition: "all 0.15s", opacity: loading ? 0.7 : 1 }}
-                onMouseEnter={(e) => { if (!loading) (e.currentTarget as HTMLButtonElement).style.background = "var(--secondary)"; }}
-                onMouseLeave={(e) => { if (!loading) (e.currentTarget as HTMLButtonElement).style.background = "var(--background)"; }}
+                className={`flex items-center gap-1.5 px-4 py-1.8 rounded-lg border border-[var(--border)] bg-[var(--background)] text-[var(--foreground)] text-sm font-medium transition-all duration-150 ${loading ? "cursor-not-allowed opacity-70" : "cursor-pointer hover:bg-[var(--secondary)] active:scale-[0.98]"}`}
                 title="Refresh History"
               >
-                <RefreshCw style={{ width: "1rem", height: "1rem", animation: loading ? "spin 1s linear infinite" : "none" }} />
+                <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
                 Refresh
               </button>
 
               <select 
                 value={filterStatus}
                 onChange={(e) => setFilterStatus(e.target.value)}
-                style={{ padding: "0.4rem 0.75rem", borderRadius: "0.5rem", border: "1px solid var(--border)", background: "var(--background)", color: "var(--foreground)", fontSize: "0.875rem", outline: "none" }}
+                className="px-3 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--background)] text-[var(--foreground)] text-sm outline-none cursor-pointer"
               >
                 <option value="all">All Statuses</option>
                 <option value="success">Success</option>
@@ -173,7 +166,7 @@ export default function HistoryPage() {
               <select 
                 value={filterDate}
                 onChange={(e) => setFilterDate(e.target.value)}
-                style={{ padding: "0.4rem 0.75rem", borderRadius: "0.5rem", border: "1px solid var(--border)", background: "var(--background)", color: "var(--foreground)", fontSize: "0.875rem", outline: "none" }}
+                className="px-3 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--background)] text-[var(--foreground)] text-sm outline-none cursor-pointer"
               >
                 <option value="all">All Time</option>
                 <option value="today">Today</option>
@@ -185,30 +178,28 @@ export default function HistoryPage() {
               {history.length > 0 && (
                 <button 
                   onClick={handleClearClick}
-                  style={{ display: "flex", alignItems: "center", gap: "0.375rem", padding: "0.45rem 1rem", borderRadius: "0.5rem", border: "1px solid rgba(239, 68, 68, 0.3)", background: "rgba(239, 68, 68, 0.1)", color: "#ef4444", fontSize: "0.875rem", fontWeight: 500, cursor: "pointer", transition: "all 0.15s" }}
-                  onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "rgba(239, 68, 68, 0.2)"; }}
-                  onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "rgba(239, 68, 68, 0.1)"; }}
+                  className="flex items-center gap-1.5 px-4 py-1.8 rounded-lg border border-red-500/30 bg-red-500/10 text-red-500 text-sm font-medium cursor-pointer transition-all duration-150 hover:bg-red-500/20 active:scale-[0.98]"
                 >
-                  <Trash2 style={{ width: "1rem", height: "1rem" }} /> Clear All
+                  <Trash2 className="w-4 h-4" /> Clear All
                 </button>
               )}
             </div>
           </div>
 
           {/* List Container */}
-          <div style={{ flex: 1, overflowY: "auto", background: "var(--card)", border: "1px solid var(--border)", borderRadius: "0.875rem", padding: "1px" }}>
+          <div className="flex-1 overflow-y-auto bg-[var(--card)] border border-[var(--border)] rounded-xl p-[1px]">
             {loading ? (
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", gap: "1rem", color: "var(--muted-foreground)" }}>
-                <Loader2 style={{ width: "2rem", height: "2rem", animation: "spin 1s linear infinite" }} />
+              <div className="flex flex-col items-center justify-center h-full gap-4 text-zinc-500">
+                <Loader2 className="w-8 h-8 animate-spin" />
                 <span>Loading history...</span>
               </div>
             ) : filteredHistory.length === 0 ? (
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", gap: "1rem", color: "var(--muted-foreground)" }}>
-                <AlertCircle style={{ width: "3rem", height: "3rem", opacity: 0.5 }} />
+              <div className="flex flex-col items-center justify-center h-full gap-4 text-zinc-500">
+                <AlertCircle className="w-12 h-12 opacity-50" />
                 <p>No matching commands found.</p>
               </div>
             ) : (
-              <div style={{ display: "flex", flexDirection: "column" }}>
+              <div className="flex flex-col">
                 {filteredHistory.map((entry, idx) => {
                   const date = new Date(entry.executed_at);
                   const isSuccess = entry.status === "success";
@@ -219,61 +210,47 @@ export default function HistoryPage() {
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ duration: 0.2, delay: Math.min(idx * 0.05, 0.5) }}
-                      style={{ 
-                        padding: "1rem 1.25rem", 
-                        borderBottom: idx === filteredHistory.length - 1 ? "none" : "1px solid var(--border)",
-                        display: "flex",
-                        gap: "1rem",
-                        alignItems: "center"
-                      }}
+                      className={`px-5 py-4 flex gap-4 items-center ${idx === filteredHistory.length - 1 ? "" : "border-b border-[var(--border)]"}`}
                     >
                       {/* Left: Status & Source */}
-                      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "0.5rem", width: "4rem", flexShrink: 0 }}>
-                        <div style={{ 
-                          padding: "0.25rem 0.5rem", 
-                          borderRadius: "9999px", 
-                          fontSize: "0.7rem", 
-                          fontWeight: 700, 
-                          textTransform: "uppercase",
-                          background: isSuccess ? "rgba(34, 197, 94, 0.1)" : "rgba(239, 68, 68, 0.1)",
-                          color: isSuccess ? "#22c55e" : "#ef4444",
-                        }}>
+                      <div className="flex flex-col items-center gap-2 w-16 shrink-0">
+                        <div className={`px-2 py-1 rounded-full text-[11px] font-bold uppercase ${isSuccess ? "bg-green-500/10 text-green-500" : "bg-red-500/10 text-red-500"}`}>
                           {entry.status}
                         </div>
-                        <span style={{ fontSize: "0.75rem", color: "var(--muted-foreground)", textTransform: "capitalize" }}>
+                        <span className="text-xs text-zinc-500 capitalize">
                           {entry.source}
                         </span>
                       </div>
 
                       {/* Main content */}
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ display: "flex", alignItems: "baseline", gap: "0.75rem", marginBottom: "0.25rem" }}>
-                          <h3 style={{ fontSize: "1rem", fontWeight: 600, color: "var(--foreground)", margin: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-baseline gap-3 mb-1">
+                          <h3 className="text-base font-semibold text-[var(--foreground)] m-0 truncate">
                             "{entry.raw_text}"
                           </h3>
                           {entry.intent && (
-                            <span style={{ fontSize: "0.75rem", padding: "0.125rem 0.375rem", background: "var(--secondary)", color: "var(--muted-foreground)", borderRadius: "0.25rem", border: "1px solid var(--border)" }}>
+                            <span className="text-xs px-1.5 py-0.5 bg-[var(--secondary)] text-zinc-500 rounded border border-[var(--border)]">
                               {entry.intent}
                             </span>
                           )}
                         </div>
                         
                         {entry.result && (
-                          <p style={{ margin: 0, fontSize: "0.875rem", color: "var(--muted-foreground)", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+                          <p className="m-0 text-sm text-zinc-500 line-clamp-2">
                             {entry.result}
                           </p>
                         )}
                       </div>
 
                       {/* Right: Meta & Actions */}
-                      <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "0.5rem", flexShrink: 0 }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: "0.375rem", fontSize: "0.75rem", color: "var(--muted-foreground)" }}>
-                          <Calendar style={{ width: "0.75rem", height: "0.75rem" }} />
+                      <div className="flex flex-col items-end gap-2 shrink-0">
+                        <div className="flex items-center gap-1.5 text-xs text-zinc-500">
+                          <Calendar className="w-3.5 h-3.5" />
                           {date.toLocaleDateString()} {date.toLocaleTimeString()}
                         </div>
                         {entry.duration_ms != null && (
-                          <div style={{ display: "flex", alignItems: "center", gap: "0.375rem", fontSize: "0.75rem", color: "var(--muted-foreground)" }}>
-                            <Clock style={{ width: "0.75rem", height: "0.75rem" }} />
+                          <div className="flex items-center gap-1.5 text-xs text-zinc-500">
+                            <Clock className="w-3.5 h-3.5" />
                             {entry.duration_ms.toFixed(0)} ms
                           </div>
                         )}
@@ -282,12 +259,10 @@ export default function HistoryPage() {
                       {/* Delete Action */}
                       <button 
                         onClick={() => deleteItem(entry.id)}
-                        style={{ marginLeft: "1rem", padding: "0.5rem", background: "transparent", border: "none", color: "var(--muted-foreground)", cursor: "pointer", borderRadius: "0.375rem", transition: "all 0.15s" }}
-                        onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "var(--secondary)"; (e.currentTarget as HTMLButtonElement).style.color = "#ef4444"; }}
-                        onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "transparent"; (e.currentTarget as HTMLButtonElement).style.color = "var(--muted-foreground)"; }}
+                        className="ml-4 p-2 bg-transparent border-none text-zinc-500 hover:text-red-500 hover:bg-[var(--secondary)] cursor-pointer rounded-md transition-all duration-150 active:scale-[0.95]"
                         title="Delete entry"
                       >
-                        <Trash2 style={{ width: "1rem", height: "1rem" }} />
+                        <Trash2 className="w-4 h-4" />
                       </button>
 
                     </motion.div>

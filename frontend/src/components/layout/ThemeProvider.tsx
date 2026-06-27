@@ -18,6 +18,13 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   // may be `false` — so we push the real value on every app load.
   useEffect(() => {
     syncTrayStateOnBoot(minimizeToTray);
+    
+    // Show window once React has finished loading to prevent white screen flash
+    if (typeof window !== "undefined" && (window as any).__TAURI__) {
+      import("@tauri-apps/api/webviewWindow").then(({ getCurrentWebviewWindow }) => {
+        getCurrentWebviewWindow().show();
+      });
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // intentionally run once on mount
 

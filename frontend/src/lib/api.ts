@@ -69,17 +69,33 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     }
   } catch (e) {}
 
-  const res = await fetch(`${base}${path}`, {
-    headers,
-    cache: "no-store",
-    ...options,
-  });
-  
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.message || `HTTP ${res.status}`);
+  let lastError: any = null;
+  const maxRetries = 5;
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const res = await fetch(`${base}${path}`, {
+        headers,
+        cache: "no-store",
+        ...options,
+      });
+      
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.message || `HTTP ${res.status}`);
+      }
+      return await res.json() as T;
+    } catch (e: any) {
+      lastError = e;
+      const isNetworkError = e instanceof TypeError || e.message === "Failed to fetch";
+      if (isNetworkError && attempt < maxRetries) {
+        console.warn(`[API] Connection attempt ${attempt} to ${path} failed (${e.message}). Retrying in ${attempt * 500}ms...`);
+        await new Promise((resolve) => setTimeout(resolve, attempt * 500));
+        continue;
+      }
+      throw e;
+    }
   }
-  return res.json() as Promise<T>;
+  throw lastError;
 }
 
 export const api = {

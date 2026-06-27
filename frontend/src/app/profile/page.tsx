@@ -8,13 +8,6 @@ import { TopBar } from "@/components/layout/TopBar";
 import { useAuthStore } from "@/store/authStore";
 import { supabase } from "@/lib/supabase";
 
-const card = { background: "var(--card)", border: "1px solid var(--border)", borderRadius: "1rem", overflow: "hidden", boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)" };
-const hdr = { padding: "1.25rem 1.5rem", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: "0.75rem", background: "rgba(255,255,255,0.02)" };
-const body = { padding: "1.5rem", display: "flex", flexDirection: "column" as const, gap: "1.5rem" };
-const lbl = { fontSize: "0.8125rem", fontWeight: 600, color: "var(--foreground)", marginBottom: "0.375rem" } as React.CSSProperties;
-const inp = { width: "100%", background: "var(--input)", border: "1px solid var(--border)", borderRadius: "0.5rem", padding: "0.625rem 0.875rem", fontSize: "0.875rem", color: "var(--foreground)", fontFamily: "var(--font-mono)", outline: "none", transition: "border-color 0.2s" } as React.CSSProperties;
-const btnA = { padding: "0.625rem 1.25rem", borderRadius: "0.5rem", fontSize: "0.875rem", fontWeight: 600, cursor: "pointer", border: "1px solid var(--ring)", background: "var(--primary)", color: "var(--primary-foreground)", transition: "all 0.15s", boxShadow: "0 2px 4px rgba(0,0,0,0.1)", display: "flex", alignItems: "center", justifyContent: "center", gap: "0.5rem" } as React.CSSProperties;
-
 export default function ProfilePage() {
   const { user, signOut } = useAuthStore();
   
@@ -92,18 +85,18 @@ export default function ProfilePage() {
   };
 
   return (
-    <div style={{ display: "flex", height: "100vh", overflow: "hidden", background: "var(--background)" }}>
+    <div className="flex h-screen overflow-hidden bg-[var(--background)]">
       <Sidebar />
-      <div style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }}>
+      <div className="flex flex-col flex-1 overflow-hidden">
         <TopBar />
-        <main style={{ flex: 1, overflowY: "auto", padding: "2.5rem" }}>
-          <div style={{ width: "100%", maxWidth: "800px", margin: "0 auto", display: "flex", flexDirection: "column", gap: "2rem" }}>
+        <main className="flex-1 overflow-y-auto p-10">
+          <div className="w-full max-w-[800px] mx-auto flex flex-col gap-8">
             
             <div>
-              <h1 style={{ fontSize: "1.75rem", fontWeight: 600, color: "var(--foreground)", letterSpacing: "-0.02em", display: "flex", alignItems: "center", gap: "0.625rem" }}>
-                <User style={{ width: "1.75rem", height: "1.75rem", color: "var(--primary)" }} /> My Profile
+              <h1 className="text-3xl font-semibold text-[var(--foreground)] tracking-tight flex items-center gap-2.5">
+                <User className="w-7 h-7 text-[var(--primary)]" /> My Profile
               </h1>
-              <p style={{ color: "var(--muted-foreground)", marginTop: "0.375rem", fontSize: "0.9375rem" }}>
+              <p className="text-zinc-500 mt-1.5 text-[15px]">
                 Manage your personal information and security settings.
               </p>
             </div>
@@ -111,44 +104,46 @@ export default function ProfilePage() {
             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }}>
               
               {/* Profile Information Card */}
-              <section style={card}>
-                <div style={hdr}>
-                  <Shield style={{ width: "1.25rem", height: "1.25rem", color: "var(--muted-foreground)" }} />
-                  <span style={{ fontSize: "1rem", fontWeight: 600, color: "var(--foreground)" }}>Personal Information</span>
+              <section className="bg-[var(--card)] border border-[var(--border)] rounded-2xl overflow-hidden shadow-md">
+                <div className="px-6 py-5 border-b border-[var(--border)] flex items-center gap-3 bg-white/[0.02]">
+                  <Shield className="w-5 h-5 text-zinc-500" />
+                  <span className="text-base font-semibold text-[var(--foreground)]">Personal Information</span>
                 </div>
-                <div style={body}>
+                <div className="p-6 flex flex-col gap-6">
                   <div>
-                    <p style={lbl}>Email Address</p>
-                    <input style={{ ...inp, opacity: 0.6, cursor: "not-allowed" }} value={user?.email || ""} disabled />
-                    <p style={{ fontSize: "0.75rem", color: "var(--muted-foreground)", marginTop: "0.375rem" }}>Your email address cannot be changed.</p>
+                    <p className="text-[13px] font-semibold text-[var(--foreground)] mb-1.5">Email Address</p>
+                    <input 
+                      className="w-full bg-[var(--input)] border border-[var(--border)] rounded-lg px-3.5 py-2.5 text-sm text-[var(--foreground)] font-mono outline-none opacity-60 cursor-not-allowed" 
+                      value={user?.email || ""} 
+                      disabled 
+                    />
+                    <p className="text-xs text-zinc-500 mt-1.5">Your email address cannot be changed.</p>
                   </div>
 
                   <div>
-                    <p style={lbl}>Display Name</p>
+                    <p className="text-[13px] font-semibold text-[var(--foreground)] mb-1.5">Display Name</p>
                     <input 
-                      style={inp} 
+                      className="w-full bg-[var(--input)] border border-[var(--border)] rounded-lg px-3.5 py-2.5 text-sm text-[var(--foreground)] font-mono outline-none transition-colors duration-200 focus:border-[var(--ring)]" 
                       value={displayName} 
                       onChange={(e) => setDisplayName(e.target.value)} 
                       placeholder="e.g. John Smith"
-                      onFocus={(e) => { (e.target as HTMLInputElement).style.borderColor = "var(--ring)"; }}
-                      onBlur={(e)  => { (e.target as HTMLInputElement).style.borderColor  = "var(--border)"; }}
                     />
                   </div>
 
                   {profileError && (
-                    <div style={{ padding: "0.75rem", borderRadius: "0.5rem", fontSize: "0.8125rem", fontWeight: 500, background: "rgba(239,68,68,0.1)", color: "#dc2626", border: "1px solid #ef444430" }}>
+                    <div className="p-3 rounded-lg text-[13px] font-medium bg-red-500/10 text-red-600 border border-red-500/20">
                       {profileError}
                     </div>
                   )}
 
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", paddingTop: "0.5rem", borderTop: "1px solid var(--border)" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", color: "var(--primary)", fontSize: "0.875rem", fontWeight: 500, opacity: profileSuccess ? 1 : 0, transition: "opacity 0.2s" }}>
+                  <div className="flex items-center justify-between pt-2 border-t border-[var(--border)]">
+                    <div className={`flex items-center gap-2 text-[var(--primary)] text-sm font-medium transition-opacity duration-200 ${profileSuccess ? "opacity-100" : "opacity-0"}`}>
                       <CheckCircle2 size={16} /> Profile updated successfully
                     </div>
                     <button 
                       onClick={handleUpdateProfile} 
                       disabled={profileSaving || displayName === user?.user_metadata?.display_name}
-                      style={{ ...btnA, opacity: (profileSaving || displayName === user?.user_metadata?.display_name) ? 0.6 : 1 }}
+                      className={`px-5 py-2.5 rounded-lg text-sm font-semibold border border-[var(--ring)] bg-[var(--primary)] text-[var(--primary-foreground)] transition-all duration-150 shadow-sm flex items-center justify-center gap-2 ${profileSaving || displayName === user?.user_metadata?.display_name ? "opacity-60 cursor-not-allowed" : "opacity-100 hover:opacity-90 active:scale-[0.98]"}`}
                     >
                       {profileSaving ? <Loader2 size={16} className="animate-spin" /> : null}
                       Save Changes
@@ -158,46 +153,46 @@ export default function ProfilePage() {
               </section>
 
               {/* Password Card */}
-              <section style={{ ...card, marginTop: "2rem" }}>
-                <div style={hdr}>
-                  <Lock style={{ width: "1.25rem", height: "1.25rem", color: "var(--muted-foreground)" }} />
-                  <span style={{ fontSize: "1rem", fontWeight: 600, color: "var(--foreground)" }}>Security</span>
+              <section className="bg-[var(--card)] border border-[var(--border)] rounded-2xl overflow-hidden shadow-md mt-8">
+                <div className="px-6 py-5 border-b border-[var(--border)] flex items-center gap-3 bg-white/[0.02]">
+                  <Lock className="w-5 h-5 text-zinc-500" />
+                  <span className="text-base font-semibold text-[var(--foreground)]">Security</span>
                 </div>
-                <div style={body}>
+                <div className="p-6 flex flex-col gap-6">
                   <div>
-                    <p style={lbl}>New Password</p>
-                    <div style={{ position: "relative" }}>
+                    <p className="text-[13px] font-semibold text-[var(--foreground)] mb-1.5">New Password</p>
+                    <div className="relative">
                       <input 
                         type={showPassword ? "text" : "password"} 
-                        style={{ ...inp, paddingRight: "3rem" }} 
+                        className="w-full bg-[var(--input)] border border-[var(--border)] rounded-lg pl-3.5 pr-12 py-2.5 text-sm text-[var(--foreground)] font-mono outline-none transition-colors duration-200 focus:border-[var(--ring)]" 
                         placeholder="••••••••" 
                         value={newPassword} 
                         onChange={(e) => setNewPassword(e.target.value)} 
-                        onFocus={(e) => { (e.target as HTMLInputElement).style.borderColor = "var(--ring)"; }}
-                        onBlur={(e)  => { (e.target as HTMLInputElement).style.borderColor  = "var(--border)"; }}
                       />
-                      <button onClick={() => setShowPassword(!showPassword)}
-                        style={{ position: "absolute", right: "1rem", top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "var(--muted-foreground)", display: "flex" }}>
+                      <button 
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-4 top-1/2 -translate-y-1/2 bg-transparent border-none cursor-pointer text-zinc-500 flex"
+                      >
                         {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                       </button>
                     </div>
-                    <p style={{ fontSize: "0.75rem", color: "var(--muted-foreground)", marginTop: "0.375rem" }}>Must be at least 6 characters long.</p>
+                    <p className="text-xs text-zinc-500 mt-1.5">Must be at least 6 characters long.</p>
                   </div>
 
                   {passwordError && (
-                    <div style={{ padding: "0.75rem", borderRadius: "0.5rem", fontSize: "0.8125rem", fontWeight: 500, background: "rgba(239,68,68,0.1)", color: "#dc2626", border: "1px solid #ef444430" }}>
+                    <div className="p-3 rounded-lg text-[13px] font-medium bg-red-500/10 text-red-600 border border-red-500/20">
                       {passwordError}
                     </div>
                   )}
 
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", paddingTop: "0.5rem", borderTop: "1px solid var(--border)" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", color: "var(--primary)", fontSize: "0.875rem", fontWeight: 500, opacity: passwordSuccess ? 1 : 0, transition: "opacity 0.2s" }}>
+                  <div className="flex items-center justify-between pt-2 border-t border-[var(--border)]">
+                    <div className={`flex items-center gap-2 text-[var(--primary)] text-sm font-medium transition-opacity duration-200 ${passwordSuccess ? "opacity-100" : "opacity-0"}`}>
                       <CheckCircle2 size={16} /> Password updated securely
                     </div>
                     <button 
                       onClick={handleUpdatePassword} 
                       disabled={passwordSaving || !newPassword}
-                      style={{ ...btnA, opacity: (passwordSaving || !newPassword) ? 0.6 : 1 }}
+                      className={`px-5 py-2.5 rounded-lg text-sm font-semibold border border-[var(--ring)] bg-[var(--primary)] text-[var(--primary-foreground)] transition-all duration-150 shadow-sm flex items-center justify-center gap-2 ${passwordSaving || !newPassword ? "opacity-60 cursor-not-allowed" : "opacity-100 hover:opacity-90 active:scale-[0.98]"}`}
                     >
                       {passwordSaving ? <Loader2 size={16} className="animate-spin" /> : null}
                       Update Password
@@ -207,23 +202,21 @@ export default function ProfilePage() {
               </section>
 
               {/* Danger Zone */}
-              <section style={{ ...card, marginTop: "2rem", border: "1px solid rgba(239, 68, 68, 0.2)" }}>
-                <div style={{ ...hdr, borderBottom: "1px solid rgba(239, 68, 68, 0.1)" }}>
-                  <LogOut style={{ width: "1.25rem", height: "1.25rem", color: "#ef4444" }} />
-                  <span style={{ fontSize: "1rem", fontWeight: 600, color: "var(--foreground)" }}>Account Actions</span>
+              <section className="bg-[var(--card)] border border-red-500/20 rounded-2xl overflow-hidden shadow-md mt-8">
+                <div className="px-6 py-5 border-b border-red-500/10 flex items-center gap-3 bg-white/[0.02]">
+                  <LogOut className="w-5 h-5 text-red-500" />
+                  <span className="text-base font-semibold text-[var(--foreground)]">Account Actions</span>
                 </div>
-                <div style={{ ...body, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+                <div className="p-6 flex flex-row items-center justify-between gap-6">
                   <div>
-                    <p style={{ ...lbl, color: "var(--foreground)" }}>Log Out</p>
-                    <p style={{ fontSize: "0.875rem", color: "var(--muted-foreground)", marginTop: "0.25rem" }}>
+                    <p className="text-[13px] font-semibold text-[var(--foreground)] mb-1.5">Log Out</p>
+                    <p className="text-sm text-zinc-500 mt-1">
                       Securely log out of your ACE account on this device.
                     </p>
                   </div>
                   <button 
                     onClick={() => signOut()} 
-                    style={{ ...btnA, background: "rgba(239, 68, 68, 0.1)", color: "#ef4444", border: "1px solid rgba(239, 68, 68, 0.2)" }}
-                    onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "rgba(239, 68, 68, 0.2)"; }}
-                    onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "rgba(239, 68, 68, 0.1)"; }}
+                    className="px-5 py-2.5 rounded-lg text-sm font-semibold border border-red-500/20 bg-red-500/10 text-red-500 transition-all duration-150 shadow-sm flex items-center justify-center gap-2 hover:bg-red-500/20 active:scale-[0.98]"
                   >
                     <LogOut size={16} />
                     Log Out
