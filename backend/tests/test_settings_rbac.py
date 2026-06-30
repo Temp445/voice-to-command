@@ -152,3 +152,70 @@ async def test_admin_list_policies(mock_auth):
             assert "browser_animations_enabled" in data[0]["permissions"]
     finally:
         app.dependency_overrides.clear()
+
+
+@pytest.mark.asyncio
+async def test_global_shortcuts_permissions(mock_auth):
+    """Test that non-admin users cannot edit global website shortcuts without permission."""
+    mock_data = {
+        "users": [{
+            "id": "test-user-id",
+            "role": "user",
+        }],
+        "user_policies": [{
+            "user_id": "test-user-id",
+            "permissions": {
+                "global_website_shortcuts": {"visible": True, "mutable": False}
+            }
+        }],
+        "global_website_shortcuts": []
+    }
+
+    mock_supabase = MagicMock()
+    mock_supabase.table.side_effect = lambda t: MockQuery(t, mock_data)
+
+    with patch("app.routers.settings_router.supabase_admin", mock_supabase):
+        # 1. GET global-shortcuts (should be allowed for anyone)
+        res_get = client.get("/api/settings/global-shortcuts")
+        assert res_get.status_code == 200
+        
+        # 2. POST global-shortcuts (should fail with 403 Forbidden since mutable is False)
+        res_post = client.post("/api/settings/global-shortcuts", json={"url": "https://example.com", "keywords": "example"})
+        assert res_post.status_code == 403
+        
+        # 3. DELETE global-shortcuts (should fail with 403 Forbidden since mutable is False)
+        res_del = client.delete("/api/settings/global-shortcuts/some-id")
+        assert res_del.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_global_shortcuts_admin_allowed(mock_auth):
+    """Test that admin users can create and delete global website shortcuts."""
+    mock_data = {
+        "users": [{
+            "id": "test-user-id",
+            "role": "admin",
+        }],
+        "user_policies": [],
+        "global_website_shortcuts": [{
+            "id": "existing-id",
+            "url": "https://existing.com",
+            "keywords": "existing"
+        }]
+    }
+
+    mock_supabase = MagicMock()
+    mock_supabase.table.side_effect = lambda t: MockQuery(t, mock_data)
+
+    with patch("app.routers.settings_router.supabase_admin", mock_supabase):
+        # 1. GET global-shortcuts
+        res_get = client.get("/api/settings/global-shortcuts")
+        assert res_get.status_code == 200
+        
+        # 2. POST global-shortcuts
+        res_post = client.post("/api/settings/global-shortcuts", json={"url": "https://new.com", "keywords": "new"})
+        assert res_post.status_code == 200
+        
+        # 3. DELETE global-shortcuts
+        res_del = client.delete("/api/settings/global-shortcuts/existing-id")
+        assert res_del.status_code == 200

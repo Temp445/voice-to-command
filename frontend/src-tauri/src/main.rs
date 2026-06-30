@@ -58,8 +58,43 @@ fn get_available_port() -> u16 {
         .unwrap_or(8000) // Fallback to 8000 if finding a dynamic port fails
 }
 
+fn get_port_from_env() -> Option<u16> {
+    let paths = vec!["../../.env", "../../../.env", "./.env"];
+    for path in paths {
+        if let Ok(content) = std::fs::read_to_string(path) {
+            for line in content.lines() {
+                let trimmed = line.trim();
+                if trimmed.starts_with("BACKEND_PORT=") {
+                    if let Some(port_str) = trimmed.split('=').nth(1) {
+                        if let Ok(port) = port_str.trim().parse::<u16>() {
+                            return Some(port);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
 fn main() {
-    let port = get_available_port();
+    let mut port = 8000;
+    let mut use_external = false;
+
+    if cfg!(debug_assertions) {
+        if let Some(env_port) = get_port_from_env() {
+            port = env_port;
+        }
+        // If we cannot bind to the port, assume uvicorn / external backend is already running
+        if std::net::TcpListener::bind(format!("127.0.0.1:{}", port)).is_err() {
+            use_external = true;
+        } else {
+            // Port is free, use a dynamic port for the spawned sidecar
+            port = get_available_port();
+        }
+    } else {
+        port = get_available_port();
+    }
 
     tauri::Builder::default()
         .plugin(tauri_plugin_autostart::init(MacosLauncher::LaunchAgent, Some(vec!["--hidden"])))
@@ -127,7 +162,8 @@ fn main() {
                 app.path().resolve("../../backend/dist/ace-backend/ace-backend.exe", tauri::path::BaseDirectory::Resource).expect("failed to resolve resource")
             };
 
-            if backend_exe.exists() {
+            let spawn_backend = !use_external;
+            if spawn_backend && backend_exe.exists() {
                 let mut cmd = std::process::Command::new(backend_exe);
                 cmd.env("BACKEND_PORT", port.to_string());
                 
@@ -139,6 +175,8 @@ fn main() {
                 if let Err(e) = cmd.spawn() {
                     eprintln!("Failed to spawn backend sidecar: {}", e);
                 }
+            } else if use_external {
+                println!("Using external backend running on port {}", port);
             } else {
                 eprintln!("Backend executable not found at {:?}. Assuming backend is running externally for dev.", backend_exe);
             }

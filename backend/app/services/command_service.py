@@ -257,6 +257,7 @@ class CommandService:
         # ── Website shortcuts cache ───────────────────────────────────────────
         self._ws_cache_loaded: bool = False
         self._ws_sites: list[dict] = []
+        self._global_ws_sites: list[dict] = []
 
     # ── Website Shortcuts Cache ───────────────────────────────────────────────
 
@@ -272,6 +273,20 @@ class CommandService:
 
             if supabase_admin is None:
                 return
+
+            # Load global website shortcuts
+            try:
+                _global_res = await sb_run(
+                    lambda: supabase_admin.table("global_website_shortcuts").select("*").execute()
+                )
+                if _global_res.data:
+                    self._global_ws_sites = _global_res.data
+                    logger.info(f"✅ Global website shortcuts pre-warmed: {len(self._global_ws_sites)} site(s)")
+                else:
+                    self._global_ws_sites = []
+            except Exception as e:
+                logger.warning(f"⚠️ Could not pre-warm global website shortcuts: {e}")
+                self._global_ws_sites = []
 
             # First try the in-memory crm_sites (already restored from DB by settings loader)
             _sites_raw = getattr(_gs, "crm_sites", None)
@@ -510,6 +525,16 @@ class CommandService:
 
             # Reload cache if it was invalidated or never loaded
             if not self._ws_cache_loaded:
+                from app.core.supabase_client import supabase_admin, sb_run
+                if supabase_admin:
+                    try:
+                        _global_res = await sb_run(
+                            lambda: supabase_admin.table("global_website_shortcuts").select("*").execute()
+                        )
+                        self._global_ws_sites = _global_res.data if _global_res.data else []
+                    except Exception as e:
+                        logger.warning(f"Could not reload global website shortcuts: {e}")
+
                 _sites_raw = getattr(_gs, "crm_sites", None)
                 if _sites_raw:
                     try:
@@ -519,7 +544,7 @@ class CommandService:
                         pass
                 self._ws_cache_loaded = True
                 
-            _sites = self._ws_sites
+            _sites = list(self._ws_sites) + list(self._global_ws_sites)
 
             _text_lower = text.lower().strip()
             _text_lower_no_spaces = _text_lower.replace(" ", "")
@@ -665,6 +690,72 @@ class CommandService:
             params = {}
             llm_routed = False
 
+            # Prioritize standard intents to bypass implicit web click/type intercepts
+            PRIORITIZED_INTENTS = {
+                "search_google",
+                "search_youtube",
+                "open_website",
+                "browser_go_back",
+                "browser_refresh",
+                "scroll_up",
+                "scroll_down",
+                "scroll_top",
+                "scroll_bottom",
+                "browser_scroll_variable",
+                "browser_click_result",
+                "browser_paginate",
+                "browser_new_tab",
+                "browser_switch_tab",
+                "browser_close_all_tabs",
+                "close_window",
+                "dismiss_overlay",
+                "open_app",
+                "close_app",
+                "minimize_window",
+                "maximize_window",
+                "volume_up",
+                "volume_down",
+                "mute",
+                "unmute",
+                "screenshot",
+                "sleep",
+                "shutdown",
+                "restart",
+                "run_command",
+                "create_folder",
+                "delete_file",
+                "open_folder",
+                "close_folder",
+                "open_project",
+                "vscode_terminal",
+                "create_project",
+                "run_dev_server",
+                "open_dev_server",
+                "ask_llm",
+                "greeting",
+                "clipboard_read",
+                "browser_list_options",
+                "browser_select_option",
+                "browser_fill_form",
+                "browser_interact_checkbox",
+                "browser_hover",
+                "browser_clipboard",
+                "browser_summarize_page",
+                "browser_full_screenshot",
+                "browser_window_state",
+                "browser_clear_marks",
+                "browser_double_click",
+                "browser_right_click",
+                "browser_press_key",
+                "browser_wait_for",
+                "browser_download",
+                "browser_upload",
+                "crm_clear_search",
+            }
+            if initial_intent in PRIORITIZED_INTENTS:
+                intent_name = initial_intent
+                params = initial_params
+
             # Layer 0.88: Chrome Native Dialog Intercept
             # ──────────────────────────────────────────────────────────────────
             # Chrome's "Save password?", "Translate?", etc. are native browser UI
@@ -723,6 +814,26 @@ class CommandService:
                             if page:
                                 try:
                                     await page.bring_to_front()
+                                    # Windows Focus Stealing Bypass
+                                    import uuid
+                                    import ctypes
+                                    import pygetwindow as gw
+
+                                    unique_title = str(uuid.uuid4())
+                                    original_title = await page.evaluate("document.title")
+                                    await page.evaluate(f"document.title = '{unique_title}'")
+                                    await asyncio.sleep(0.1)
+
+                                    wins = gw.getWindowsWithTitle(unique_title)
+                                    if wins:
+                                        win = wins[0]
+                                        ctypes.windll.user32.keybd_event(0x12, 0, 0, 0)  # ALT down
+                                        ctypes.windll.user32.keybd_event(0x12, 0, 2, 0)  # ALT up
+                                        if win.isMinimized:
+                                            win.restore()
+                                        ctypes.windll.user32.SetForegroundWindow(win._hWnd)
+
+                                    await page.evaluate(f"document.title = '{original_title}'")
                                 except Exception:
                                     pass
                             return True

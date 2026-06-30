@@ -156,6 +156,13 @@ export const api = {
   chatLLM:         (message: string) => request("/llm/chat", { method: "POST", body: JSON.stringify({ message }) }),
   clearLLMHistory: () => request("/llm/history", { method: "DELETE" }),
 
+  // Global Website Shortcuts
+  listGlobalShortcuts: () => request<any[]>("/settings/global-shortcuts"),
+  createGlobalShortcut: (url: string, keywords: string) =>
+    request("/settings/global-shortcuts", { method: "POST", body: JSON.stringify({ url, keywords }) }),
+  deleteGlobalShortcut: (id: string) =>
+    request(`/settings/global-shortcuts/${id}`, { method: "DELETE" }),
+
   // Health / Ping
   getHealthPing: async () => {
     if (typeof window === 'undefined') return { processTime: "0ms", networkTime: 0, ok: false };

@@ -25,7 +25,6 @@ class TranscriptionError(ACEBaseException):
     def __init__(self, message: str = "Transcription error"):
         super().__init__(message, "TRANSCRIPTION_ERROR")
 
-
 class TTSError(ACEBaseException):
     """Text-to-speech synthesis failed."""
     def __init__(self, message: str = "TTS synthesis error"):
@@ -62,6 +61,7 @@ class AppNotFound(AutomationError):
     """Target application not found on system."""
     def __init__(self, app_name: str):
         super().__init__(f"Application '{app_name}' not found on this system.")
+
 
 
 class BrowserAutomationError(AutomationError):

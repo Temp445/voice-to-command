@@ -15,7 +15,6 @@ const BARS: [number, string, number, number][] = [
   [28, "vD", 2350, 280],  [82, "vA", 2700, 100],  [54, "vB", 3000, 190],
   [38, "vC", 2880,  60],  [70, "vD", 2500, 150],
 ];
-const BAR_HEIGHTS = BARS.map(b => b[0]);
 const MOBILE_BARS = BARS.slice(0, 14);
 
 export default function AuthPage() {
@@ -27,7 +26,6 @@ export default function AuthPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
-  const [focusedField, setFocusedField] = useState<string | null>(null);
   const [isMobile, setIsMobile] = useState(false);
 
   // Override global overflow:hidden so auth page can scroll
@@ -39,7 +37,7 @@ export default function AuthPage() {
     };
   }, []);
 
-  // JS-based responsive detection — bypasses CSS overflow:hidden issues
+  // JS-based responsive detection
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth < 1024);
     check();
@@ -73,7 +71,6 @@ export default function AuthPage() {
           setTimeout(() => router.push("/"), 1500);
         } else {
           setSuccess("Account created! Please check your email to verify your account.");
-          // Don't redirect, stay on the auth page so they can switch to sign in
         }
       }
     } catch (err: any) {
@@ -83,60 +80,77 @@ export default function AuthPage() {
     }
   };
 
-  const inputBorder = (field: string) =>
-    focusedField === field ? "#111111" : isMobile ? "#262626" : "#e5e7eb";
-  const inputShadow = (field: string) =>
-    focusedField === field ? "0 0 0 3px rgba(0,0,0,0.08)" : "none";
+  const renderLoader = () => (
+    <div className={`absolute -inset-3 flex flex-col items-center justify-center gap-5 rounded-2xl z-50 animate-[fadeIn_0.25s_cubic-bezier(0.16,1,0.3,1)_both] backdrop-blur-[6px] ${isMobile ? "bg-[#09090b]/75" : "bg-white/75"}`}>
+      <div className="absolute w-[140px] h-[140px] bg-[radial-gradient(circle,rgba(168,85,247,0.25)_0%,rgba(236,72,153,0)_70%)] blur-[15px] -z-10 animate-[pulseGlow_2s_ease-in-out_infinite]" />
+      <div className="flex items-end gap-1.25 h-12">
+        {[
+          { anim: "pulseBar1", dur: "1.0s", delay: "0s" },
+          { anim: "pulseBar2", dur: "1.2s", delay: "0.15s" },
+          { anim: "pulseBar3", dur: "0.9s", delay: "0.05s" },
+          { anim: "pulseBar4", dur: "1.1s", delay: "0.2s" },
+          { anim: "pulseBar5", dur: "1.3s", delay: "0.1s" }
+        ].map((bar, idx) => (
+          <div key={idx} style={{
+            animation: `${bar.anim} ${bar.dur} ease-in-out ${bar.delay} infinite`,
+          }} className="w-1.25 h-12 bg-gradient-to-t from-[#6366f1] via-[#a855f7] to-[#ec4899] rounded-[2.5px] origin-bottom shadow-[0_0_10px_rgba(168,85,247,0.3)]" />
+        ))}
+      </div>
+      <div className="flex flex-col items-center gap-1">
+        <span className={`text-[12px] font-bold tracking-widest uppercase ${isMobile ? "text-[#fafafa]" : "text-[#09090b]"}`}>
+          Verifying Identity
+        </span>
+        <span className={`text-[11px] tracking-normal ${isMobile ? "text-[#a1a1aa]" : "text-[#71717a]"}`}>
+          Connecting to secure workspace...
+        </span>
+      </div>
+    </div>
+  );
 
-  // ─── Shared form fields ───
   const renderFormFields = () => (
     <form
       key={isLogin ? "l" : "s"}
       onSubmit={handleSubmit}
-      style={{ display: "flex", flexDirection: "column", gap: 16, animation: "fadeUp 0.3s ease-out both" }}
+      className="flex flex-col gap-4 animate-[fadeUp_0.3s_ease-out_both]"
     >
       {!isLogin && (
-        <div style={fs.group}>
-          <label style={{ ...fs.label, color: isMobile ? "#737373" : "#374151" }}>Full Name</label>
-          <div style={fs.wrap}>
-            <User size={14} color={focusedField === "name" ? "#111111" : isMobile ? "#404040" : "#9ca3af"} style={fs.icon} />
+        <div className="flex flex-col gap-1.5">
+          <label className={`text-[12px] font-medium ${isMobile ? "text-[#737373]" : "text-[#374151]"}`}>Full Name</label>
+          <div className="relative flex items-center group">
+            <User size={14} className="absolute left-[13px] pointer-events-none transition-colors duration-200 text-gray-400 group-focus-within:text-black dark:group-focus-within:text-white" />
             <input type="text" placeholder="John Smith" value={displayName}
               onChange={e => setDisplayName(e.target.value)}
-              onFocus={() => setFocusedField("name")} onBlur={() => setFocusedField(null)}
-              style={{ ...fs.input, ...(isMobile ? fs.darkInput : fs.lightInput), borderColor: inputBorder("name"), boxShadow: inputShadow("name") }} />
+              className={`w-full rounded-[10px] py-3 pl-10 pr-3.5 text-sm outline-none transition-all duration-200 border border-solid border-gray-200 focus:border-neutral-900 focus:shadow-[0_0_0_3px_rgba(0,0,0,0.08)] ${isMobile ? "bg-[#141414] text-[#e5e5e5] border-[#262626]" : "bg-[#fafafa] text-[#111827]"}`} />
           </div>
         </div>
       )}
-      <div style={fs.group}>
-        <label style={{ ...fs.label, color: isMobile ? "#737373" : "#374151" }}>Email Address</label>
-        <div style={fs.wrap}>
-          <Mail size={14} color={focusedField === "email" ? "#111111" : isMobile ? "#404040" : "#9ca3af"} style={fs.icon} />
+      <div className="flex flex-col gap-1.5">
+        <label className={`text-[12px] font-medium ${isMobile ? "text-[#737373]" : "text-[#374151]"}`}>Email Address</label>
+        <div className="relative flex items-center group">
+          <Mail size={14} className="absolute left-[13px] pointer-events-none transition-colors duration-200 text-gray-400 group-focus-within:text-black dark:group-focus-within:text-white" />
           <input type="email" required placeholder="you@company.com" value={email}
             onChange={e => setEmail(e.target.value)}
-            onFocus={() => setFocusedField("email")} onBlur={() => setFocusedField(null)}
-            style={{ ...fs.input, ...(isMobile ? fs.darkInput : fs.lightInput), borderColor: inputBorder("email"), boxShadow: inputShadow("email") }} />
+            className={`w-full rounded-[10px] py-3 pl-10 pr-3.5 text-sm outline-none transition-all duration-200 border border-solid border-gray-200 focus:border-neutral-900 focus:shadow-[0_0_0_3px_rgba(0,0,0,0.08)] ${isMobile ? "bg-[#141414] text-[#e5e5e5] border-[#262626]" : "bg-[#fafafa] text-[#111827]"}`} />
         </div>
       </div>
-      <div style={fs.group}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <label style={{ ...fs.label, color: isMobile ? "#737373" : "#374151" }}>Password</label>
-          {isLogin && <span style={{ fontSize: 12, color: "#111111", cursor: "pointer", fontWeight: 500 }}>Forgot password?</span>}
+      <div className="flex flex-col gap-1.5">
+        <div className="flex justify-between items-center">
+          <label className={`text-[12px] font-medium ${isMobile ? "text-[#737373]" : "text-[#374151]"}`}>Password</label>
+          {isLogin && <span className="text-[12px] text-[#111111] dark:text-[#a1a1aa] hover:underline cursor-pointer font-medium">Forgot password?</span>}
         </div>
-        <div style={fs.wrap}>
-          <Lock size={14} color={focusedField === "password" ? "#111111" : isMobile ? "#404040" : "#9ca3af"} style={fs.icon} />
+        <div className="relative flex items-center group">
+          <Lock size={14} className="absolute left-[13px] pointer-events-none transition-colors duration-200 text-gray-400 group-focus-within:text-black dark:group-focus-within:text-white" />
           <input type="password" required placeholder="••••••••••••" minLength={6} value={password}
             onChange={e => setPassword(e.target.value)}
-            onFocus={() => setFocusedField("password")} onBlur={() => setFocusedField(null)}
-            style={{ ...fs.input, ...(isMobile ? fs.darkInput : fs.lightInput), borderColor: inputBorder("password"), boxShadow: inputShadow("password") }} />
+            className={`w-full rounded-[10px] py-3 pl-10 pr-3.5 text-sm outline-none transition-all duration-200 border border-solid border-gray-200 focus:border-neutral-900 focus:shadow-[0_0_0_3px_rgba(0,0,0,0.08)] ${isMobile ? "bg-[#141414] text-[#e5e5e5] border-[#262626]" : "bg-[#fafafa] text-[#111827]"}`} />
         </div>
-        {!isLogin && <p style={{ fontSize: 11, color: isMobile ? "#333" : "#9ca3af", margin: "3px 0 0" }}>Minimum 6 characters.</p>}
+        {!isLogin && <p className={`text-[11px] margin-0 mt-0.5 ${isMobile ? "text-[#333]" : "text-gray-400"}`}>Minimum 6 characters.</p>}
       </div>
       <button type="submit" disabled={loading}
-        style={{ ...fs.submitBtn, marginTop: 8 }}
-        onMouseEnter={e => { if (!loading) e.currentTarget.style.background = "#000000"; }}
-        onMouseLeave={e => { if (!loading) e.currentTarget.style.background = "#111111"; }}>
+        className="w-full bg-[#111111] hover:bg-black text-white border-none rounded-[10px] py-3.5 px-5 text-sm font-semibold cursor-pointer flex items-center justify-center gap-2 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed tracking-tight mt-2"
+      >
         {loading
-          ? <><Loader2 size={15} style={{ animation: "spin 1s linear infinite" }} /><span>Please wait...</span></>
+          ? <><Loader2 size={15} className="animate-spin" /><span>Please wait...</span></>
           : <><span>{isLogin ? "Sign In to Workspace" : "Create My Account"}</span><ArrowRight size={15} /></>}
       </button>
     </form>
@@ -148,7 +162,6 @@ export default function AuthPage() {
       <>
         <style>{`
           @keyframes spin { to { transform: rotate(360deg); } }
-          /* 4 unique smooth voice frequency animations */
           @keyframes vA {
             0%, 100% { transform: scaleY(0.15); }
             20% { transform: scaleY(0.85); }
@@ -174,61 +187,78 @@ export default function AuthPage() {
             80% { transform: scaleY(0.80); }
           }
           @keyframes fadeUp { from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)} }
+          @keyframes fadeIn { from { opacity: 0; backdrop-filter: blur(0px); } to { opacity: 1; backdrop-filter: blur(6px); } }
+          @keyframes pulseGlow {
+            0%, 100% { transform: scale(1); opacity: 0.5; }
+            50% { transform: scale(1.25); opacity: 0.8; }
+          }
+          @keyframes pulseBar1 { 0%, 100% { transform: scaleY(0.25); } 50% { transform: scaleY(1.0); } }
+          @keyframes pulseBar2 { 0%, 100% { transform: scaleY(0.40); } 50% { transform: scaleY(0.85); } }
+          @keyframes pulseBar3 { 0%, 100% { transform: scaleY(0.15); } 50% { transform: scaleY(0.95); } }
+          @keyframes pulseBar4 { 0%, 100% { transform: scaleY(0.50); } 50% { transform: scaleY(0.70); } }
+          @keyframes pulseBar5 { 0%, 100% { transform: scaleY(0.30); } 50% { transform: scaleY(1.0); } }
         `}</style>
-        <div style={{ minHeight: "100vh", width: "100%", background: "#09090b", fontFamily: "Inter, system-ui, sans-serif", display: "flex", flexDirection: "column", overflow: "auto" }}>
+        <div className="min-h-screen w-full bg-[#09090b] font-sans flex flex-col overflow-auto">
 
           {/* Hero */}
-          <div style={{ padding: "32px 24px 28px", borderBottom: "1px solid #161616", display: "flex", flexDirection: "column", gap: 20 }}>
+          <div className="px-6 pt-8 pb-7 border-b border-[#161616] flex flex-col gap-5">
             {/* Logo */}
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <div style={{ width: 30, height: 30, background: "#ffffff", borderRadius: 7, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, fontWeight: 800, color: "#09090b", letterSpacing: "0.1em" }}>ACE</div>
-              <span style={{ fontSize: 13, fontWeight: 600, color: "#a1a1aa" }}>Voice Controller</span>
+            <div className="flex items-center gap-2.5">
+              <div className="w-[30px] h-[30px] bg-white rounded-[7px] flex items-center justify-center text-[9px] font-extrabold text-[#09090b] tracking-wider">ACE</div>
+              <span className="text-[13px] font-semibold text-[#a1a1aa]">Voice Controller</span>
             </div>
             {/* Headline */}
             <div>
-              <h1 style={{ fontSize: 32, fontWeight: 800, color: "#fafafa", lineHeight: 1.1, letterSpacing: "-0.03em", margin: "0 0 10px" }}>Voice<br />Commands.<br />Reimagined.</h1>
-              <p style={{ fontSize: 13, color: "#52525b", lineHeight: 1.65, margin: 0 }}>Enterprise-grade voice automation for the modern workspace.</p>
+              <h1 className="text-[32px] font-extrabold text-[#fafafa] leading-[1.1] tracking-tight mb-2.5">Voice<br />Commands.<br />Reimagined.</h1>
+              <p className="text-[13px] text-[#52525b] leading-[1.65] m-0">Enterprise-grade voice automation for the modern workspace.</p>
             </div>
             {/* EQ Bars */}
-            <div style={{ display: "flex", alignItems: "flex-end", gap: 3, height: 36 }}>
+            <div className="flex items-end gap-0.75 h-[36px]">
               {MOBILE_BARS.map(([h, anim, dur, delay], i) => (
-                <div key={i} style={{ width: 4, height: Math.round(h * 0.4), borderRadius: 2, background: "#ffffff", opacity: 0.4, flexShrink: 0, animation: `${anim} ${dur}ms ease-in-out ${delay}ms infinite`, transformOrigin: "bottom" }} />
+                <div key={i} style={{
+                  height: Math.round(h * 0.4),
+                  animation: `${anim} ${dur}ms ease-in-out ${delay}ms infinite`,
+                }} className="w-1 bg-white opacity-40 shrink-0 origin-bottom" />
               ))}
             </div>
             {/* Stats */}
-            <div style={{ display: "flex", gap: 28, paddingTop: 16, borderTop: "1px solid #18181b" }}>
+            <div className="flex gap-7 pt-4 border-t border-[#18181b]">
               {[{ val: "<5s", lbl: "Response" }, { val: "99%", lbl: "Accuracy" }, { val: "256-bit", lbl: "Encrypted" }].map(({ val, lbl }) => (
-                <div key={lbl} style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                  <span style={{ fontSize: 16, fontWeight: 700, color: "#e4e4e7", letterSpacing: "-0.02em" }}>{val}</span>
-                  <span style={{ fontSize: 10, color: "#525252", fontWeight: 500 }}>{lbl}</span>
+                <div key={lbl} className="flex flex-col gap-0.5">
+                  <span className="text-[16px] font-bold text-[#e4e4e7] tracking-tight">{val}</span>
+                  <span className="text-[10px] text-[#525252] font-medium">{lbl}</span>
                 </div>
               ))}
             </div>
           </div>
 
           {/* Form */}
-          <div style={{ padding: "28px 24px 48px", flex: 1 }}>
-            <h2 style={{ fontSize: 22, fontWeight: 800, color: "#fafafa", letterSpacing: "-0.03em", margin: "0 0 6px" }}>{isLogin ? "Welcome back." : "Create account."}</h2>
-            <p style={{ fontSize: 13, color: "#52525b", margin: "0 0 24px", lineHeight: 1.6 }}>{isLogin ? "Sign in to your workspace." : "Set up your ACE workspace."}</p>
+          <div className="px-6 pt-7 pb-12 flex-1">
+            <h2 className="text-[22px] font-extrabold text-[#fafafa] tracking-tight mb-1.5">{isLogin ? "Welcome back." : "Create account."}</h2>
+            <p className="text-[13px] text-[#52525b] mb-6 leading-relaxed">{isLogin ? "Sign in to your workspace." : "Set up your ACE workspace."}</p>
 
-            {/* Pill tabs */}
-            <div style={{ display: "flex", gap: 5, marginBottom: 20, background: "#141414", padding: 4, borderRadius: 10, border: "1px solid #1c1c1c" }}>
-              {["Sign In", "Sign Up"].map((label, i) => {
-                const active = (i === 0) === isLogin;
-                return (
-                  <button key={label} onClick={() => { setIsLogin(i === 0); setError(null); setSuccess(null); }}
-                    style={{ flex: 1, padding: "9px 0", borderRadius: 7, border: "none", fontSize: 13, fontWeight: 600, cursor: "pointer", background: active ? "#1e1e1e" : "transparent", color: active ? "#f5f5f5" : "#525252", boxShadow: active ? "0 1px 4px rgba(0,0,0,0.5)" : "none", fontFamily: "Inter, system-ui, sans-serif", transition: "all 0.2s" }}>
-                    {label}
-                  </button>
-                );
-              })}
+            <div className="relative">
+              {/* Pill tabs */}
+              <div className="flex gap-[5px] mb-5 bg-[#141414] p-1 rounded-[10px] border border-[#1c1c1c]">
+                {["Sign In", "Sign Up"].map((label, i) => {
+                  const active = (i === 0) === isLogin;
+                  return (
+                    <button key={label} onClick={() => { setIsLogin(i === 0); setError(null); setSuccess(null); }}
+                      className={`flex-1 py-2.25 rounded-[7px] border-none text-[13px] font-semibold cursor-pointer transition-all duration-200 ${active ? "bg-[#1e1e1e] text-[#f5f5f5] shadow-[0_1px_4px_rgba(0,0,0,0.5)]" : "bg-transparent text-[#525252]"}`}>
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {error && <div className="flex items-center px-3.5 py-2.75 rounded-lg text-[13px] mb-4 bg-red-500/8 text-[#f87171] border border-red-500/15"><span className="mr-1.5">⚠</span>{error}</div>}
+              {success && <div className="flex items-center px-3.5 py-2.75 rounded-lg text-[13px] mb-4 bg-green-500/8 text-[#4ade80] border border-green-500/15"><CheckCircle2 size={14} className="mr-1.5" />{success}</div>}
+
+              {renderFormFields()}
+
+              {loading && renderLoader()}
             </div>
-
-            {error && <div style={{ display: "flex", alignItems: "center", padding: "11px 14px", borderRadius: 8, fontSize: 13, marginBottom: 16, background: "rgba(239,68,68,0.08)", color: "#f87171", border: "1px solid rgba(239,68,68,0.15)" }}><span style={{ marginRight: 6 }}>⚠</span>{error}</div>}
-            {success && <div style={{ display: "flex", alignItems: "center", padding: "11px 14px", borderRadius: 8, fontSize: 13, marginBottom: 16, background: "rgba(34,197,94,0.08)", color: "#4ade80", border: "1px solid rgba(34,197,94,0.15)" }}><CheckCircle2 size={14} style={{ marginRight: 6 }} />{success}</div>}
-
-            {renderFormFields()}
-            <p style={{ fontSize: 11, color: "#2d2d2d", textAlign: "center", lineHeight: 1.7, margin: "20px 0 0" }}>By continuing you agree to our <span style={{ color: "#111111", textDecoration: "underline", cursor: "pointer" }}>Terms</span> &amp; <span style={{ color: "#111111", textDecoration: "underline", cursor: "pointer" }}>Privacy Policy</span>.</p>
+            <p className="text-[11px] text-[#52525b] text-center leading-[1.7] mt-5">By continuing you agree to our <span className="text-[#fafafa] underline cursor-pointer">Terms</span> &amp; <span className="text-[#fafafa] underline cursor-pointer">Privacy Policy</span>.</p>
           </div>
         </div>
       </>
@@ -240,7 +270,6 @@ export default function AuthPage() {
     <>
       <style>{`
         @keyframes spin { to { transform: rotate(360deg); } }
-        /* 4 unique smooth voice frequency animations */
         @keyframes vA {
           0%, 100% { transform: scaleY(0.15); }
           20% { transform: scaleY(0.85); }
@@ -266,86 +295,72 @@ export default function AuthPage() {
           80% { transform: scaleY(0.80); }
         }
         @keyframes fadeUp { from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)} }
+        @keyframes fadeIn { from { opacity: 0; backdrop-filter: blur(0px); } to { opacity: 1; backdrop-filter: blur(6px); } }
+        @keyframes pulseGlow {
+          0%, 100% { transform: scale(1); opacity: 0.5; }
+          50% { transform: scale(1.25); opacity: 0.8; }
+        }
+        @keyframes pulseBar1 { 0%, 100% { transform: scaleY(0.25); } 50% { transform: scaleY(1.0); } }
+        @keyframes pulseBar2 { 0%, 100% { transform: scaleY(0.40); } 50% { transform: scaleY(0.85); } }
+        @keyframes pulseBar3 { 0%, 100% { transform: scaleY(0.15); } 50% { transform: scaleY(0.95); } }
+        @keyframes pulseBar4 { 0%, 100% { transform: scaleY(0.50); } 50% { transform: scaleY(0.70); } }
+        @keyframes pulseBar5 { 0%, 100% { transform: scaleY(0.30); } 50% { transform: scaleY(1.0); } }
       `}</style>
-      <div style={{ display: "flex", minHeight: "100vh", width: "100%", fontFamily: "Inter, system-ui, sans-serif", overflow: "auto", background: "#09090b" }}>
+      <div className="flex min-h-screen w-full font-sans overflow-auto bg-[#09090b]">
 
         {/* Brand Panel */}
-        <div style={{ width: "52%", minHeight: "100vh", background: "#09090b", flexShrink: 0, display: "flex", borderRight: "1px solid #18181b" }}>
-          <div style={{ display: "flex", flexDirection: "column", padding: "48px 52px", width: "100%", justifyContent: "space-between" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <div style={{ width: 32, height: 32, background: "#ffffff", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 800, color: "#09090b", letterSpacing: "0.1em" }}>ACE</div>
-              <span style={{ fontSize: 14, fontWeight: 600, color: "#a1a1aa" }}>Voice Controller</span>
+        <div className="w-[52%] min-h-screen bg-[#09090b] shrink-0 flex border-r border-[#18181b]">
+          <div className="flex flex-col px-[52px] py-12 w-full justify-between">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center text-[10px] font-extrabold text-[#09090b] tracking-wider">ACE</div>
+              <span className="text-sm font-semibold text-[#a1a1aa]">Voice Controller</span>
             </div>
-            <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", gap: 20, padding: "40px 0" }}>
-              <h1 style={{ fontSize: 52, fontWeight: 800, color: "#fafafa", lineHeight: 1.05, letterSpacing: "-0.04em", margin: 0 }}>Voice<br />Commands.<br />Reimagined.</h1>
-              <p style={{ fontSize: 15, color: "#52525b", lineHeight: 1.7, margin: 0 }}>The operating layer between your voice<br />and your entire digital workspace.</p>
+            <div className="flex-1 flex flex-col justify-center gap-5 py-10">
+              <h1 className="text-[52px] font-extrabold text-[#fafafa] leading-[1.05] tracking-tight m-0">Voice<br />Commands.<br />Reimagined.</h1>
+              <p className="text-[15px] text-[#52525b] leading-[1.7] m-0">The operating layer between your voice<br />and your entire digital workspace.</p>
             </div>
-            <div style={{ display: "flex", alignItems: "flex-end", gap: 4, height: 96 }}>
+            <div className="flex items-end gap-1 h-24">
               {BARS.map(([h, anim, dur, delay], i) => (
-                <div key={i} style={{ width: 6, height: h, borderRadius: 3, background: "#ffffff", opacity: 0.45, flexShrink: 0, animation: `${anim} ${dur}ms ease-in-out ${delay}ms infinite`, transformOrigin: "bottom" }} />
+                <div key={i} style={{
+                  height: h,
+                  animation: `${anim} ${dur}ms ease-in-out ${delay}ms infinite`,
+                }} className="w-1.5 bg-white opacity-45 shrink-0 origin-bottom rounded-full" />
               ))}
             </div>
-            {/* <div style={{ display: "flex", gap: 36, paddingTop: 28, borderTop: "1px solid #18181b", marginTop: 20 }}>
-              {[{ val: "<5s", lbl: "Response Time" }, { val: "99%", lbl: "Accuracy" }, { val: "256-bit", lbl: "Encryption" }].map(({ val, lbl }) => (
-                <div key={lbl} style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-                  <span style={{ fontSize: 18, fontWeight: 700, color: "#e4e4e7", letterSpacing: "-0.02em" }}>{val}</span>
-                  <span style={{ fontSize: 11, color: "#52525b", fontWeight: 500 }}>{lbl}</span>
-                </div>
-              ))}
-            </div> */}
           </div>
         </div>
 
         {/* Form Panel */}
-        <div style={{ flex: 1, background: "#ffffff", display: "flex", alignItems: "center", justifyContent: "center", padding: "48px 40px", overflowY: "auto" }}>
-          <div style={{ width: "100%", maxWidth: 380, display: "flex", flexDirection: "column" }}>
-            <h2 style={{ fontSize: 26, fontWeight: 800, color: "#09090b", letterSpacing: "-0.03em", margin: "0 0 8px" }}>{isLogin ? "Welcome back." : "Create account."}</h2>
-            <p style={{ fontSize: 14, color: "#71717a", margin: "0 0 28px", lineHeight: 1.6 }}>{isLogin ? "Sign in to access your voice workspace." : "Set up your ACE workspace in seconds."}</p>
+        <div className="flex-1 bg-white flex items-center justify-center px-10 py-12 overflow-y-auto">
+          <div className="w-full max-w-[380px] flex flex-col">
+            <h2 className="text-[26px] font-extrabold text-[#09090b] tracking-tight mb-2">{isLogin ? "Welcome back." : "Create account."}</h2>
+            <p className="text-sm text-[#71717a] mb-7 leading-relaxed">{isLogin ? "Sign in to access your voice workspace." : "Set up your ACE workspace in seconds."}</p>
 
-            {/* Pills */}
-            <div style={{ display: "flex", gap: 5, marginBottom: 24, background: "#f4f4f5", padding: 4, borderRadius: 10 }}>
-              {["Sign In", "Sign Up"].map((label, i) => {
-                const active = (i === 0) === isLogin;
-                return (
-                  <button key={label} onClick={() => { setIsLogin(i === 0); setError(null); setSuccess(null); }}
-                    style={{ flex: 1, padding: "9px 0", borderRadius: 7, border: "none", fontSize: 13, fontWeight: 600, cursor: "pointer", background: active ? "#fff" : "transparent", color: active ? "#09090b" : "#a1a1aa", boxShadow: active ? "0 1px 3px rgba(0,0,0,0.1)" : "none", fontFamily: "Inter, system-ui, sans-serif", transition: "all 0.2s" }}>
-                    {label}
-                  </button>
-                );
-              })}
+            <div className="relative">
+              {/* Pills */}
+              <div className="flex gap-[5px] mb-6 bg-[#f4f4f5] p-1 rounded-[10px]">
+                {["Sign In", "Sign Up"].map((label, i) => {
+                  const active = (i === 0) === isLogin;
+                  return (
+                    <button key={label} onClick={() => { setIsLogin(i === 0); setError(null); setSuccess(null); }}
+                      className={`flex-1 py-2.25 rounded-[7px] border-none text-[13px] font-semibold cursor-pointer transition-all duration-200 ${active ? "bg-white text-[#09090b] shadow-[0_1px_3px_rgba(0,0,0,0.1)]" : "bg-transparent text-[#a1a1aa]"}`}>
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {error && <div className="flex items-center px-3.5 py-2.75 rounded-lg text-[13px] mb-4 bg-red-50 text-red-600 border border-red-200"><span className="mr-1.5">⚠</span>{error}</div>}
+              {success && <div className="flex items-center px-3.5 py-2.75 rounded-lg text-[13px] mb-4 bg-green-50 text-green-600 border border-green-200"><CheckCircle2 size={14} className="mr-1.5" />{success}</div>}
+
+              {renderFormFields()}
+
+              {loading && renderLoader()}
             </div>
-
-            {error && <div style={{ display: "flex", alignItems: "center", padding: "11px 14px", borderRadius: 8, fontSize: 13, marginBottom: 16, background: "#fef2f2", color: "#dc2626", border: "1px solid #fecaca" }}><span style={{ marginRight: 6 }}>⚠</span>{error}</div>}
-            {success && <div style={{ display: "flex", alignItems: "center", padding: "11px 14px", borderRadius: 8, fontSize: 13, marginBottom: 16, background: "#f0fdf4", color: "#16a34a", border: "1px solid #bbf7d0" }}><CheckCircle2 size={14} style={{ marginRight: 6 }} />{success}</div>}
-
-            {renderFormFields()}
-            <p style={{ fontSize: 11, color: "#9ca3af", textAlign: "center", lineHeight: 1.7, margin: "20px 0 0" }}>By continuing you agree to our <span style={{ color: "#111111", textDecoration: "underline", cursor: "pointer" }}>Terms</span> &amp; <span style={{ color: "#111111", textDecoration: "underline", cursor: "pointer" }}>Privacy Policy</span>.</p>
+            <p className="text-[11px] text-gray-400 text-center leading-[1.7] mt-5">By continuing you agree to our <span className="text-[#111111] underline cursor-pointer">Terms</span> &amp; <span className="text-[#111111] underline cursor-pointer">Privacy Policy</span>.</p>
           </div>
         </div>
       </div>
     </>
   );
 }
-
-// ─── Shared field styles ───
-const fs: Record<string, React.CSSProperties> = {
-  group: { display: "flex", flexDirection: "column", gap: 6 },
-  label: { fontSize: 12, fontWeight: 500 },
-  wrap: { position: "relative", display: "flex", alignItems: "center" },
-  icon: { position: "absolute", left: 13, pointerEvents: "none", transition: "color 0.2s" },
-  input: {
-    width: "100%", borderRadius: 10, padding: "12px 14px 12px 40px",
-    fontSize: 14, outline: "none", transition: "border-color 0.2s, box-shadow 0.2s",
-    fontFamily: "Inter, system-ui, sans-serif", boxSizing: "border-box",
-    border: "1.5px solid #e5e7eb",
-  },
-  lightInput: { background: "#fafafa", color: "#111827" },
-  darkInput: { background: "#141414", color: "#e5e5e5", fontSize: 16 },
-  submitBtn: {
-    width: "100%", background: "#111111", color: "#fff", border: "none",
-    borderRadius: 10, padding: "14px 20px", fontSize: 14, fontWeight: 600,
-    cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
-    gap: 8, transition: "background 0.2s", fontFamily: "Inter, system-ui, sans-serif",
-    letterSpacing: "-0.01em",
-  },
-};

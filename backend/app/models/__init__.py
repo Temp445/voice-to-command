@@ -194,3 +194,15 @@ class AdminPolicy(Base):
     show_browser_tab: Mapped[bool] = mapped_column(Boolean, default=True)
     show_system_tab:  Mapped[bool] = mapped_column(Boolean, default=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
+# ─── GlobalWebsiteShortcut ───────────────────────────────────────────
+
+class GlobalWebsiteShortcut(Base):
+    __tablename__ = "global_website_shortcuts"
+
+    id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True, default=new_uuid)
+    url: Mapped[str] = mapped_column(Text, nullable=False)
+    keywords: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Settings, Mic, Volume2, Globe, Shield, CheckCircle2, Eye, EyeOff, Bot, Loader2, Link2, RefreshCw, HardDrive } from "lucide-react";
+import { Settings, Mic, Volume2, Globe, Shield, CheckCircle2, Eye, EyeOff, Bot, Loader2, Link2, RefreshCw, HardDrive, Lock } from "lucide-react";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { TopBar } from "@/components/layout/TopBar";
 import { useSettingsStore } from "@/store/settingsStore";
@@ -92,6 +92,7 @@ const PERMISSION_FIELDS = [
       { key: "browser_animations_enabled", label: "Browser Animations Toggle" },
       { key: "restrict_browser_automation", label: "Restrict Website Automation Toggle" },
       { key: "crm_sites", label: "Website Shortcuts List" },
+      { key: "global_website_shortcuts", label: "Global Website Shortcuts" },
     ]
   },
   {
@@ -137,6 +138,12 @@ export default function SettingsPage() {
   const [adminSavingUser, setAdminSavingUser] = useState<string | null>(null);
   const [adminError, setAdminError] = useState<string | null>(null);
   const [adminSuccess, setAdminSuccess] = useState<string | null>(null);
+
+  // Global Website Shortcuts State
+  const [globalShortcuts, setGlobalShortcuts] = useState<any[]>([]);
+  const [loadingGlobalShortcuts, setLoadingGlobalShortcuts] = useState(false);
+  const [globalShortcutsError, setGlobalShortcutsError] = useState<string | null>(null);
+  const [globalShortcutsSuccess, setGlobalShortcutsSuccess] = useState<string | null>(null);
 
   // STT Tester State
   const [sttTestActive, setSttTestActive] = useState(false);
@@ -201,6 +208,43 @@ export default function SettingsPage() {
     }).catch(err => console.error(err));
   }, []);
 
+  // Fetch Global Website Shortcuts
+  useEffect(() => {
+    setLoadingGlobalShortcuts(true);
+    api.listGlobalShortcuts()
+      .then((data: any[]) => setGlobalShortcuts(data || []))
+      .catch(err => console.error("Failed to load global shortcuts:", err))
+      .finally(() => setLoadingGlobalShortcuts(false));
+  }, []);
+
+  const handleAddGlobalShortcut = async (url: string, keywords: string) => {
+    setGlobalShortcutsError(null);
+    setGlobalShortcutsSuccess(null);
+    try {
+      const newShortcut = await api.createGlobalShortcut(url, keywords);
+      setGlobalShortcuts(prev => [...prev, newShortcut]);
+      setGlobalShortcutsSuccess("Global website shortcut added successfully!");
+      setTimeout(() => setGlobalShortcutsSuccess(null), 3000);
+    } catch (err: any) {
+      setGlobalShortcutsError(err.message || "Failed to add global shortcut. Check permissions.");
+      setTimeout(() => setGlobalShortcutsError(null), 3000);
+    }
+  };
+
+  const handleDeleteGlobalShortcut = async (id: string) => {
+    setGlobalShortcutsError(null);
+    setGlobalShortcutsSuccess(null);
+    try {
+      await api.deleteGlobalShortcut(id);
+      setGlobalShortcuts(prev => prev.filter(item => item.id !== id));
+      setGlobalShortcutsSuccess("Global website shortcut deleted successfully!");
+      setTimeout(() => setGlobalShortcutsSuccess(null), 3000);
+    } catch (err: any) {
+      setGlobalShortcutsError(err.message || "Failed to delete global shortcut. Check permissions.");
+      setTimeout(() => setGlobalShortcutsError(null), 3000);
+    }
+  };
+
   useEffect(() => {
     if (!initialLoaded) return;
     if (settings.role !== "admin") {
@@ -257,7 +301,9 @@ export default function SettingsPage() {
           const normalized = data.map((u) => {
             const perms = { ...u.permissions };
             allKeys.forEach((k) => {
-              if (!perms[k]) perms[k] = { visible: true, mutable: true };
+              if (!perms[k]) {
+                perms[k] = k === "global_website_shortcuts" ? { visible: true, mutable: false } : { visible: true, mutable: true };
+              }
             });
             return { ...u, permissions: perms };
           });
@@ -441,7 +487,7 @@ export default function SettingsPage() {
         <section className={cardClass}>
           <div className={bodyClass}>
             <p className="text-zinc-500 text-center p-8 text-[15px] font-medium">
-              🔒 This tab has been disabled by your administrator.
+              <span className="flex items-center justify-center gap-2"><Lock className="w-4 h-4 text-zinc-500" /> This tab has been disabled by your administrator.</span>
             </p>
           </div>
         </section>
@@ -461,7 +507,7 @@ export default function SettingsPage() {
                 <div className={isMutable("wake_word") ? "opacity-100" : "opacity-60"}>
                   <p className="text-[13px] font-semibold text-[var(--foreground)] mb-1.5 flex items-center gap-1.5">
                     Wake Word
-                    {!isMutable("wake_word") && <span title="Locked by Administrator">🔒</span>}
+                    {!isMutable("wake_word") && <span title="Locked by Administrator" className="inline-flex items-center ml-1.5"><Lock className="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500 shrink-0" /></span>}
                   </p>
                   <select 
                     className={inpClass} 
@@ -482,7 +528,7 @@ export default function SettingsPage() {
                 <div className={isMutable("stt_provider") ? "opacity-100" : "opacity-60"}>
                   <p className="text-[13px] font-semibold text-[var(--foreground)] mb-1.5 flex items-center gap-1.5">
                     STT Provider
-                    {!isMutable("stt_provider") && <span title="Locked by Administrator">🔒</span>}
+                    {!isMutable("stt_provider") && <span title="Locked by Administrator" className="inline-flex items-center ml-1.5"><Lock className="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500 shrink-0" /></span>}
                   </p>
                   <div className="grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-4 mb-6">
                     {[
@@ -522,7 +568,7 @@ export default function SettingsPage() {
                 <div className={`mb-6 ${isMutable("elevenlabs_api_key") ? "opacity-100" : "opacity-60"}`}>
                   <p className="text-[13px] font-semibold text-[var(--foreground)] mb-1.5 flex items-center gap-1.5">
                     ElevenLabs API Key
-                    {!isMutable("elevenlabs_api_key") && <span title="Locked by Administrator">🔒</span>}
+                    {!isMutable("elevenlabs_api_key") && <span title="Locked by Administrator" className="inline-flex items-center ml-1.5"><Lock className="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500 shrink-0" /></span>}
                   </p>
                   <div className="relative max-w-96">
                     <input
@@ -548,7 +594,7 @@ export default function SettingsPage() {
                 <div className={`mb-6 ${isMutable("deepgram_api_key") ? "opacity-100" : "opacity-60"}`}>
                   <p className="text-[13px] font-semibold text-[var(--foreground)] mb-1.5 flex items-center gap-1.5">
                     Deepgram API Key
-                    {!isMutable("deepgram_api_key") && <span title="Locked by Administrator">🔒</span>}
+                    {!isMutable("deepgram_api_key") && <span title="Locked by Administrator" className="inline-flex items-center ml-1.5"><Lock className="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500 shrink-0" /></span>}
                   </p>
                   <div className="relative max-w-96">
                     <input
@@ -574,7 +620,7 @@ export default function SettingsPage() {
                 <div className={isMutable("whisper_model") ? "opacity-100" : "opacity-60"}>
                   <p className="text-[13px] font-semibold text-[var(--foreground)] mb-1.5 flex items-center gap-1.5">
                     Whisper Model
-                    {!isMutable("whisper_model") && <span title="Locked by Administrator">🔒</span>}
+                    {!isMutable("whisper_model") && <span title="Locked by Administrator" className="inline-flex items-center ml-1.5"><Lock className="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500 shrink-0" /></span>}
                   </p>
                   <div className="flex gap-2 flex-wrap">
                     {(["tiny", "base", "small", "medium"] as const).map((m) => (
@@ -597,7 +643,7 @@ export default function SettingsPage() {
                   <div>
                     <p className="text-[15px] font-semibold text-[var(--foreground)] flex items-center gap-1.5">
                       Noise Cancellation
-                      {!isMutable("stt_noise_cancellation") && <span title="Locked by Administrator">🔒</span>}
+                      {!isMutable("stt_noise_cancellation") && <span title="Locked by Administrator" className="inline-flex items-center ml-1.5"><Lock className="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500 shrink-0" /></span>}
                     </p>
                     <p className="text-[13px] text-zinc-500 mt-1">Aggressively filter background noise using VAD</p>
                   </div>
@@ -609,7 +655,7 @@ export default function SettingsPage() {
                 <div className={isMutable("require_wake_word_always") ? "opacity-100" : "opacity-60"}>
                   <p className="text-[13px] font-semibold text-[var(--foreground)] mb-1.5 flex items-center gap-1.5">
                     Interaction Mode
-                    {!isMutable("require_wake_word_always") && <span title="Locked by Administrator">🔒</span>}
+                    {!isMutable("require_wake_word_always") && <span title="Locked by Administrator" className="inline-flex items-center ml-1.5"><Lock className="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500 shrink-0" /></span>}
                   </p>
                   <div className="grid grid-cols-2 gap-4">
                     {[
@@ -644,7 +690,7 @@ export default function SettingsPage() {
                 <div className={`mt-4 p-5 bg-[var(--secondary)] rounded-xl border border-[var(--border)] ${isMutable("active_mode_timeout") ? "opacity-100" : "opacity-60"}`}>
                   <p className="text-[15px] font-semibold text-[var(--foreground)] mb-4 flex items-center gap-1.5">
                     Active Mode Timeout (Seconds)
-                    {!isMutable("active_mode_timeout") && <span title="Locked by Administrator">🔒</span>}
+                    {!isMutable("active_mode_timeout") && <span title="Locked by Administrator" className="inline-flex items-center ml-1.5"><Lock className="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500 shrink-0" /></span>}
                   </p>
                   <div className="flex items-center gap-4">
                     <input
@@ -674,7 +720,7 @@ export default function SettingsPage() {
                       <div>
                         <p className="text-[13px] font-semibold text-[var(--foreground)] mb-1 flex items-center gap-1.5">
                           Toggle Desktop Overlay
-                          {!isMutable("overlay_shortcut") && <span title="Locked by Administrator">🔒</span>}
+                          {!isMutable("overlay_shortcut") && <span title="Locked by Administrator" className="inline-flex items-center ml-1.5"><Lock className="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500 shrink-0" /></span>}
                         </p>
                         <input
                           type="text"
@@ -691,7 +737,7 @@ export default function SettingsPage() {
                       <div>
                         <p className="text-[13px] font-semibold text-[var(--foreground)] mb-1 flex items-center gap-1.5">
                           Skip Wake Word (Trigger Listen)
-                          {!isMutable("listen_shortcut") && <span title="Locked by Administrator">🔒</span>}
+                          {!isMutable("listen_shortcut") && <span title="Locked by Administrator" className="inline-flex items-center ml-1.5"><Lock className="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500 shrink-0" /></span>}
                         </p>
                         <input
                           type="text"
@@ -747,7 +793,7 @@ export default function SettingsPage() {
                 <div className={isMutable("tts_provider") ? "opacity-100" : "opacity-60"}>
                   <p className="text-[13px] font-semibold text-[var(--foreground)] mb-1.5 flex items-center gap-1.5">
                     TTS Provider
-                    {!isMutable("tts_provider") && <span title="Locked by Administrator">🔒</span>}
+                    {!isMutable("tts_provider") && <span title="Locked by Administrator" className="inline-flex items-center ml-1.5"><Lock className="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500 shrink-0" /></span>}
                   </p>
                   <div className="grid grid-cols-2 gap-4">
                     {[
@@ -782,7 +828,7 @@ export default function SettingsPage() {
                 <div className={isMutable("piper_voice") ? "opacity-100" : "opacity-60"}>
                   <p className="text-[13px] font-semibold text-[var(--foreground)] mb-1.5 flex items-center gap-1.5">
                     Piper Voice
-                    {!isMutable("piper_voice") && <span title="Locked by Administrator">🔒</span>}
+                    {!isMutable("piper_voice") && <span title="Locked by Administrator" className="inline-flex items-center ml-1.5"><Lock className="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500 shrink-0" /></span>}
                   </p>
                   <select 
                     className={`${inpClass} max-w-96`}
@@ -802,7 +848,7 @@ export default function SettingsPage() {
                   <div>
                     <p className="text-[15px] font-semibold text-[var(--foreground)] flex items-center gap-1.5">
                       Reply Sound
-                      {!isMutable("reply_sound") && <span title="Locked by Administrator">🔒</span>}
+                      {!isMutable("reply_sound") && <span title="Locked by Administrator" className="inline-flex items-center ml-1.5"><Lock className="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500 shrink-0" /></span>}
                     </p>
                     <p className="text-[13px] text-zinc-500 mt-1">Play audio response voice when executing commands</p>
                   </div>
@@ -814,7 +860,7 @@ export default function SettingsPage() {
                 <div className={`mt-6 ${isMutable("speech_rate") ? "opacity-100" : "opacity-60"}`}>
                   <p className="text-[13px] font-semibold text-[var(--foreground)] mb-1.5 flex items-center gap-1.5">
                     Speech Speed
-                    {!isMutable("speech_rate") && <span title="Locked by Administrator">🔒</span>}
+                    {!isMutable("speech_rate") && <span title="Locked by Administrator" className="inline-flex items-center ml-1.5"><Lock className="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500 shrink-0" /></span>}
                   </p>
                   <select 
                     className={`${inpClass} max-w-96`}
@@ -865,7 +911,7 @@ export default function SettingsPage() {
                   <Bot className="w-5 h-5 text-zinc-500" />
                   <span className="text-base font-semibold text-[var(--foreground)] flex items-center gap-1.5">
                     AI Assistant
-                    {!isMutable("llm_enabled") && <span title="Locked by Administrator">🔒</span>}
+                    {!isMutable("llm_enabled") && <span title="Locked by Administrator" className="inline-flex items-center ml-1.5"><Lock className="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500 shrink-0" /></span>}
                   </span>
                 </div>
                 <Toggle checked={settings.llmEnabled} disabled={!isMutable("llm_enabled")} onChange={() => settings.update({ llmEnabled: !settings.llmEnabled })} />
@@ -887,7 +933,7 @@ export default function SettingsPage() {
                       <div className={isMutable("llm_provider") ? "opacity-100" : "opacity-60"}>
                         <p className="text-[13px] font-semibold text-[var(--foreground)] mb-1.5 flex items-center gap-1.5">
                           Provider
-                          {!isMutable("llm_provider") && <span title="Locked by Administrator">🔒</span>}
+                          {!isMutable("llm_provider") && <span title="Locked by Administrator" className="inline-flex items-center ml-1.5"><Lock className="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500 shrink-0" /></span>}
                         </p>
                         <select 
                           className={inpClass} 
@@ -912,7 +958,7 @@ export default function SettingsPage() {
                       <div className={isMutable("llm_model") ? "opacity-100" : "opacity-60"}>
                         <p className="text-[13px] font-semibold text-[var(--foreground)] mb-1.5 flex items-center gap-1.5">
                           Model
-                          {!isMutable("llm_model") && <span title="Locked by Administrator">🔒</span>}
+                          {!isMutable("llm_model") && <span title="Locked by Administrator" className="inline-flex items-center ml-1.5"><Lock className="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500 shrink-0" /></span>}
                         </p>
                         <select 
                           className={inpClass} 
@@ -931,7 +977,7 @@ export default function SettingsPage() {
                     <div className={isMutable("llm_api_key_encrypted") ? "opacity-100" : "opacity-60"}>
                       <p className="text-[13px] font-semibold text-[var(--foreground)] mb-1.5 flex items-center gap-1.5">
                         API Key
-                        {!isMutable("llm_api_key_encrypted") && <span title="Locked by Administrator">🔒</span>}
+                        {!isMutable("llm_api_key_encrypted") && <span title="Locked by Administrator" className="inline-flex items-center ml-1.5"><Lock className="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500 shrink-0" /></span>}
                       </p>
                       <div className="relative">
                         <input 
@@ -958,7 +1004,7 @@ export default function SettingsPage() {
                       <div className={isMutable("llm_mode") ? "opacity-100" : "opacity-60"}>
                         <p className="text-[13px] font-semibold text-[var(--foreground)] mb-1.5 flex items-center gap-1.5">
                           Processing Mode
-                          {!isMutable("llm_mode") && <span title="Locked by Administrator">🔒</span>}
+                          {!isMutable("llm_mode") && <span title="Locked by Administrator" className="inline-flex items-center ml-1.5"><Lock className="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500 shrink-0" /></span>}
                         </p>
                         <div className="flex gap-2">
                           <button disabled={!isMutable("llm_mode")} onClick={() => settings.update({ llmMode: "fallback" })} className={settings.llmMode === "fallback" ? btnAClass : btnIClass}>Fallback</button>
@@ -971,7 +1017,7 @@ export default function SettingsPage() {
                       <div className={isMutable("llm_temperature") ? "opacity-100" : "opacity-60"}>
                         <p className="text-[13px] font-semibold text-[var(--foreground)] mb-1.5 flex items-center gap-1.5">
                           Temperature: {settings.llmTemperature}
-                          {!isMutable("llm_temperature") && <span title="Locked by Administrator">🔒</span>}
+                          {!isMutable("llm_temperature") && <span title="Locked by Administrator" className="inline-flex items-center ml-1.5"><Lock className="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500 shrink-0" /></span>}
                         </p>
                         <input 
                           type="range" 
@@ -1027,7 +1073,7 @@ export default function SettingsPage() {
                 <div className={isMutable("browser_type") ? "opacity-100" : "opacity-60"}>
                   <p className="text-[13px] font-semibold text-[var(--foreground)] mb-1.5 flex items-center gap-1.5">
                     Browser Engine
-                    {!isMutable("browser_type") && <span title="Locked by Administrator">🔒</span>}
+                    {!isMutable("browser_type") && <span title="Locked by Administrator" className="inline-flex items-center ml-1.5"><Lock className="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500 shrink-0" /></span>}
                   </p>
                   <div className="flex gap-3">
                     {(["chromium", "firefox", "webkit"] as const).map((b) => (
@@ -1050,7 +1096,7 @@ export default function SettingsPage() {
                   <div>
                     <p className="text-[15px] font-semibold text-[var(--foreground)] flex items-center gap-1.5">
                       Browser Animations
-                      {!isMutable("browser_animations_enabled") && <span title="Locked by Administrator">🔒</span>}
+                      {!isMutable("browser_animations_enabled") && <span title="Locked by Administrator" className="inline-flex items-center ml-1.5"><Lock className="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500 shrink-0" /></span>}
                     </p>
                     <p className="text-[13px] text-zinc-500 mt-1">Show visual feedback (animated cursor, element highlights) during automation</p>
                   </div>
@@ -1063,7 +1109,7 @@ export default function SettingsPage() {
                   <div>
                     <p className="text-[15px] font-semibold text-[var(--foreground)] flex items-center gap-1.5">
                       Restrict Website Automation
-                      {!isMutable("restrict_browser_automation") && <span title="Locked by Administrator">🔒</span>}
+                      {!isMutable("restrict_browser_automation") && <span title="Locked by Administrator" className="inline-flex items-center ml-1.5"><Lock className="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500 shrink-0" /></span>}
                     </p>
                     <p className="text-[13px] text-zinc-500 mt-1">Only allow browser automation on sites added to Website Shortcuts</p>
                   </div>
@@ -1078,7 +1124,7 @@ export default function SettingsPage() {
                     <div>
                       <p className="text-base font-semibold text-[var(--foreground)] flex items-center gap-1.5">
                         Website Shortcuts
-                        {!isMutable("crm_sites") && <span title="Locked by Administrator">🔒</span>}
+                        {!isMutable("crm_sites") && <span title="Locked by Administrator" className="inline-flex items-center ml-1.5"><Lock className="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500 shrink-0" /></span>}
                       </p>
                       <p className="text-xs text-zinc-500 mt-1">Say a keyword to instantly open any website — CRM, dashboards, tools, anything.</p>
                     </div>
@@ -1154,6 +1200,112 @@ export default function SettingsPage() {
                   </div>
                 </div>
               )}
+
+              {/* ── Global Website Shortcuts ── */}
+              {isVisible("global_website_shortcuts") && (
+                <div className={`mt-6 pt-6 border-t border-[var(--border)] ${isMutable("global_website_shortcuts") ? "opacity-100" : "opacity-60"}`}>
+                  <div className="flex items-center justify-between mb-2">
+                    <div>
+                      <p className="text-base font-semibold text-[var(--foreground)] flex items-center gap-1.5">
+                        Global Website Shortcuts
+                        {!isMutable("global_website_shortcuts") && <span title="Locked by Administrator" className="inline-flex items-center ml-1.5"><Lock className="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500 shrink-0" /></span>}
+                      </p>
+                      <p className="text-xs text-zinc-500 mt-1">
+                        Centralized shortcuts visible to all users.
+                      </p>
+                    </div>
+                  </div>
+
+                  {globalShortcutsError && (
+                    <div className="p-3 mb-3 rounded-lg bg-red-500/10 text-red-500 border border-red-500/20 text-xs font-medium">
+                      {globalShortcutsError}
+                    </div>
+                  )}
+                  {globalShortcutsSuccess && (
+                    <div className="p-3 mb-3 rounded-lg bg-green-500/10 text-green-600 border border-green-500/20 text-xs font-medium">
+                      {globalShortcutsSuccess}
+                    </div>
+                  )}
+
+                  {/* Add form — only visible if mutable */}
+                  {isMutable("global_website_shortcuts") && (
+                    <form 
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        const formData = new FormData(e.currentTarget);
+                        const url = formData.get("url") as string;
+                        const keywords = formData.get("keywords") as string;
+                        if (!url || !keywords) return;
+                        handleAddGlobalShortcut(url, keywords);
+                        e.currentTarget.reset();
+                      }}
+                      className="bg-[var(--secondary)] rounded-xl p-4 border border-[var(--border)] mb-4 flex flex-col gap-3"
+                    >
+                      <p className="text-sm font-semibold text-[var(--foreground)]">Add Global Shortcut</p>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div>
+                          <label className="text-xs text-zinc-400 block mb-1">Website URL</label>
+                          <input 
+                            name="url"
+                            required
+                            placeholder="https://example.com"
+                            className={inpClass}
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs text-zinc-400 block mb-1">Voice Keywords (comma separated)</label>
+                          <input 
+                            name="keywords"
+                            required
+                            placeholder="open example, go to example"
+                            className={inpClass}
+                          />
+                        </div>
+                      </div>
+                      <button
+                        type="submit"
+                        className="self-end px-4 py-2 rounded-lg text-[13px] font-semibold bg-[var(--primary)] text-[var(--primary-foreground)] hover:opacity-90 active:scale-95 transition-all duration-150 border-none cursor-pointer"
+                      >
+                        + Add Global Shortcut
+                      </button>
+                    </form>
+                  )}
+
+                  {/* List of shortcuts */}
+                  <div className="flex flex-col gap-3">
+                    {loadingGlobalShortcuts ? (
+                      <div className="flex items-center gap-2 py-4 justify-center text-zinc-500">
+                        <Loader2 className="animate-spin" size={16} />
+                        <span className="text-sm">Loading global shortcuts...</span>
+                      </div>
+                    ) : (
+                      globalShortcuts.map((site) => (
+                        <div key={site.id} className="bg-[var(--secondary)] rounded-xl p-4 border border-[var(--border)] flex items-center justify-between">
+                          <div className="flex-1 min-w-0 pr-4">
+                            <p className="text-sm font-semibold text-[var(--foreground)] truncate">{site.url}</p>
+                            <p className="text-xs text-zinc-500 mt-0.5">Keywords: <span className="font-mono text-zinc-400">{site.keywords}</span></p>
+                          </div>
+                          {isMutable("global_website_shortcuts") && (
+                            <button
+                              onClick={() => handleDeleteGlobalShortcut(site.id)}
+                              className="bg-transparent border-none cursor-pointer text-zinc-500 hover:text-red-500 active:scale-90 transition-colors p-1"
+                              title="Delete global shortcut"
+                            >
+                              ✕
+                            </button>
+                          )}
+                        </div>
+                      ))
+                    )}
+
+                    {!loadingGlobalShortcuts && globalShortcuts.length === 0 && (
+                      <p className="text-sm text-zinc-500 text-center p-4">
+                        No global shortcuts configured.
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           </section>
         );
@@ -1170,7 +1322,7 @@ export default function SettingsPage() {
                 <div className={isMutable("theme") ? "opacity-100" : "opacity-60"}>
                   <p className="text-[13px] font-semibold text-[var(--foreground)] mb-1.5 flex items-center gap-1.5">
                     Theme
-                    {!isMutable("theme") && <span title="Locked by Administrator">🔒</span>}
+                    {!isMutable("theme") && <span title="Locked by Administrator" className="inline-flex items-center ml-1.5"><Lock className="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500 shrink-0" /></span>}
                   </p>
                   <div className="flex gap-3">
                     {(["dark", "light"] as const).map((t) => (
@@ -1203,7 +1355,7 @@ export default function SettingsPage() {
                       <div>
                         <p className="text-[15px] font-semibold text-[var(--foreground)] flex items-center gap-1.5">
                           {label}
-                          {disabled && <span title="Locked by Administrator">🔒</span>}
+                          {disabled && <span title="Locked by Administrator" className="inline-flex items-center ml-1.5"><Lock className="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500 shrink-0" /></span>}
                         </p>
                         <p className="text-[13px] text-zinc-500 mt-1">{desc}</p>
                       </div>
@@ -1220,7 +1372,7 @@ export default function SettingsPage() {
                     <HardDrive className="w-[18px] h-[18px] text-[var(--primary)]" />
                     <p className="text-[15px] font-semibold text-[var(--foreground)] flex items-center gap-1.5">
                       App &amp; File Scanning
-                      {!isMutable("scan_mode") && <span title="Locked by Administrator">🔒</span>}
+                      {!isMutable("scan_mode") && <span title="Locked by Administrator" className="inline-flex items-center ml-1.5"><Lock className="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500 shrink-0" /></span>}
                     </p>
                   </div>
 
@@ -1346,7 +1498,7 @@ export default function SettingsPage() {
                               <p className="text-[13px] font-bold text-[var(--primary)] uppercase tracking-wider mb-3">{group.category}</p>
                               <div className="flex flex-col gap-2">
                                 {group.items.map((field) => {
-                                  const perm = user.permissions[field.key] || { visible: true, mutable: true };
+                                  const perm = user.permissions[field.key] || (field.key === "global_website_shortcuts" ? { visible: true, mutable: false } : { visible: true, mutable: true });
                                   return (
                                     <div key={field.key} className="grid grid-cols-[1.5fr_1fr_1fr] items-center px-3.5 py-2.5 bg-[var(--secondary)] rounded-lg border border-[var(--border)]">
                                       <span className="text-[13px] font-medium text-[var(--foreground)]">{field.label}</span>

@@ -202,10 +202,14 @@ async def get_settings(request: Request, user_id: str = Depends(get_current_user
         "tab_system",
         "elevenlabs_api_key",
         "deepgram_api_key",
-        "llm_api_key"
+        "llm_api_key",
+        "global_website_shortcuts"
     }
     for key in virtual_keys:
-        final_permissions[key] = {"visible": True, "mutable": True}
+        if key == "global_website_shortcuts" and role != "admin":
+            final_permissions[key] = {"visible": True, "mutable": False}
+        else:
+            final_permissions[key] = {"visible": True, "mutable": True}
         
     for key, val in permissions.items():
         if isinstance(val, dict) and key in final_permissions:
@@ -250,10 +254,14 @@ async def update_settings(
         "tab_system",
         "elevenlabs_api_key",
         "deepgram_api_key",
-        "llm_api_key"
+        "llm_api_key",
+        "global_website_shortcuts"
     }
     for key in virtual_keys:
-        final_permissions[key] = {"visible": True, "mutable": True}
+        if key == "global_website_shortcuts" and role != "admin":
+            final_permissions[key] = {"visible": True, "mutable": False}
+        else:
+            final_permissions[key] = {"visible": True, "mutable": True}
         
     for key, val in permissions.items():
         if isinstance(val, dict) and key in final_permissions:
@@ -518,4 +526,110 @@ async def trigger_scan(request: Request, user_id: str = Depends(get_current_user
 
     asyncio.create_task(_do_scan())
     return {"status": "scanning", "message": "Scan started in background"}
+
+
+# ── Global Website Shortcuts ──────────────────────────────────────────────────
+
+from pydantic import BaseModel
+
+class GlobalShortcutCreate(BaseModel):
+    url: str
+    keywords: str
+
+
+async def check_global_shortcuts_write_permission(user_id: str):
+    """Enforce that only administrators or users explicitly granted permission can edit global website shortcuts."""
+    # 1. Fetch user role
+    user_res = await sb_run(lambda: supabase_admin.table("users").select("role").eq("id", user_id).execute())
+    role = user_res.data[0].get("role") if user_res.data else "user"
+    if role == "admin":
+        return
+
+    # 2. Fetch user policy
+    policy_res = await sb_run(lambda: supabase_admin.table("user_policies").select("permissions").eq("user_id", user_id).execute())
+    permissions = policy_res.data[0].get("permissions") if policy_res.data else {}
+
+    allowed = False
+    if "global_website_shortcuts" in permissions:
+        if isinstance(permissions["global_website_shortcuts"], dict):
+            allowed = permissions["global_website_shortcuts"].get("mutable", False)
+
+    if not allowed:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Modification forbidden: You do not have permission to edit global website shortcuts."
+        )
+
+
+@router.get("/global-shortcuts", response_model=list[dict])
+async def list_global_shortcuts(user_id: str = Depends(get_current_user_id)):
+    """Retrieve all global website shortcuts."""
+    try:
+        res = await sb_run(
+            lambda: supabase_admin.table("global_website_shortcuts").select("*").order("created_at", desc=False).execute()
+        )
+        return res.data or []
+    except Exception as e:
+        logger.error(f"Failed to fetch global shortcuts: {e}")
+        return []
+
+
+@router.post("/global-shortcuts", response_model=dict)
+async def create_global_shortcut(
+    body: GlobalShortcutCreate,
+    user_id: str = Depends(get_current_user_id)
+):
+    """Add a new global website shortcut. Admin only by default, or permitted users."""
+    await check_global_shortcuts_write_permission(user_id)
+    try:
+        new_shortcut = {
+            "id": str(uuid.uuid4()),
+            "url": body.url,
+            "keywords": body.keywords
+        }
+        res = await sb_run(
+            lambda: supabase_admin.table("global_website_shortcuts").insert(new_shortcut).execute()
+        )
+        if not res.data:
+            raise HTTPException(status_code=500, detail="Failed to create global shortcut row.")
+            
+        # Invalidate in-process cache
+        try:
+            from app.services.command_service import command_service
+            command_service._ws_cache_loaded = False
+        except Exception:
+            pass
+            
+        return res.data[0]
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to create global shortcut: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/global-shortcuts/{shortcut_id}")
+async def delete_global_shortcut(
+    shortcut_id: str,
+    user_id: str = Depends(get_current_user_id)
+):
+    """Delete a global website shortcut. Admin only by default, or permitted users."""
+    await check_global_shortcuts_write_permission(user_id)
+    try:
+        res = await sb_run(
+            lambda: supabase_admin.table("global_website_shortcuts").delete().eq("id", shortcut_id).execute()
+        )
+        # Invalidate in-process cache
+        try:
+            from app.services.command_service import command_service
+            command_service._ws_cache_loaded = False
+        except Exception:
+            pass
+            
+        return {"status": "success", "message": "Shortcut deleted"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to delete global shortcut: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 

@@ -65,6 +65,8 @@ _SUBPROCESS_CHROME_ARGS = [
     "--disable-ipc-flooding-protection",
     "--disable-session-crashed-bubble",
     "--start-maximized",
+    "--password-store=basic",
+    "--disable-save-password-bubble",
     "--flag-switches-begin",
     "--flag-switches-end",
 ]
@@ -100,6 +102,37 @@ def _is_chrome_running_on_debug_port(port: int = 9222) -> bool:
             return True
     except OSError:
         return False
+
+
+def _patch_chrome_preferences(profile_path: str) -> None:
+    """Patch Chrome Preferences to disable password manager and 'Restore pages?' bubbles."""
+    import json
+    prefs_dir = os.path.join(profile_path, "Default")
+    os.makedirs(prefs_dir, exist_ok=True)
+    prefs_path = os.path.join(prefs_dir, "Preferences")
+    
+    prefs = {}
+    if os.path.exists(prefs_path):
+        try:
+            with open(prefs_path, "r", encoding="utf-8") as f:
+                prefs = json.load(f)
+        except Exception as e:
+            logger.debug(f"Failed to read Chrome preferences: {e}")
+            
+    if "profile" not in prefs:
+        prefs["profile"] = {}
+    prefs["profile"]["exit_type"] = "Normal"
+    prefs["profile"]["exited_cleanly"] = True
+    prefs["profile"]["password_manager_enabled"] = False
+    
+    prefs["credentials_enable_service"] = False
+    
+    try:
+        with open(prefs_path, "w", encoding="utf-8") as f:
+            json.dump(prefs, f)
+        logger.info("✅ Patched Chrome preferences (disabled password manager/restore bubbles).")
+    except Exception as e:
+        logger.debug(f"Failed to write Chrome preferences: {e}")
 
 
 def _launch_detached_chrome(profile_path: str, port: int = 9222) -> None:
@@ -220,20 +253,7 @@ class BrowserEngine:
                 logger.info("✅ Chrome already running on port 9222 — pre-warm skipped (server reload detected).")
                 return
 
-            # Patch Chrome Preferences to prevent "Restore pages?" crash bubble
-            prefs_path = os.path.join(profile_path, "Default", "Preferences")
-            if os.path.exists(prefs_path):
-                try:
-                    import json
-                    with open(prefs_path, "r", encoding="utf-8") as f:
-                        prefs = json.load(f)
-                    if "profile" in prefs:
-                        prefs["profile"]["exit_type"] = "Normal"
-                        prefs["profile"]["exited_cleanly"] = True
-                    with open(prefs_path, "w", encoding="utf-8") as f:
-                        json.dump(prefs, f)
-                except Exception as e:
-                    logger.debug(f"Failed to patch Chrome preferences: {e}")
+            _patch_chrome_preferences(profile_path)
 
             try:
                 _launch_detached_chrome(profile_path)
@@ -288,22 +308,47 @@ class BrowserEngine:
         logger.debug("BrowserEngine: cleared active page override")
 
     def _is_shortcut_url(self, url: str) -> bool:
-        """Returns True if url matches any configured crm_sites entry."""
+        """Returns True if url matches any configured crm_sites entry or global shortcut."""
         import json
         from urllib.parse import urlparse
         try:
             url_lower = url.lower().strip()
-            if url_lower.startswith(("about:", "chrome:", "chrome-extension://")) or "localhost" in url_lower or "127.0.0.1" in url_lower or "new-tab-page" in url_lower or "newtab" in url_lower:
+            if not url_lower or url_lower.startswith((
+                "about:",
+                "chrome:",
+                "chrome-error:",
+                "chrome-extension:",
+                "chrome-search:",
+                "chrome-untrusted:",
+                "devtools:",
+                "data:"
+            )) or "chromewebdata" in url_lower or "localhost" in url_lower or "127.0.0.1" in url_lower or "new-tab-page" in url_lower or "newtab" in url_lower:
                 return True
 
+            # 1. Load user-specific shortcuts
             raw = getattr(settings, "crm_sites", "[]") or "[]"
             sites = json.loads(raw)
+            if not isinstance(sites, list):
+                sites = []
+
+            # 2. Merge with global website shortcuts (from command_service cache if available)
+            try:
+                from app.services.command_service import command_service
+                if hasattr(command_service, "_global_ws_sites") and command_service._global_ws_sites:
+                    sites = list(sites) + list(command_service._global_ws_sites)
+            except Exception as e:
+                logger.debug(f"Could not load global shortcuts from command_service: {e}")
+
             if not sites:
                 return False
 
             # Add protocol prefix if missing so urlparse extracts netloc correctly
             active_url = url_lower if url_lower.startswith(("http://", "https://")) else f"https://{url_lower}"
             active_host = urlparse(active_url).netloc.lower()
+
+            # Whitelist Google search domains
+            if active_host == "google.com" or active_host.endswith(".google.com"):
+                return True
 
             for site in sites:
                 site_url = site.get("url", "")
@@ -367,12 +412,13 @@ class BrowserEngine:
                             position: fixed;
                             width: 18px;
                             height: 18px;
-                            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' width='24' height='24'%3E%3Cpath fill='%230095FF' stroke='white' stroke-width='1.5' d='M0 0l14 11-6.5 1.5 4.5 6.5-2.5 1.5-4.5-6.5-5 4z'/%3E%3C/svg%3E");
+                            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12.586 12.586 19 19'/%3E%3Cpath d='M3.688 3.037a.497.497 0 0 0-.651.651l6.5 15.999a.501.501 0 0 0 .947-.062l1.569-6.083a2 2 0 0 1 1.448-1.479l6.124-1.579a.5.5 0 0 0 .063-.947z' fill='white'/%3E%3C/svg%3E");
                             background-size: contain;
                             background-repeat: no-repeat;
                             pointer-events: none;
                             z-index: 10000000;
-                            transition: all 0.5s cubic-bezier(0.25, 1, 0.5, 1);
+                            opacity: 0;
+                            transition: opacity 0.3s ease, left 0.5s cubic-bezier(0.25, 1, 0.5, 1), top 0.5s cubic-bezier(0.25, 1, 0.5, 1);
                             filter: drop-shadow(0px 1px 2px rgba(0,0,0,0.4));
                         }
                         .ace-click-ripple {
@@ -400,16 +446,20 @@ class BrowserEngine:
                 if (!cursor) {
                     cursor = document.createElement('div');
                     cursor.className = 'ace-virtual-cursor';
-                    cursor.style.left = '0px';
-                    cursor.style.top = '0px';
+                    cursor.style.left = x + 'px';
+                    cursor.style.top = y + 'px';
                     document.body.appendChild(cursor);
-                    await new Promise(r => setTimeout(r, 50));
+                    cursor.offsetWidth;
                 }
                 const el = document.elementFromPoint(x, y);
                 if (el) {
                     el.classList.add('ace-element-highlight');
                     setTimeout(() => el.classList.remove('ace-element-highlight'), 1000);
                 }
+
+                const actionId = Date.now().toString();
+                cursor.dataset.lastActionId = actionId;
+                cursor.style.opacity = '1';
                 cursor.style.left = x + 'px';
                 cursor.style.top = y + 'px';
                 await new Promise(r => setTimeout(r, 500));
@@ -421,13 +471,19 @@ class BrowserEngine:
                     document.body.appendChild(ripple);
                     setTimeout(() => ripple.remove(), 400);
                 }
+                
+                setTimeout(() => {
+                    if (cursor.dataset.lastActionId === actionId) {
+                        cursor.style.opacity = '0';
+                    }
+                }, 1000);
             }
             """
             await page.evaluate(js_script, {"x": x, "y": y, "actionType": action_type})
         except Exception as e:
             logger.debug(f"Failed to show browser action animation: {e}")
 
-    async def get_active_page(self, allow_restricted: bool = False) -> Page:
+    async def get_active_page(self, allow_restricted: bool = False, read_only: bool = False) -> Page:
         """Return the tab the user is currently looking at.
 
         Detection priority:
@@ -496,11 +552,22 @@ class BrowserEngine:
         if page and not allow_restricted and getattr(settings, "restrict_browser_automation", False):
             current_url = page.url
             if not self._is_shortcut_url(current_url):
+                originated_from_search = False
+                try:
+                    referrer = await page.evaluate("document.referrer")
+                    if referrer and isinstance(referrer, str) and self._is_shortcut_url(referrer):
+                        originated_from_search = True
+                except Exception as ref_err:
+                    logger.debug(f"Failed to evaluate document.referrer: {ref_err}")
+
+                if read_only and originated_from_search:
+                    logger.debug(f"Permitting read-only action on restricted site {current_url} since it originated from whitelisted referrer {referrer}")
+                    return page
+
                 from urllib.parse import urlparse
                 host = urlparse(current_url).netloc or current_url
                 raise PermissionError(
-                    f"Automation restricted. '{host}' is not in your Website Shortcuts. "
-                    f"Disable 'Restrict Website Automation' in Settings or add this site to shortcuts."
+                    f"Automation restricted. '{host}' is not in your shortcuts."
                 )
 
         return page
@@ -542,6 +609,7 @@ class BrowserEngine:
                     if not _is_chrome_running_on_debug_port(9222):
                         logger.info("Chrome not detected on port 9222 — launching detached process.")
                         try:
+                            _patch_chrome_preferences(profile_path)
                             _launch_detached_chrome(profile_path)
                         except Exception as launch_err:
                             logger.error(f"Failed to launch Chrome: {launch_err}")
@@ -727,8 +795,7 @@ class BrowserEngine:
                 from urllib.parse import urlparse
                 host = urlparse(target).netloc or target
                 raise PermissionError(
-                    f"Automation restricted. '{host}' is not in your Website Shortcuts. "
-                    f"Disable 'Restrict Website Automation' in Settings or add this site to shortcuts."
+                    f"Automation restricted. '{host}' is not in your shortcuts."
                 )
 
             # Bring to front and maximize BEFORE goto() to avoid main-thread block
@@ -794,28 +861,28 @@ class BrowserEngine:
 
     async def go_back(self) -> str:
         async def _do():
-            page = await self.get_active_page()
+            page = await self.get_active_page(allow_restricted=True)
             await page.go_back()
             return "Navigated back."
         return await _run_in_playwright(_do())
 
     async def go_forward(self) -> str:
         async def _do():
-            page = await self.get_active_page()
+            page = await self.get_active_page(allow_restricted=True)
             await page.go_forward()
             return "Navigated forward."
         return await _run_in_playwright(_do())
 
     async def refresh(self) -> str:
         async def _do():
-            page = await self.get_active_page()
+            page = await self.get_active_page(allow_restricted=True)
             await page.reload()
             return "Page refreshed."
         return await _run_in_playwright(_do())
 
     async def get_url(self) -> str:
         async def _do():
-            page = await self.get_active_page()
+            page = await self.get_active_page(allow_restricted=True)
             return page.url
         return await _run_in_playwright(_do())
 
@@ -842,7 +909,7 @@ class BrowserEngine:
 
     async def close_tab(self) -> str:
         async def _do():
-            page = await self.get_active_page()
+            page = await self.get_active_page(allow_restricted=True)
             # Unregister BEFORE close so crash-handler doesn't fire confusingly
             try:
                 from automation.browser.tab_registry import tab_registry as _tr
@@ -1101,7 +1168,7 @@ class BrowserEngine:
     # --- Clipboard ---
     async def clipboard_select_all(self) -> str:
         async def _do():
-            page = await self.get_active_page()
+            page = await self.get_active_page(read_only=True)
             key = "Meta+A" if sys.platform == "darwin" else "Control+A"
             await page.keyboard.press(key)
             return "Selected all text."
@@ -1109,7 +1176,7 @@ class BrowserEngine:
 
     async def clipboard_copy(self) -> str:
         async def _do():
-            page = await self.get_active_page()
+            page = await self.get_active_page(read_only=True)
             key = "Meta+C" if sys.platform == "darwin" else "Control+C"
             await page.keyboard.press(key)
             return "Copied text."
@@ -1134,7 +1201,7 @@ class BrowserEngine:
     # --- Scrolling ---
     async def scroll(self, direction: str, amount: int = 500) -> str:
         async def _do():
-            page = await self.get_active_page()
+            page = await self.get_active_page(read_only=True)
             sign = 1 if direction == "down" else -1
             await page.mouse.wheel(0, sign * amount)
             return f"Scrolled {direction}."
@@ -1146,14 +1213,14 @@ class BrowserEngine:
 
     async def scroll_to_top(self) -> str:
         async def _do():
-            page = await self.get_active_page()
+            page = await self.get_active_page(read_only=True)
             await page.evaluate("window.scrollTo(0, 0)")
             return "Scrolled to top."
         return await _run_in_playwright(_do())
 
     async def scroll_to_bottom(self) -> str:
         async def _do():
-            page = await self.get_active_page()
+            page = await self.get_active_page(read_only=True)
             await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
             return "Scrolled to bottom."
         return await _run_in_playwright(_do())
@@ -1161,13 +1228,13 @@ class BrowserEngine:
     # --- Reading & Information ---
     async def get_page_title(self) -> str:
         async def _do():
-            page = await self.get_active_page()
+            page = await self.get_active_page(allow_restricted=True)
             return await page.title()
         return await _run_in_playwright(_do())
 
     async def extract_page_content(self) -> str:
         async def _do():
-            page = await self.get_active_page()
+            page = await self.get_active_page(allow_restricted=True)
             import re
             text = await page.inner_text("body")
             return re.sub(r'\n+', '\n', text).strip()
@@ -1176,7 +1243,7 @@ class BrowserEngine:
     async def extract_clean_text(self) -> str:
         """Extract clean text using BeautifulSoup4 (bypasses Playwright's inner_text slowness)."""
         async def _do():
-            page = await self.get_active_page()
+            page = await self.get_active_page(allow_restricted=True)
             html_content = await page.content()
             try:
                 from bs4 import BeautifulSoup
@@ -1196,7 +1263,7 @@ class BrowserEngine:
     # --- Screenshots & Visuals ---
     async def screenshot(self, filename: str = "screenshot.png", full_page: bool = False) -> str:
         async def _do():
-            page = await self.get_active_page()
+            page = await self.get_active_page(allow_restricted=True)
             path = os.path.join(self._get_profile_path(), "screenshots", filename)
             os.makedirs(os.path.dirname(path), exist_ok=True)
             await page.screenshot(path=path, full_page=full_page)
@@ -1318,7 +1385,7 @@ class BrowserEngine:
             else:
                 # Use registry to get whatever tab is currently active — NOT self._page
                 # (self._page may still point at the tab from a previous navigation)
-                page = await self.get_active_page()
+                page = await self.get_active_page(allow_restricted=True)
             logger.info(f"[search_google] Navigating to Google homepage then typing query: '{query}'")
 
             from playwright.async_api import TimeoutError as PlaywrightTimeoutError
@@ -1387,7 +1454,7 @@ class BrowserEngine:
                 page = new_page
             else:
                 # Use registry to get whatever tab is currently active — NOT self._page
-                page = await self.get_active_page()
+                page = await self.get_active_page(allow_restricted=True)
             logger.info(f"[search_youtube] Navigating to YouTube homepage then typing query: '{query}'")
 
             from playwright.async_api import TimeoutError as PlaywrightTimeoutError

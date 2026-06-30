@@ -1,0 +1,77 @@
+"""Apply global_website_shortcuts migration to Supabase via Management API."""
+import urllib.request
+import json
+
+SUPABASE_URL = "https://xaqxspgbjmhznyfuesnt.supabase.co"
+PROJECT_REF  = "xaqxspgbjmhznyfuesnt"
+SERVICE_KEY  = (
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9"
+    ".eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhhcXhzcGdiam1oem55ZnVlc250Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3OTkzOTg4NywiZXhwIjoyMDk1NTE1ODg3fQ"
+    ".Koec5C1T85q4TIVwyV-2D3I_bBLOCNCNcF7cR2TF-2w"
+)
+
+SQL_STATEMENTS = [
+    # 1. Create global_website_shortcuts table
+    """
+    CREATE TABLE IF NOT EXISTS public.global_website_shortcuts (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        url TEXT NOT NULL,
+        keywords TEXT NOT NULL,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+    );
+    """,
+    # 2. Grant public access (or let PostgREST read/write it)
+    "ALTER TABLE public.global_website_shortcuts ENABLE ROW LEVEL SECURITY;",
+    "DROP POLICY IF EXISTS \"Allow public read on global shortcuts\" ON public.global_website_shortcuts;",
+    "CREATE POLICY \"Allow public read on global shortcuts\" ON public.global_website_shortcuts FOR SELECT USING (true);",
+    "DROP POLICY IF EXISTS \"Allow admin write on global shortcuts\" ON public.global_website_shortcuts;",
+    "CREATE POLICY \"Allow admin write on global shortcuts\" ON public.global_website_shortcuts FOR ALL USING (true) WITH CHECK (true);"
+]
+
+MGMT_URL = f"https://api.supabase.com/v1/projects/{PROJECT_REF}/database/query"
+
+print("=== ACE — Applying global_website_shortcuts migration to Supabase ===\n")
+
+for i, sql in enumerate(SQL_STATEMENTS, 1):
+    body = json.dumps({"query": sql}).encode("utf-8")
+    req = urllib.request.Request(
+        MGMT_URL,
+        data=body,
+        headers={
+            "Authorization": f"Bearer {SERVICE_KEY}",
+            "Content-Type": "application/json",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            result = resp.read().decode("utf-8")
+            print(f"  [{i}] OK: {result[:120]}")
+    except urllib.error.HTTPError as e:
+        err_body = e.read().decode("utf-8")
+        if any(x in err_body.lower() for x in ["already exists", "does not exist", "duplicate"]):
+            print(f"  [{i}] Skipped (already applied): {err_body[:100]}")
+        else:
+            print(f"  [{i}] HTTP {e.code}: {err_body[:200]}")
+    except Exception as ex:
+        print(f"  [{i}] Error: {ex}")
+
+print("\n=== Done — verifying table exists ===")
+
+# Verify by querying the table via REST API
+verify_url = f"{SUPABASE_URL}/rest/v1/global_website_shortcuts?select=*&limit=1"
+req = urllib.request.Request(
+    verify_url,
+    headers={
+        "apikey": SERVICE_KEY,
+        "Authorization": f"Bearer {SERVICE_KEY}",
+    },
+)
+try:
+    with urllib.request.urlopen(req, timeout=10) as resp:
+        data = json.loads(resp.read().decode("utf-8"))
+        print(f"global_website_shortcuts table confirmed in database! Sample rows: {data}")
+except urllib.error.HTTPError as e:
+    body = e.read().decode("utf-8")
+    print(f"Verification failed ({e.code}): {body[:200]}")

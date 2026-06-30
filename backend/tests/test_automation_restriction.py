@@ -77,10 +77,10 @@ async def test_navigate_restricted_check(clean_settings):
         
     # Navigation to restricted site MUST raise PermissionError
     with pytest.raises(PermissionError) as exc_info:
-        await engine.navigate("google.com")
+        await engine.navigate("yahoo.com")
     
     assert "Automation restricted" in str(exc_info.value)
-    assert "google.com" in str(exc_info.value)
+    assert "yahoo.com" in str(exc_info.value)
 
 @pytest.mark.asyncio
 async def test_get_active_page_restricted_check(clean_settings):
@@ -110,3 +110,28 @@ async def test_get_active_page_restricted_check(clean_settings):
         
     assert "Automation restricted" in str(exc_info.value)
     assert "restricted.com" in str(exc_info.value)
+
+@pytest.mark.asyncio
+async def test_get_active_page_restricted_with_referrer(clean_settings):
+    engine = BrowserEngine()
+    clean_settings.restrict_browser_automation = True
+    clean_settings.crm_sites = json.dumps([
+        {"url": "google.com", "keywords": "search"}
+    ])
+    
+    mock_page = AsyncMock()
+    mock_page.is_closed = MagicMock(return_value=False)
+    mock_page.url = "https://restricted.com/login"
+    
+    # Set mock evaluate to return a google referrer
+    mock_page.evaluate = AsyncMock(return_value="https://google.com/search?q=test")
+    engine._active_page_override = mock_page
+    engine.invalidate_active_page_cache()
+    
+    # Under read_only=True and originated from search referrer, it should NOT raise PermissionError!
+    page = await engine.get_active_page(allow_restricted=False, read_only=True)
+    assert page == mock_page
+    
+    # Under read_only=False, it MUST raise PermissionError
+    with pytest.raises(PermissionError):
+        await engine.get_active_page(allow_restricted=False, read_only=False)

@@ -84,7 +84,7 @@ export function TopBar() {
       className="h-16 flex items-center px-6 gap-4 border-b border-[var(--border)] bg-[var(--background)] shrink-0 select-none"
     >
       {/* Active Tab Badge on the left */}
-      <div className="flex-1 flex items-center">
+     {/* <div className="flex-1 flex items-center">
         {tabName && connected && (
           <div 
             title={`Active Browser Tab: ${activeTabUrl}`}
@@ -96,7 +96,7 @@ export function TopBar() {
           </div>
         )}
       </div>
-
+*/}
       <div className="flex items-center gap-3 ml-auto">
         {/* API Ping Status */}
         {ping && (

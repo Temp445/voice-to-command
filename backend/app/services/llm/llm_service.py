@@ -244,10 +244,10 @@ class LLMService:
             msgs.extend(self._history)
             msgs.append({"role": "user", "content": prompt})
             
-            # Timeout set to 3.0 seconds to keep interaction responsive
+            # Timeout set to 5.0 seconds to keep interaction responsive
             raw = await asyncio.wait_for(
                 self._provider.chat(msgs, temperature=0.0, max_tokens=150),
-                timeout=3.0
+                timeout=5.0
             )
             
             # Strip markdown code blocks if the LLM hallucinated them despite instructions
@@ -262,7 +262,7 @@ class LLMService:
                 logger.info(f"LLM contextually classified '{text}' → '{intent}' (params: {parsed.get('params', {})}, confidence={confidence})")
                 return parsed
         except asyncio.TimeoutError:
-            logger.warning(f"LLM intent classification timed out after 3.0s")
+            logger.warning(f"LLM intent classification timed out after 5.0s")
         except Exception as e:
             logger.warning(f"LLM intent classification failed: {e}")
             self._handle_llm_error(e)
@@ -312,14 +312,14 @@ class LLMService:
         
         try:
             msgs = self._build_messages(sys_prompt, user_prompt)
-            # Strict timeout of 2.0 seconds. Speech synthesis must be fast.
+            # Strict timeout of 5.0 seconds. Speech synthesis must be fast.
             reply = await asyncio.wait_for(
                 self._provider.chat(msgs, temperature=self._temperature),
-                timeout=2.0
+                timeout=5.0
             )
             return reply.strip()
         except asyncio.TimeoutError:
-            logger.warning("LLM rewrite timed out after 2.0s, falling back to raw result")
+            logger.warning("LLM rewrite timed out after 5.0s, falling back to raw result")
             return raw_result
         except Exception as e:
             logger.warning(f"LLM rewrite failed, falling back to raw result: {e}")

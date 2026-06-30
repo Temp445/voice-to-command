@@ -23,7 +23,7 @@ export function AuthWrapper({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!loading) {
       if (!session && !isAuthPage) {
-        router.push("/auth");
+        window.location.href = "/auth";
       } else if (session && isAuthPage) {
         router.push("/");
       }
@@ -33,16 +33,37 @@ export function AuthWrapper({ children }: { children: React.ReactNode }) {
   // Show a loading screen while auth state is resolving
   if (loading) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-zinc-950">
-        <Loader2 className="w-8 h-8 text-blue-500 animate-spin mb-4" />
-        <p className="text-zinc-400">Authenticating...</p>
+      <div className="min-h-screen flex flex-col items-center justify-center bg-[#09090b] font-sans gap-4 relative overflow-hidden">
+        {/* Subtle glow */}
+        <div className="absolute w-[120px] h-[120px] bg-purple-500/5 blur-[30px] -z-10" />
+
+        {/* Minimal rotating gradient ring */}
+        <div className="w-7 h-7 rounded-full border-2 border-zinc-800 border-t-zinc-400 animate-spin" />
+
+        {/* Minimal description */}
+        <span className="text-[11px] font-medium text-zinc-500 tracking-wider uppercase animate-pulse">
+          Authenticating
+        </span>
       </div>
     );
   }
 
   // Prevent rendering protected content briefly before redirect
   if (!session && !isAuthPage) {
-    return null;
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-[#09090b] font-sans gap-4 relative overflow-hidden">
+        {/* Subtle glow */}
+        <div className="absolute w-[120px] h-[120px] bg-purple-500/5 blur-[30px] -z-10" />
+
+        {/* Minimal rotating gradient ring */}
+        <div className="w-7 h-7 rounded-full border-2 border-zinc-800 border-t-zinc-400 animate-spin" />
+
+        {/* Minimal description */}
+        <span className="text-[11px] font-medium text-zinc-500 tracking-wider uppercase animate-pulse">
+          Redirecting
+        </span>
+      </div>
+    );
   }
 
   return <>{children}</>;
