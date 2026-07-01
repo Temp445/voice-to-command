@@ -38,6 +38,9 @@ export const useAuthStore = create<AuthState>((set) => ({
       localStorage.removeItem("chat-history-storage");
       localStorage.removeItem("command-history-storage");
     } catch (e) {}
+    try {
+      await api.logout();
+    } catch (e) {}
   },
   initializeAuth: () => {
     const syncWithBackend = async (token: string, retries = 5, delay = 1000) => {
@@ -55,7 +58,11 @@ export const useAuthStore = create<AuthState>((set) => ({
 
     supabase.auth.getSession().then(({ data: { session } }) => {
       set({ session, user: session?.user ?? null, loading: false });
-      if (session) syncWithBackend(session.access_token);
+      if (session) {
+        syncWithBackend(session.access_token);
+      } else {
+        api.logout().catch(() => {});
+      }
     });
 
     supabase.auth.onAuthStateChange((_event, session) => {
@@ -73,6 +80,7 @@ export const useAuthStore = create<AuthState>((set) => ({
           localStorage.removeItem("chat-history-storage");
           localStorage.removeItem("command-history-storage");
         } catch (e) {}
+        api.logout().catch(() => {});
       }
     });
   },

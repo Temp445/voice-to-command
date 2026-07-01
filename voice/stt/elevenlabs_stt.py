@@ -63,5 +63,8 @@ class ElevenLabsSTTTranscriber:
             return text
 
         except Exception as e:
-            logger.error(f"ElevenLabs STT error: {e}")
-            return ""
+            err_str = str(e).lower()
+            is_auth_error = any(kw in err_str for kw in ("401", "unauthorized", "api key", "credential", "invalid"))
+            if not is_auth_error:
+                logger.error(f"ElevenLabs STT error: {e}")
+            raise

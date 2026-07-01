@@ -27,6 +27,23 @@ class ClaudeAdapter(LLMProvider):
     def available_models(self) -> list[str]:
         return _MODELS
 
+    def _clean_messages(self, messages: list[dict]) -> list[dict]:
+        cleaned = []
+        for msg in messages:
+            role = msg.get("role")
+            content = msg.get("content")
+            if isinstance(content, list):
+                text_parts = []
+                for item in content:
+                    if isinstance(item, dict):
+                        if item.get("type") == "text":
+                            text_parts.append(item.get("text", ""))
+                    elif isinstance(item, str):
+                        text_parts.append(item)
+                content = "\n".join(text_parts)
+            cleaned.append({"role": role, "content": content})
+        return cleaned
+
     def _extract_system(self, messages: list[dict]) -> tuple[str, list[dict]]:
         system = next((m["content"] for m in messages if m["role"] == "system"), "")
         non_system = [m for m in messages if m["role"] != "system"]
@@ -34,7 +51,8 @@ class ClaudeAdapter(LLMProvider):
 
     async def chat(self, messages: list[dict], *, temperature: float = 0.7, max_tokens: int = 1024) -> str:
         try:
-            system, msgs = self._extract_system(messages)
+            cleaned_messages = self._clean_messages(messages)
+            system, msgs = self._extract_system(cleaned_messages)
             resp = await self._client.messages.create(
                 model=self._model,
                 system=system or anthropic.NOT_GIVEN,
@@ -50,7 +68,8 @@ class ClaudeAdapter(LLMProvider):
     async def stream_chat(self, messages: list[dict], *, temperature: float = 0.7, max_tokens: int = 1024) -> AsyncGenerator[str, None]:
         try:
             import anthropic
-            system, msgs = self._extract_system(messages)
+            cleaned_messages = self._clean_messages(messages)
+            system, msgs = self._extract_system(cleaned_messages)
             async with self._client.messages.stream(
                 model=self._model,
                 system=system or anthropic.NOT_GIVEN,
@@ -59,7 +78,7 @@ class ClaudeAdapter(LLMProvider):
                 max_tokens=max_tokens,
             ) as stream:
                 async for text in stream.text_stream:
-                    yield text
+                     yield text
         except Exception as e:
             logger.error(f"Claude stream error: {e}")
             raise

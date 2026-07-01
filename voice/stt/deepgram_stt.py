@@ -66,5 +66,8 @@ class DeepgramSTTTranscriber:
             return text
 
         except Exception as e:
-            logger.error(f"Deepgram STT error: {e}")
-            return ""
+            err_str = str(e).lower()
+            is_auth_error = any(kw in err_str for kw in ("401", "unauthorized", "api key", "credential", "invalid"))
+            if not is_auth_error:
+                logger.error(f"Deepgram STT error: {e}")
+            raise

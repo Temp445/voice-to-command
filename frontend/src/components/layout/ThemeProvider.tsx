@@ -1,6 +1,7 @@
 "use client";
 import { useEffect } from "react";
 import { useSettingsStore, syncTrayStateOnBoot } from "@/store/settingsStore";
+import { isTauri } from "@/lib/api";
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const theme = useSettingsStore((s) => s.theme);
@@ -20,7 +21,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     syncTrayStateOnBoot(minimizeToTray);
     
     // Show window once React has finished loading to prevent white screen flash
-    if (typeof window !== "undefined" && (window as any).__TAURI__) {
+    if (isTauri) {
       import("@tauri-apps/api/webviewWindow").then(({ getCurrentWebviewWindow }) => {
         getCurrentWebviewWindow().show();
       });

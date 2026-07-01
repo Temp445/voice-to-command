@@ -27,6 +27,12 @@ class MockQuery:
     def eq(self, *args, **kwargs):
         return self
 
+    def order(self, *args, **kwargs):
+        return self
+
+    def delete(self, *args, **kwargs):
+        return self
+
     def execute(self):
         res = MagicMock()
         res.data = self.data_map.get(self.table_name, [])

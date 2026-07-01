@@ -3,6 +3,12 @@ import { invoke } from '@tauri-apps/api/core';
 // Ensure we don't accidentally use a dev tunnel URL when running locally, but allow it for remote devices
 const isLocalhost = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
 
+export const isTauri = typeof window !== 'undefined' && (
+  (window as any).__TAURI__ !== undefined ||
+  (window as any).__TAURI_IPC__ !== undefined ||
+  (window as any).__TAURI_INTERNALS__ !== undefined
+);
+
 function getBaseUrl() {
   if (typeof window === 'undefined') return "http://127.0.0.1:8000/api";
   if (window.location.hostname.includes("devtunnels.ms")) {
@@ -18,7 +24,7 @@ export async function getResolvedBaseUrl(): Promise<string> {
   if (resolvedBaseUrl) return resolvedBaseUrl;
 
   let port = 8000;
-  if (typeof window !== 'undefined' && (window as any).__TAURI_IPC__) {
+  if (isTauri) {
     try {
       port = await invoke('get_backend_port');
     } catch (e) {
@@ -29,7 +35,7 @@ export async function getResolvedBaseUrl(): Promise<string> {
   }
 
   let base = `http://127.0.0.1:${port}/api`;
-  if (!isLocalhost && !(typeof window !== 'undefined' && (window as any).__TAURI_IPC__)) {
+  if (!isLocalhost && !isTauri) {
     base = process.env.NEXT_PUBLIC_API_URL || getBaseUrl();
   }
   
@@ -148,6 +154,8 @@ export const api = {
     request("/auth/register", { method: "POST", body: JSON.stringify({ email, password, display_name }) }),
   sync:     (access_token: string) =>
     request("/auth/sync", { method: "POST", body: JSON.stringify({ access_token }) }),
+  logout:   () =>
+    request("/auth/logout", { method: "POST" }),
     
   // LLM / AI Assistant
   getLLMProviders: () => request("/llm/providers"),

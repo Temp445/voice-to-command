@@ -1,0 +1,12 @@
+[[permission]]
+identifier = "allow-app-commands"
+description = "Enables custom commands for the main application"
+commands.allow = [
+  "sync_minimize_to_tray",
+  "get_minimize_to_tray",
+  "hide_to_tray",
+  "get_backend_port",
+  "enable_autostart",
+  "disable_autostart",
+  "is_autostart_enabled"
+]

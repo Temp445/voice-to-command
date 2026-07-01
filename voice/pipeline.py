@@ -120,7 +120,12 @@ class VoicePipeline:
             await asyncio.get_event_loop().run_in_executor(None, stt.transcribe, silent_audio)
             logger.info("✅ STT engine preloaded successfully.")
         except Exception as e:
-            logger.warning(f"Failed to preload STT engine: {e}")
+            err_str = str(e).lower()
+            is_auth_error = any(kw in err_str for kw in ("401", "unauthorized", "api key", "credential", "invalid"))
+            if is_auth_error:
+                logger.info("Failed to preload STT: STT credentials empty or invalid (user likely logged out).")
+            else:
+                logger.warning(f"Failed to preload STT engine: {e}")
 
     def stop(self) -> None:
         self._running = False
@@ -346,6 +351,18 @@ class VoicePipeline:
         from app.config import settings
         import time
 
+        # Check if user is logged in
+        user_id = getattr(settings, "owner_user_id", None)
+        if not user_id:
+            logger.info("Voice pipeline triggered, but no user is logged in. Replying: 'Please login'")
+            if self.on_transcript:
+                self.on_transcript("Please login", True)
+            await self._speak("Please login")
+            self._set_state(PipelineState.IDLE)
+            self._wake_word.start()
+            self._active_task = None
+            return
+
         MIN_AUDIO_BYTES = 3200  # ~0.1s of audio @ 16kHz 16-bit
         active_timeout = getattr(settings, 'active_mode_timeout', 120)
 
@@ -435,10 +452,20 @@ class VoicePipeline:
             logger.info("Active Mode finished or timed out. Returning to IDLE.")
             
         except Exception as e:
-            logger.error(f"Pipeline error: {e}")
             self._audio_capture.stop()
-            self._set_state(PipelineState.ERROR)
-            await asyncio.sleep(1)
+            
+            err_str = str(e).lower()
+            is_auth_error = any(kw in err_str for kw in ("401", "unauthorized", "api key", "credential", "invalid"))
+            if is_auth_error:
+                logger.info("Auth or API Key error detected in STT. Replying: 'Please login'")
+                if self.on_transcript:
+                    self.on_transcript("Please login", True)
+                await self._speak("Please login")
+                self._set_state(PipelineState.IDLE)
+            else:
+                logger.error(f"Pipeline error: {e}")
+                self._set_state(PipelineState.ERROR)
+                await asyncio.sleep(1)
         finally:
             self._set_state(PipelineState.IDLE)
             self._wake_word.start()

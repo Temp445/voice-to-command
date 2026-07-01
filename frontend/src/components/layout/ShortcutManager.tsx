@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from 'react';
 import { useSettingsStore } from '@/store/settingsStore';
-import { api } from '@/lib/api';
+import { api, isTauri } from '@/lib/api';
 import { useToastStore } from '@/store/toastStore';
 
 export function ShortcutManager() {
@@ -14,7 +14,7 @@ export function ShortcutManager() {
 
   useEffect(() => {
     // If we are in a web browser (not Tauri), use a local fallback listener
-    if (!(window as any).__TAURI__) {
+    if (!isTauri) {
       const handleKeyDown = (e: KeyboardEvent) => {
         const checkShortcut = (shortcut: string | undefined) => {
           if (!shortcut) return false;

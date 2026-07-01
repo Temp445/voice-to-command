@@ -170,17 +170,26 @@ async def get_settings(request: Request, user_id: str = Depends(get_current_user
         import subprocess, os, sys
         from pathlib import Path
         _ROOT = Path(__file__).resolve().parent.parent.parent
-        python_exe = os.path.join(str(_ROOT), ".venv", "Scripts", "python.exe")
-        if not os.path.exists(python_exe):
-            python_exe = sys.executable
-        overlay_path = os.path.join(str(_ROOT), "automation", "desktop", "overlay", "__main__.py")
-        if os.path.exists(overlay_path):
+        is_frozen = getattr(sys, "frozen", False)
+        if is_frozen:
             request.app.state.overlay_process = subprocess.Popen(
-                [python_exe, "-m", "automation.desktop.overlay"],
-                cwd=str(_ROOT),
+                [sys.executable, "--overlay"],
+                cwd=os.path.dirname(sys.executable),
                 creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
             )
-            logger.info("🖥️ Desktop Overlay started dynamically after login")
+            logger.info("🖥️ Desktop Overlay dynamically started after login (frozen)")
+        else:
+            python_exe = os.path.join(str(_ROOT), ".venv", "Scripts", "python.exe")
+            if not os.path.exists(python_exe):
+                python_exe = sys.executable
+            overlay_path = os.path.join(str(_ROOT), "automation", "desktop", "overlay", "__main__.py")
+            if os.path.exists(overlay_path):
+                request.app.state.overlay_process = subprocess.Popen(
+                    [python_exe, "-m", "automation.desktop.overlay"],
+                    cwd=str(_ROOT),
+                    creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+                )
+                logger.info("🖥️ Desktop Overlay started dynamically after login")
             
     # --- RBAC and Policies Logic ---
     user_res = await sb_run(lambda: supabase_admin.table("users").select("role").eq("id", user_id).execute())
@@ -216,6 +225,16 @@ async def get_settings(request: Request, user_id: str = Depends(get_current_user
             final_permissions[key]["visible"] = val.get("visible", True)
             final_permissions[key]["mutable"] = val.get("mutable", True)
             
+
+    restricted_keys = {
+        "enable_desktop_overlay",
+        "browser_animations_enabled",
+        "overlay_shortcut",
+        "listen_shortcut"
+    }
+    if role != "admin" and not s.get("screen_settings_visible_to_users", True):
+        for rk in restricted_keys:
+            final_permissions[rk] = {"visible": False, "mutable": False}
 
     s_filtered = {**s}
     if role != "admin":
@@ -269,20 +288,52 @@ async def update_settings(
             final_permissions[key]["mutable"] = val.get("mutable", True)
             
 
+    restricted_keys = {
+        "enable_desktop_overlay",
+        "browser_animations_enabled",
+        "overlay_shortcut",
+        "listen_shortcut"
+    }
+    if role != "admin" and not s.get("screen_settings_visible_to_users", True):
+        for rk in restricted_keys:
+            final_permissions[rk] = {"visible": False, "mutable": False}
+
     # Perform mutable checks on fields being updated
     patch_dict = body.model_dump(exclude_none=True)
     if role != "admin":
         if "screen_settings_visible_to_users" in patch_dict:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Modification forbidden: Only administrators can toggle settings visibility."
-            )
-        for field in patch_dict.keys():
-            if field in final_permissions and not final_permissions[field].get("mutable", True):
+            if patch_dict["screen_settings_visible_to_users"] != s.get("screen_settings_visible_to_users"):
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
-                    detail=f"Modification forbidden: Settings key '{field}' is read-only or restricted."
+                    detail="Modification forbidden: Only administrators can toggle settings visibility."
                 )
+        for field, new_val in patch_dict.items():
+            if field in final_permissions and not final_permissions[field].get("mutable", True):
+                is_changed = False
+                db_field = field
+                if field == "llm_api_key":
+                    db_field = "llm_api_key_encrypted"
+                elif field == "elevenlabs_api_key":
+                    db_field = "elevenlabs_api_key_encrypted"
+                elif field == "deepgram_api_key":
+                    db_field = "deepgram_api_key_encrypted"
+
+                if db_field in s:
+                    if db_field.endswith("_api_key_encrypted"):
+                        if new_val:  # Non-empty API key is considered a change/update
+                            is_changed = True
+                    else:
+                        if new_val != s.get(db_field):
+                            is_changed = True
+                else:
+                    # Virtual field (e.g. tabs or global shortcuts)
+                    pass
+
+                if is_changed:
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail=f"Modification forbidden: Settings key '{field}' is read-only or restricted."
+                    )
     from app.config import settings as global_settings
     global_settings.owner_user_id = user_id
     updates: dict = {}
@@ -406,17 +457,26 @@ async def update_settings(
                 import subprocess, os, sys
                 from pathlib import Path
                 _ROOT = Path(__file__).resolve().parent.parent.parent
-                python_exe = os.path.join(str(_ROOT), ".venv", "Scripts", "python.exe")
-                if not os.path.exists(python_exe):
-                    python_exe = sys.executable
-                overlay_path = os.path.join(str(_ROOT), "automation", "desktop", "overlay", "__main__.py")
-                if os.path.exists(overlay_path):
+                is_frozen = getattr(sys, "frozen", False)
+                if is_frozen:
                     request.app.state.overlay_process = subprocess.Popen(
-                        [python_exe, "-m", "automation.desktop.overlay"],
-                        cwd=str(_ROOT),
+                        [sys.executable, "--overlay"],
+                        cwd=os.path.dirname(sys.executable),
                         creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
                     )
-                    logger.info("🖥️ Desktop Overlay dynamically started.")
+                    logger.info("🖥️ Desktop Overlay dynamically started (frozen).")
+                else:
+                    python_exe = os.path.join(str(_ROOT), ".venv", "Scripts", "python.exe")
+                    if not os.path.exists(python_exe):
+                        python_exe = sys.executable
+                    overlay_path = os.path.join(str(_ROOT), "automation", "desktop", "overlay", "__main__.py")
+                    if os.path.exists(overlay_path):
+                        request.app.state.overlay_process = subprocess.Popen(
+                            [python_exe, "-m", "automation.desktop.overlay"],
+                            cwd=str(_ROOT),
+                            creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+                        )
+                        logger.info("🖥️ Desktop Overlay dynamically started.")
         else:
             proc = getattr(request.app.state, "overlay_process", None)
             if proc:

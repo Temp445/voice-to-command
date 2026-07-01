@@ -6,7 +6,7 @@ All user data is managed by Supabase Auth — no local user table needed.
 
 import asyncio
 import uuid
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, status, Request
 from loguru import logger
 from pydantic import BaseModel
 
@@ -181,3 +181,17 @@ async def sync_supabase_user(body: SyncRequest):
 @router.get("/me")
 async def get_me():
     return {"message": "Decode JWT from Authorization header to get user info"}
+
+
+@router.post("/logout")
+async def logout(request: Request):
+    """Clear owner_user_id on logout and stop active listening."""
+    from app.config import settings as global_settings
+    logger.info("User logged out: clearing owner_user_id and deactivating voice pipeline")
+    global_settings.owner_user_id = None
+    
+    pipeline = getattr(request.app.state, "pipeline", None)
+    if pipeline:
+        pipeline.deactivate()
+        
+    return {"status": "success", "message": "Logged out on backend"}

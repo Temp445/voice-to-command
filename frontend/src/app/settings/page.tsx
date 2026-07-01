@@ -7,7 +7,7 @@ import { Sidebar } from "@/components/layout/Sidebar";
 import { TopBar } from "@/components/layout/TopBar";
 import { useSettingsStore } from "@/store/settingsStore";
 import { useWSStore } from "@/hooks/useWebSocket";
-import { api, getResolvedBaseUrl, resolvedBackendPort } from "@/lib/api";
+import { api, getResolvedBaseUrl, resolvedBackendPort, isTauri } from "@/lib/api";
 import { invoke } from "@tauri-apps/api/core";
 
 // Tailwind Class mappings for reuse in the switches
@@ -274,7 +274,7 @@ export default function SettingsPage() {
     if (!initialLoaded) return;
 
     // Sync the Start on Boot setting with the OS registry
-    if (typeof window !== 'undefined' && '__TAURI_IPC__' in window) {
+    if (isTauri) {
       invoke(settings.startupOnBoot ? "enable_autostart" : "disable_autostart").catch(err => console.error("Autostart sync failed:", err));
     }
 
@@ -380,9 +380,8 @@ export default function SettingsPage() {
       }
       mediaStreamRef.current = stream;
 
-      await getResolvedBaseUrl();
-      const host = window.location.hostname === "localhost" ? "127.0.0.1" : window.location.host.split(":")[0];
-      const wsUrl = (window.location.protocol === "https:" ? "wss://" : "ws://") + host + ":" + resolvedBackendPort + "/api/voice/ws-test-stt";
+      const baseUrl = await getResolvedBaseUrl();
+      const wsUrl = (baseUrl + "/voice/ws-test-stt").replace(/^http/, "ws");
       const ws = new WebSocket(wsUrl);
       sttWsRef.current = ws;
 

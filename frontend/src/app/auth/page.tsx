@@ -222,14 +222,14 @@ export default function AuthPage() {
               ))}
             </div>
             {/* Stats */}
-            <div className="flex gap-7 pt-4 border-t border-[#18181b]">
+            {/* <div className="flex gap-7 pt-4 border-t border-[#18181b]">
               {[{ val: "<5s", lbl: "Response" }, { val: "99%", lbl: "Accuracy" }, { val: "256-bit", lbl: "Encrypted" }].map(({ val, lbl }) => (
                 <div key={lbl} className="flex flex-col gap-0.5">
                   <span className="text-[16px] font-bold text-[#e4e4e7] tracking-tight">{val}</span>
                   <span className="text-[10px] text-[#525252] font-medium">{lbl}</span>
                 </div>
               ))}
-            </div>
+            </div> */}
           </div>
 
           {/* Form */}

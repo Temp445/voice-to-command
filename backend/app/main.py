@@ -302,7 +302,12 @@ async def _background_init(app_state, running_loop: asyncio.AbstractEventLoop):
                 await asyncio.to_thread(stt.transcribe, silent)
                 logger.info("✅ Whisper STT pre-warmed")
             except Exception as e:
-                logger.warning(f"STT pre-warm failed: {e}")
+                err_str = str(e).lower()
+                is_auth_error = any(kw in err_str for kw in ("401", "unauthorized", "api key", "credential", "invalid"))
+                if is_auth_error:
+                    logger.info("STT pre-warm: STT credentials empty or invalid (user likely logged out).")
+                else:
+                    logger.warning(f"STT pre-warm failed: {e}")
 
         async def _warm_semantic():
             try:
@@ -342,30 +347,51 @@ async def _background_init(app_state, running_loop: asyncio.AbstractEventLoop):
         import subprocess, os
         from pathlib import Path as _Path
         _BACKEND = _Path(__file__).resolve().parent.parent
-        python_exe = os.path.join(str(_BACKEND), ".venv", "Scripts", "python.exe")
-        if not os.path.exists(python_exe):
-            python_exe = sys.executable
-        overlay_path = os.path.join(str(_BACKEND), "automation", "desktop", "overlay", "__main__.py")
-        if os.path.exists(overlay_path):
-            if sys.platform == "win32":
-                try:
-                    import psutil
-                    for proc in psutil.process_iter(["pid", "name", "cmdline"]):
-                        try:
-                            if proc.info["name"] in ("python.exe", "pythonw.exe"):
-                                if any("overlay" in str(c) for c in (proc.info.get("cmdline") or [])):
-                                    if proc.pid != os.getpid():
-                                        proc.terminate()
-                        except (psutil.NoSuchProcess, psutil.AccessDenied):
-                            pass
-                except ImportError:
-                    pass
+        is_frozen = getattr(sys, "frozen", False)
+        
+        if sys.platform == "win32":
+            try:
+                import psutil
+                for proc in psutil.process_iter(["pid", "name", "cmdline"]):
+                    try:
+                        proc_name = proc.info["name"].lower()
+                        is_target = False
+                        if is_frozen:
+                            target_name = os.path.basename(sys.executable).lower()
+                            is_target = (proc_name == target_name)
+                        else:
+                            is_target = proc_name in ("python.exe", "pythonw.exe")
+                            
+                        if is_target:
+                            cmdline = proc.info.get("cmdline") or []
+                            if any("overlay" in str(c) for c in cmdline):
+                                if proc.pid != os.getpid():
+                                    proc.terminate()
+                    except (psutil.NoSuchProcess, psutil.AccessDenied):
+                        pass
+            except ImportError:
+                pass
+
+        if is_frozen:
+            # In production, we run the bundled backend executable with "--overlay" argument
             app_state.overlay_process = subprocess.Popen(
-                [python_exe, "-m", "automation.desktop.overlay"],
-                cwd=str(_BACKEND),
+                [sys.executable, "--overlay"],
+                cwd=os.path.dirname(sys.executable),
                 creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
             )
-            logger.info("🖥️ Desktop Overlay started")
+            logger.info("🖥️ Desktop Overlay started (frozen)")
+        else:
+            python_exe = os.path.join(str(_BACKEND), ".venv", "Scripts", "python.exe")
+            if not os.path.exists(python_exe):
+                python_exe = sys.executable
+            overlay_path = os.path.join(str(_BACKEND), "automation", "desktop", "overlay", "__main__.py")
+            if os.path.exists(overlay_path):
+                app_state.overlay_process = subprocess.Popen(
+                    [python_exe, "-m", "automation.desktop.overlay"],
+                    cwd=str(_BACKEND),
+                    creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
+                )
+                logger.info("🖥️ Desktop Overlay started")
 
     logger.info("🎉 ACE fully initialized — all background tasks running")
 
@@ -466,6 +492,10 @@ async def websocket_endpoint(websocket: WebSocket):
                     elif msg_type == "suggestion":
                         if getattr(app.state, "pipeline", None):
                             app.state.pipeline.speak_suggestion()
+                    elif msg_type == "auth_sync":
+                        user_id = data.get("user_id")
+                        logger.info(f"WebSocket auth sync: settings.owner_user_id = {user_id}")
+                        settings.owner_user_id = user_id
                 except json.JSONDecodeError:
                     pass
     except (WebSocketDisconnect, RuntimeError):

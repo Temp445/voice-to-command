@@ -6,6 +6,7 @@ import { useCommandStore } from "@/store/commandStore";
 import { create } from "zustand";
 import { useSettingsStore } from "@/store/settingsStore";
 import { getBackendWsUrl } from "@/lib/api";
+import { useAuthStore } from "@/store/authStore";
 
 interface WSStore { 
   connected: boolean; 
@@ -39,6 +40,7 @@ export function WebSocketManager() {
   const { setPipelineState, setTranscript, setWakeWordActive } = useVoiceStore();
   const { addEntry, updateEntry } = useCommandStore();
     const { connected, setConnected, setSendBytes } = useWSStore();
+    const { user } = useAuthStore();
 
     const connect = useCallback(async () => {
       if (wsRef.current?.readyState === WebSocket.OPEN) return;
@@ -57,6 +59,14 @@ export function WebSocketManager() {
           }
         });
         console.log("✅ WebSocket connected");
+        
+        // Send initial auth sync message directly on open
+        const user = useAuthStore.getState().user;
+        ws.send(JSON.stringify({
+          type: "auth_sync",
+          user_id: user?.id || null
+        }));
+        console.log("📤 Sent auth_sync via WebSocket onopen:", user?.id || "logged-out");
       };
 
     ws.onmessage = (e) => {
@@ -78,6 +88,7 @@ export function WebSocketManager() {
             }
             break;
           case "transcript":
+            console.log("🎙️ Received transcript from backend:", data.text, "is_final:", data.is_final);
             setTranscript(data.text, data.is_final);
             break;
           case "command_executed":
@@ -123,6 +134,16 @@ export function WebSocketManager() {
 
     ws.onerror = () => ws.close();
   }, []);
+
+  useEffect(() => {
+    if (connected && wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({
+        type: "auth_sync",
+        user_id: user?.id || null
+      }));
+      console.log("📤 Sent auth_sync via WebSocket:", user?.id || "logged-out");
+    }
+  }, [user, connected]);
 
   const isMounted = useRef(true);
   useEffect(() => {

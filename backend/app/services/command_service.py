@@ -365,6 +365,13 @@ class CommandService:
         """
         text = text.strip()
 
+        # Remove trailing punctuation (periods, question marks, exclamation marks, commas)
+        # for non-typing commands. Trailing punctuation frequently breaks regular expression matching.
+        _lower_stripped = text.lower().strip()
+        is_typing = _lower_stripped.startswith(("type ", "write ", "enter ", "say ", "reply "))
+        if not is_typing:
+            text = re.sub(r'[.?!,;]+$', '', text).strip()
+
         # ── STT Normalization: fix common Whisper gerund / contraction errors ──
         # Whisper often collapses two-word commands into gerund form, e.g.:
         #   "sign in" → "signing"    "log out" → "logging"    "scroll down" → "scrolling"
@@ -374,13 +381,21 @@ class CommandService:
             # Auth actions
             "signing":      "sign in",
             "signin":       "sign in",
+            "signingin":    "sign in",
+            "signinginto":  "sign in",
             "signup":       "sign up",
             "signingup":    "sign up",
             "signingout":   "sign out",
             "signout":      "sign out",
+            "signoff":      "sign off",
+            "signingoff":   "sign off",
             "logging":      "log in",
             "login":        "log in",
+            "loggingin":    "log in",
+            "logginginto":  "log in",
             "logout":       "log out",
+            "logoff":       "log off",
+            "loggingoff":   "log off",
             # Navigation / page actions
             "refreshing":   "refresh",
             "reloading":    "reload",
@@ -392,7 +407,8 @@ class CommandService:
             "opening":      "open",
             "closing":      "close",
         }
-        _text_key = text.lower().replace(" ", "")
+        # Normalize key by converting to lowercase, removing spaces, hyphens, and any surrounding punctuation
+        _text_key = text.lower().strip(".,?!;:").replace(" ", "").replace("-", "")
         if _text_key in _STT_NORM:
             _corrected = _STT_NORM[_text_key]
             logger.info(f"STT normalization: '{text}' → '{_corrected}'")
