@@ -26,7 +26,7 @@ def _is_credential_like(word: str) -> bool:
         return True
     return False
 
-def apply_caps_modifier(text: str) -> str:
+def apply_caps_modifier(text: str, wrap_preserve: bool = False) -> str:
     """
     Parse phrases like 'reset@123 S caps' or 'niven33456@gmail.com N small'
     and capitalize or lowercase the named letter in the target word.
@@ -101,21 +101,30 @@ def apply_caps_modifier(text: str) -> str:
             # First, check adjacent words (standard behavior)
             idx_before = mod_start_idx - 1
             if idx_before >= 0:
-                clean_before = words[idx_before].lower().strip(".,!?;:")
+                w_before = words[idx_before]
+                if w_before.startswith("__PRESERVE_CASE__") and w_before.endswith("__"):
+                    w_before = w_before[len("__PRESERVE_CASE__"):-2]
+                clean_before = w_before.lower().strip(".,!?;:")
                 if char in clean_before:
                     target_word_idx = idx_before
             
             if target_word_idx == -1:
                 idx_after = mod_end_idx + 1
                 if idx_after < len(words):
-                    clean_after = words[idx_after].lower().strip(".,!?;:")
+                    w_after = words[idx_after]
+                    if w_after.startswith("__PRESERVE_CASE__") and w_after.endswith("__"):
+                        w_after = w_after[len("__PRESERVE_CASE__"):-2]
+                    clean_after = w_after.lower().strip(".,!?;:")
                     if char in clean_after:
                         target_word_idx = idx_after
             
             # Second, search backwards for the nearest word containing target letter
             if target_word_idx == -1:
                 for idx in range(mod_start_idx - 1, -1, -1):
-                    clean_w = words[idx].lower().strip(".,!?;:")
+                    w_check = words[idx]
+                    if w_check.startswith("__PRESERVE_CASE__") and w_check.endswith("__"):
+                        w_check = w_check[len("__PRESERVE_CASE__"):-2]
+                    clean_w = w_check.lower().strip(".,!?;:")
                     if char in clean_w:
                         target_word_idx = idx
                         break
@@ -123,7 +132,10 @@ def apply_caps_modifier(text: str) -> str:
             # Third, search forwards for the nearest word containing target letter
             if target_word_idx == -1:
                 for idx in range(mod_end_idx + 1, len(words)):
-                    clean_w = words[idx].lower().strip(".,!?;:")
+                    w_check = words[idx]
+                    if w_check.startswith("__PRESERVE_CASE__") and w_check.endswith("__"):
+                        w_check = w_check[len("__PRESERVE_CASE__"):-2]
+                    clean_w = w_check.lower().strip(".,!?;:")
                     if char in clean_w:
                         target_word_idx = idx
                         break
@@ -131,11 +143,19 @@ def apply_caps_modifier(text: str) -> str:
             # Apply capitalization/lowercasing if a target word was found
             if target_word_idx != -1:
                 word = words[target_word_idx]
+                is_already_wrapped = word.startswith("__PRESERVE_CASE__") and word.endswith("__")
+                if is_already_wrapped:
+                    word = word[len("__PRESERVE_CASE__"):-2]
+                
                 char_lower = char.lower()
                 idx_in_word = word.lower().find(char_lower)
                 if idx_in_word >= 0:
                     repl_char = word[idx_in_word].upper() if action == "upper" else word[idx_in_word].lower()
                     word = word[:idx_in_word] + repl_char + word[idx_in_word + 1:]
+                
+                if wrap_preserve or is_already_wrapped:
+                    words[target_word_idx] = f"__PRESERVE_CASE__{word}__"
+                else:
                     words[target_word_idx] = word
                 # Remove the modifier tokens from the list since we applied it
                 del words[mod_start_idx : mod_end_idx + 1]
@@ -280,10 +300,11 @@ class CommandSpellingCorrector:
 
         # Step 1: Resolve caps-modifier annotations BEFORE anything else.
         # This allows users to say "password reSet@123 s caps" to mean "reSet@123"
-        text = apply_caps_modifier(text)
+        text = apply_caps_modifier(text, wrap_preserve=True)
 
         if not self._initialized or not self.sym_spell:
-            return text
+            # Strip preserve wrapper if corrector not ready
+            return re.sub(r'__PRESERVE_CASE__(.*?)__', r'\1', text)
 
         # Step 2: Check if the entire command is a data/credential command.
         # If ANY token looks like a credential, skip lowercasing the whole string —
@@ -295,6 +316,12 @@ class CommandSpellingCorrector:
 
         corrected_words = []
         for word in words:
+            # If this word was explicitly modified by a casing modifier, bypass correction and preserve exact casing
+            if word.startswith("__PRESERVE_CASE__") and word.endswith("__"):
+                unwrapped = word[len("__PRESERVE_CASE__"):-2]
+                corrected_words.append(unwrapped)
+                continue
+
             # If this token consists entirely of punctuation/non-alphanumeric characters, preserve it as-is
             if not re.search(r'[a-zA-Z0-9]', word):
                 corrected_words.append(word)
