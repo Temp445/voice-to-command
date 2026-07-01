@@ -311,6 +311,13 @@ async def handle_browser_fill_form(context: str = "", **_) -> str:
     page = await ctrl._ensure_page()
     return await DOMAgent(page).fill_form(context)
 
+async def handle_set_field(text: str = "", **_) -> str:
+    from automation.browser.browser_controller import BrowserController
+    from automation.browser.dom_agent import DOMAgent
+    ctrl = BrowserController()
+    page = await ctrl._ensure_page()
+    return await DOMAgent(page).execute_intent(text)
+
 async def handle_browser_interact_checkbox(action: str = "", **_) -> str:
     from automation.browser.dom_agent import DOMAgent
     from automation.browser.browser_controller import BrowserController
@@ -2148,7 +2155,7 @@ async def handle_double_click(**_) -> str:
     MouseController().double_click()
     return "Double clicked"
 
-async def handle_click_text(text: str = "", **_) -> str:
+async def handle_click_text(text: str = "", **kwargs) -> str:
     """
     Priority order for clicking text:
     1. DOMAgent (browser-based) — precise, targets only the browser page, not the whole screen.
@@ -2156,6 +2163,7 @@ async def handle_click_text(text: str = "", **_) -> str:
     3. OCR (last resort) — scans the entire screen. Only used when no browser session is active or element not found.
     """
     clean_text = text.strip()
+    action = kwargs.get("action") or "click"
     
     # ── Priority 1: DOMAgent (Browser-First) ────────────────────────────────
     # If the browser engine is running (even via CDP reconnect), always try this first.
@@ -2169,7 +2177,7 @@ async def handle_click_text(text: str = "", **_) -> str:
         page = await engine.get_active_page()
         if page is not None:
             agent = DOMAgent(page)
-            dom_res = await agent.execute_intent(f"click {clean_text}")
+            dom_res = await agent.execute_intent(f"{action} {clean_text}")
             if not any(err in dom_res.lower() for err in ["couldn't find", "failed", "could not determine", "no actions"]):
                 return dom_res
             logger.warning(f"DOMAgent failed for '{clean_text}' (Result: {dom_res}). Trying direct Playwright locators...")
@@ -2196,7 +2204,29 @@ async def handle_click_text(text: str = "", **_) -> str:
                                 await page.wait_for_load_state("commit", timeout=2000)
                             except Exception:
                                 pass
-                            return f"Clicked '{clean_text}' on webpage."
+                            # Use actual element label if available, else clean the input text
+                            try:
+                                el_text = (await el.inner_text()).strip()
+                            except Exception:
+                                el_text = ""
+                            reply_label = el_text if el_text and len(el_text) < 60 else clean_text
+                            # Strip action verbs from the clean_text for nicer reply
+                            import re as _re2
+                            reply_label = _re2.sub(
+                                r"^(?:click|tap|open|go\s+to|navigate\s+to|toggle|show|press|launch|expand|hit|select)\s+(?:the\s+|on\s+)?",
+                                "", reply_label, flags=_re2.IGNORECASE
+                            ).strip()
+                            _nav_words = {"page", "section", "dashboard", "home", "screen", "view", "route"}
+                            _ui_words = {"sidebar", "menu", "drawer", "navbar", "toolbar", "hamburger", "navigation"}
+                            rl_lower = reply_label.lower()
+                            if any(w in rl_lower for w in _ui_words):
+                                return f"Opened the {rl_lower.replace('the ', '').strip()}."
+                            elif any(w in rl_lower for w in _nav_words):
+                                return f"Got it, heading to {reply_label.title().replace(' Page', '').replace(' Section', '')}."
+                            elif len(reply_label.split()) <= 2:
+                                return "Done!"
+                            else:
+                                return f"Done — selected '{reply_label}'."
                 except Exception:
                     pass
             # ── Priority 2.5: JS Broad Element Search ───────────────────────────
@@ -2253,8 +2283,26 @@ async def handle_click_text(text: str = "", **_) -> str:
                             # Re-pin the page since navigation may occur after click
                             engine.pin_active_page(page)
                             matched_label = (pos.get("label") or clean_text).strip()
+                            # Strip leading/trailing whitespace and limit length
+                            if len(matched_label) > 60:
+                                matched_label = clean_text
                             logger.info(f"Priority 2.5 JS broad click: '{clean_text}' → '{matched_label}'")
-                            return f"Clicked '{matched_label}' on webpage."
+                            import re as _re3
+                            reply_label = _re3.sub(
+                                r"^(?:click|tap|open|go\s+to|navigate\s+to|toggle|show|press|launch|expand|hit|select)\s+(?:the\s+|on\s+)?",
+                                "", matched_label, flags=_re3.IGNORECASE
+                            ).strip()
+                            _nav_w = {"page", "section", "dashboard", "home", "screen", "view", "route"}
+                            _ui_w = {"sidebar", "menu", "drawer", "navbar", "toolbar", "hamburger", "navigation"}
+                            rl = reply_label.lower()
+                            if any(w in rl for w in _ui_w):
+                                return f"Opened the {rl.replace('the ', '').strip()}."
+                            elif any(w in rl for w in _nav_w):
+                                return f"Got it, heading to {reply_label.title().replace(' Page', '').replace(' Section', '')}."
+                            elif len(reply_label.split()) <= 2:
+                                return "Done!"
+                            else:
+                                return f"Done — selected '{reply_label}'."
                     except Exception:
                         continue
             except Exception as _js_err:
@@ -2492,67 +2540,144 @@ async def handle_cancel(app_name: str = "", **_) -> str:
         if bc.engine._context is not None:
             page = await bc._ensure_page()
             if page:
-                # 1a. Look for explicit close / dismiss / × buttons
-                CLOSE_SELECTORS = [
-                    "[aria-label*='close' i]",
-                    "[aria-label*='dismiss' i]",
-                    "[aria-label*='cancel' i]",
-                    "button.close",
-                    ".close",               # Added: Generic close class
-                    ".btn-close",           # Added: Bootstrap close class
-                    ".modal-close",
-                    ".popup-close",
-                    ".dialog-close",
-                    "[class*='close-btn' i]",
-                    "[class*='closeBtn' i]",
-                    "[class*='close-button' i]",
-                    "button:has-text('×')",
-                    "button:has-text('✕')",
-                    "span:has-text('×')",   # Added: Spans with X
-                    "i:has-text('×')",      # Added: Icons with X
-                    "button:has-text('X')",
-                    "[role='button'][aria-label*='close' i]",
-                ]
-                for sel in CLOSE_SELECTORS:
-                    try:
-                        loc = page.locator(sel)
-                        count = await loc.count()
-                        for i in range(min(count, 5)):
-                            el = loc.nth(i)
-                            if await el.is_visible():
-                                from automation.browser.browser_engine import BrowserEngine
-                                await BrowserEngine()._animate_action(page, el, "click")
-                                await el.click(timeout=1500)
-                                logger.info(f"[Cancel] Closed overlay via selector: {sel}")
-                                return "Closed the popup."
-                    except Exception as e:
-                        logger.error(f"[{__name__}] {type(e).__name__}: {e}")
-                        pass
+                # 0. Check if a modal/dialog/overlay is visible before pressing Escape
+                has_modal_before = False
+                try:
+                    has_modal_before = await page.evaluate("""() => {
+                        const modalSelectors = [
+                            '[role="dialog"]',
+                            '[role="alertdialog"]',
+                            '[class*="modal" i]',
+                            '[class*="dialog" i]',
+                            '[class*="popup" i]',
+                            '[class*="overlay" i]',
+                            '[class*="drawer" i]',
+                            '[class*="sheet" i]',
+                            '[class*="pane" i]'
+                        ];
+                        for (const sel of modalSelectors) {
+                            const elements = document.querySelectorAll(sel);
+                            for (const el of elements) {
+                                const rect = el.getBoundingClientRect();
+                                const style = window.getComputedStyle(el);
+                                if (rect.width > 0 && rect.height > 0 && style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0') {
+                                    return true;
+                                }
+                            }
+                        }
+                        return false;
+                    }""")
+                except Exception as eval_err:
+                    logger.debug(f"[Cancel] Pre-emptive modal check failed: {eval_err}")
 
-                # 1b. Text-based: Cancel / Close / Dismiss buttons
+                # Strategy: Try explicit "Cancel" / "Close" button first, then fall back to Escape.
+                # This ensures form Cancel buttons are always preferred over keyboard shortcuts.
+                
+                # 1a. Look for explicit text-based Cancel/Close/Dismiss buttons FIRST
+                button_clicked = False
                 for label in ["cancel", "close", "dismiss", "no thanks", "not now"]:
+                    if button_clicked:
+                        break
                     try:
+                        # Exact match on interactive elements
                         cancel_button = page.locator(
                             "button, a, input[type='button'], [role='button']"
-                        ).filter(has_text=re.compile(re.escape(label), re.IGNORECASE))
+                        ).filter(has_text=re.compile(rf"^\s*{re.escape(label)}\s*$", re.IGNORECASE))
+                        
+                        # Fallback: substring match
+                        if await cancel_button.count() == 0:
+                            cancel_button = page.locator(
+                                "button, a, input[type='button'], [role='button']"
+                            ).filter(has_text=re.compile(re.escape(label), re.IGNORECASE))
+                            
+                        # Fallback: div/span acting as button
+                        if await cancel_button.count() == 0:
+                            cancel_button = page.locator(
+                                "div, span"
+                            ).filter(has_text=re.compile(rf"^\s*{re.escape(label)}\s*$", re.IGNORECASE))
+
                         for i in range(await cancel_button.count()):
                             btn = cancel_button.nth(i)
-                            if await btn.is_visible():
-                                from automation.browser.browser_engine import BrowserEngine
-                                await BrowserEngine()._animate_action(page, btn, "click")
+                            if not await btn.is_visible():
+                                continue
+                            from automation.browser.browser_engine import BrowserEngine
+                            await BrowserEngine()._animate_action(page, btn, "click")
+                            try:
                                 await btn.click(timeout=1500)
-                                logger.info(f"[Cancel] Clicked '{label}' button on webpage.")
-                                return f"Clicked {label.capitalize()} on webpage."
+                            except Exception:
+                                await btn.click(timeout=1500, force=True)
+                            logger.info(f"[Cancel] Clicked '{label}' button on webpage.")
+                            
+                            # Verify the overlay actually closed
+                            await asyncio.sleep(0.4)
+                            still_open = await page.evaluate("""() => {
+                                const sels = [
+                                    '[role="dialog"]', '[role="alertdialog"]',
+                                    '[class*="modal" i]', '[class*="dialog" i]',
+                                    '[class*="popup" i]', '[class*="overlay" i]',
+                                    '[class*="drawer" i]', '[class*="sheet" i]',
+                                    '[class*="pane" i]'
+                                ];
+                                for (const sel of sels) {
+                                    for (const el of document.querySelectorAll(sel)) {
+                                        const r = el.getBoundingClientRect();
+                                        const s = window.getComputedStyle(el);
+                                        if (r.width > 100 && r.height > 100 && s.display !== 'none'
+                                            && s.visibility !== 'hidden' && s.opacity !== '0')
+                                            return true;
+                                    }
+                                }
+                                return false;
+                            }""")
+                            if not still_open:
+                                return "Canceled."
+                            # Form still open — button didn't work, try next approach
+                            logger.debug(f"[Cancel] '{label}' button clicked but form still visible, trying next strategy...")
+                            button_clicked = True  # Don't keep trying other text labels
+                            break
                     except Exception as e:
-                        logger.error(f"[{__name__}] {type(e).__name__}: {e}")
-                        pass
+                        logger.debug(f"[Cancel] Text button '{label}' failed: {e}")
+
+                # 1b. Explicit close / dismiss / × icon buttons
+                if not button_clicked:
+                    CLOSE_SELECTORS = [
+                        "[aria-label*='close' i]",
+                        "[aria-label*='dismiss' i]",
+                        "[aria-label*='cancel' i]",
+                        "button.close",
+                        ".close", ".btn-close", ".modal-close", ".popup-close",
+                        ".dialog-close", "[class*='close-btn' i]", "[class*='closeBtn' i]",
+                        "[class*='close-button' i]", "button[class*='close' i]",
+                        "button[id*='close' i]", "[class*='DialogClose' i]",
+                        "[class*='lucide-x' i]", "button:has(svg[class*='x' i])",
+                        "[data-testid*='close' i]", "[data-dismiss='modal']",
+                        "[data-bs-dismiss='modal']", "button:has-text('×')",
+                        "button:has-text('✕')", "button:has-text('X')",
+                        "[role='button'][aria-label*='close' i]",
+                    ]
+                    for sel in CLOSE_SELECTORS:
+                        try:
+                            loc = page.locator(sel)
+                            count = await loc.count()
+                            for i in range(min(count, 5)):
+                                el = loc.nth(i)
+                                if await el.is_visible():
+                                    from automation.browser.browser_engine import BrowserEngine
+                                    await BrowserEngine()._animate_action(page, el, "click")
+                                    await el.click(timeout=1500)
+                                    logger.info(f"[Cancel] Closed overlay via selector: {sel}")
+                                    await asyncio.sleep(0.3)
+                                    return "Canceled."
+                        except Exception:
+                            pass
 
                 # 1c. DOMAgent Fallback (Before pressing Escape)
                 try:
                     from automation.browser.dom_agent import DOMAgent
                     agent = DOMAgent(page)
                     res = await agent.execute_intent("click the 'x' close button on the popup")
-                    if "couldn't find" not in res.lower() and "failed" not in res.lower():
+                    res_lower = res.lower()
+                    if any(act in res_lower for act in ["clicked", "selected", "typed", "entered"]):
                         logger.info("[Cancel] Closed popup via DOMAgent.")
                         return "Closed the popup."
                 except Exception as e:
@@ -3113,6 +3238,22 @@ def register_all_intents() -> None:
             param_names=["context"]
         ),
         Intent(
+            name="set_field",
+            domain="browser",
+            patterns=[
+                r"^(?P<text>(?:set|change|fill|type|enter|write)\s+.+?\s+(?:to|with|as|in|into)\s+.+)$",
+                r"^(?P<text>.+?\s+(?:to|is|set\s+to)\s+.+)$",
+                # Pattern 3: implicit label-value (e.g. "deduction start month june")
+                # Negative lookahead excludes action verbs AND dismiss/cancel/escape keywords
+                # so they always route to dismiss_overlay instead.
+                r"^(?P<text>(?!(?:click|tap|press|hit|open|close|go\s+to|navigate\s+to|view|show|inspect|edit|update|delete|remove|refresh|reload|scroll|hover|copy|cut|paste|select\s+all|cancel|escape|dismiss|hide|close\s+it|press\s+escape)\b)[\w\s]{2,25}?\s+.+)$",
+            ],
+            handler=handle_set_field,
+            description="Type a value into a form input field or select an option in a dropdown",
+            examples=["set deduction start month to june", "justification personal reason", "deduction start month jun", "interest rate 0", "number of installments 6 months"],
+            param_names=["text"],
+        ),
+        Intent(
             name="browser_interact_checkbox",
             patterns=[r"(?P<action>check|uncheck)\s+(?:the\s+)?checkbox"],
             handler=handle_browser_interact_checkbox,
@@ -3243,16 +3384,20 @@ def register_all_intents() -> None:
             examples=["go to next page", "go to page 3", "previous page", "first page"],
             param_names=["direction", "page_num"]
         ),
-        # ── Dismiss / Cancel / Close Popup — HIGH PRIORITY (before crm_workflow) ──
-       Intent(
+        Intent(
             name="dismiss_overlay",
             domain="browser",
             patterns=[
-                r"^(?:cancel|escape|close\s+(?:the\s+)?(?:popup|overlay|modal|dialog|video|window|ad|card|box|banner)|dismiss|press\s+escape|close\s+it)(?:\s+.*)?$",
+                # Direct dismiss words (optionally followed by anything)
+                r"^(?:cancel|escape|dismiss|press\s+escape|close\s+it|hide\s+it)(?:\s+.*)?$",
+                # "close/cancel/hide/dismiss the [anything] [form|popup|modal|...]" 
+                r"^(?:close|hide|cancel|dismiss)\s+(?:the\s+|this\s+)?(?:[\w\s]+?\s+)?(?:popup|pop\s*up|overlay|modal|dialog|video|window|ad|card|box|banner|sidebar|side\s*bar|menu|drawer|panel|request|form|details|pane|sheet)(?:\s+.*)?$",
+                # "cancel the form", "cancel this dialog" — bare cancel + the/this + noun
+                r"^(?:cancel|close|dismiss|hide)\s+(?:the\s+|this\s+)[\w\s]+$",
             ],
             handler=handle_cancel,
-            description="Close a popup, overlay, modal, or dialog by pressing Escape or clicking X",
-            examples=["cancel", "escape", "close the popup", "close the overlay card"],
+            description="Close a popup, overlay, modal, sidebar, menu, or dialog by pressing Escape or clicking X",
+            examples=["cancel", "escape", "close the popup", "cancel the form", "close the sidebar", "hide the menu", "cancel the request form"],
         ),
         Intent(
             name="crm_workflow",
@@ -3306,7 +3451,8 @@ def register_all_intents() -> None:
             domain="desktop",
             is_fallback=True,
             patterns=[
-                r"^(?:open|launch|start)\s+(?!(?:my\s+)?(?:ace\s+)?crm\b)(?P<app>.+)$",
+                # Exclude common UI element names so they fall through to click_text
+                r"^(?:open|launch|start)\s+(?!(?:my\s+)?(?:ace\s+)?crm\b)(?!(?:the\s+)?(?:sidebar|side\s*bar|menu|drawer|panel|tab|modal|dialog|popup|pop-up|dropdown|drop-down|overlay|widget|toolbar|navbar|nav\s*bar|hamburger|navigation)\b)(?P<app>.+)$",
             ],
             handler=handle_open_app,
             description="Open a desktop application",
@@ -3340,9 +3486,9 @@ def register_all_intents() -> None:
             name="close_app",
             domain="desktop",
             patterns=[
-                r"close\s+(?P<app>.+)",
-                r"quit\s+(?P<app>.+)",
-                r"exit\s+(?P<app>.+)",
+                r"close\s+(?!(?:the\s+)?(?:sidebar|side\s*bar|modal|dialog|dialogue|drawer|panel|tab|menu|dropdown|drop-down|popup|pop-up|overlay|tooltip|widget|toolbar|navbar|nav\s*bar|window|form|banner|notification|toast|alert|badge|chip)(?:\s|$))(?P<app>.+)",
+                r"quit\s+(?!(?:the\s+)?(?:sidebar|side\s*bar|modal|dialog|dialogue|drawer|panel|tab|menu|dropdown|drop-down|popup|pop-up|overlay|tooltip|widget|toolbar|navbar|nav\s*bar|window|form)(?:\s|$))(?P<app>.+)",
+                r"exit\s+(?!(?:the\s+)?(?:sidebar|side\s*bar|modal|dialog|dialogue|drawer|panel|tab|menu|dropdown|drop-down|popup|pop-up|overlay|tooltip|widget|toolbar|navbar|nav\s*bar|window|form)(?:\s|$))(?P<app>.+)",
                 r"kill\s+(?P<app>.+)",
             ],
             handler=handle_close_app,
@@ -3518,12 +3664,16 @@ def register_all_intents() -> None:
             domain="browser",
             patterns=[
                 r"(?:click|tap)\s+(?:on\s+)?(?P<text>.+)",
-                r"(?:go\s+to|navigate\s+to)\s+(?P<text>[^\.]+)$"
+                r"(?:go\s+to|navigate\s+to)\s+(?P<text>[^\.]+)$",
+                # "open/close/dismiss <ui-element>" — catches sidebar, menu, drawer, panel, modal, etc.
+                r"^(?:open|toggle|show|expand|collapse|close|dismiss|hide)\s+(?:the\s+)?(?P<text>(?:sidebar|side\s*bar|menu|drawer|panel|tab|modal|dialog|dialogue|popup|pop-up|dropdown|drop-down|overlay|widget|toolbar|navbar|nav\s*bar|hamburger|navigation|banner|notification\s*panel|toast|alert|badge|tooltip).*)$",
+                # "edit/view <element>"
+                r"^(?P<action>edit|update|change|modify|view|show|inspect)\s+(?:on\s+)?(?:the\s+)?(?P<text>.+)$",
             ],
             handler=handle_click_text,
-            description="Click on specific text on the screen using OCR",
-            examples=["click on submit", "tap next", "click login", "get started"],
-            param_names=["text"],
+            description="Click, tap, edit, view, show, inspect, update, or modify specific text or a UI element on the screen using the DOM Agent",
+            examples=["click on submit", "tap next", "click login", "open sidebar", "open menu", "edit the 6 months installments request", "view the employee Nivin S request", "update the amount"],
+            param_names=["text", "action"],
         ),
         Intent(
             name="click",

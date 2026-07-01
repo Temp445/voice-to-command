@@ -83,7 +83,7 @@ export default function AuthPage() {
   const renderLoader = () => (
     <div className={`absolute -inset-3 flex flex-col items-center justify-center gap-5 rounded-2xl z-50 animate-[fadeIn_0.25s_cubic-bezier(0.16,1,0.3,1)_both] backdrop-blur-[6px] ${isMobile ? "bg-[#09090b]/75" : "bg-white/75"}`}>
       <div className="absolute w-[140px] h-[140px] bg-[radial-gradient(circle,rgba(168,85,247,0.25)_0%,rgba(236,72,153,0)_70%)] blur-[15px] -z-10 animate-[pulseGlow_2s_ease-in-out_infinite]" />
-      <div className="flex items-end gap-1.25 h-12">
+      {/* <div className="flex items-end gap-1.25 h-12">
         {[
           { anim: "pulseBar1", dur: "1.0s", delay: "0s" },
           { anim: "pulseBar2", dur: "1.2s", delay: "0.15s" },
@@ -95,7 +95,7 @@ export default function AuthPage() {
             animation: `${bar.anim} ${bar.dur} ease-in-out ${bar.delay} infinite`,
           }} className="w-1.25 h-12 bg-gradient-to-t from-[#6366f1] via-[#a855f7] to-[#ec4899] rounded-[2.5px] origin-bottom shadow-[0_0_10px_rgba(168,85,247,0.3)]" />
         ))}
-      </div>
+      </div> */}
       <div className="flex flex-col items-center gap-1">
         <span className={`text-[12px] font-bold tracking-widest uppercase ${isMobile ? "text-[#fafafa]" : "text-[#09090b]"}`}>
           Verifying Identity

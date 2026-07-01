@@ -38,32 +38,133 @@ class ElementFinderMixin:
             for loc in locators:
                 if await loc.count() > 0:
                     return await loc.element_handle()
+            
+            # 3b. Fuzzy label match: covers label-derived names like "Deduction Start Month"
+            # that don't match any HTML `name` or `aria-label` attribute exactly.
+            try:
+                loc = page.get_by_label(element.name, exact=False).first
+                if await loc.count() > 0:
+                    return await loc.element_handle()
+            except Exception:
+                pass
 
         # 4. JS-based visual element matcher
         # Evaluates in the browser context to find the best match based on properties
         js_finder = """
         (info) => {
+            const labelsMap = {};
+            const labels = document.querySelectorAll('label[for]');
+            for (const label of labels) {
+                const htmlFor = label.getAttribute('for');
+                if (htmlFor) {
+                    labelsMap[htmlFor] = label.innerText || label.textContent || '';
+                }
+            }
+
+            const getLabelText = (el) => {
+                const tag = el.tagName.toUpperCase();
+                if (tag !== 'INPUT' && tag !== 'SELECT' && tag !== 'TEXTAREA' && el.getAttribute('role') !== 'combobox') {
+                    return '';
+                }
+                let labelText = '';
+                if (el.labels && el.labels.length > 0) {
+                    labelText = Array.from(el.labels).map(l => l.innerText || l.textContent || '').join(' ');
+                } else if (el.id && labelsMap[el.id]) {
+                    labelText = labelsMap[el.id];
+                }
+                if (!labelText.trim()) {
+                    const parentLabel = el.closest('label');
+                    if (parentLabel) {
+                        labelText = parentLabel.innerText || parentLabel.textContent || '';
+                    }
+                }
+                if (!labelText.trim()) {
+                    let prev = el.previousElementSibling;
+                    while (prev) {
+                        const prevText = (prev.innerText || prev.textContent || '').trim();
+                        if (prevText && prevText.length < 100) {
+                            labelText = prevText;
+                            break;
+                        }
+                        prev = prev.previousElementSibling;
+                    }
+                }
+                if (!labelText.trim()) {
+                    const parent = el.parentElement;
+                    if (parent) {
+                        const parentText = (parent.innerText || parent.textContent || '').trim();
+                        if (parentText && parentText.length < 100) {
+                            labelText = parentText;
+                        }
+                    }
+                }
+                return labelText.replace(/\\s+/g, ' ').trim();
+            };
+
             const selector = info.tag || '*';
             const elements = Array.from(document.querySelectorAll(selector));
+            
+            // Phase 1: Try exact text and context match
             for (const el of elements) {
-                // Skip hidden elements
                 const style = window.getComputedStyle(el);
                 if (style.display === 'none' || style.visibility === 'hidden' || el.offsetWidth === 0) continue;
                 
-                // Match ID
                 if (info.el_id && el.id !== info.el_id) continue;
-                
-                // Match Placeholder
                 if (info.placeholder && el.placeholder !== info.placeholder) continue;
+
                 
-                // Match Name / Aria-label
                 if (info.name) {
                     const nameAttr = el.getAttribute('name') || '';
                     const ariaLabel = el.getAttribute('aria-label') || '';
-                    if (nameAttr !== info.name && ariaLabel !== info.name) continue;
+                    if (nameAttr !== info.name && ariaLabel !== info.name && getLabelText(el) !== info.name) continue;
                 }
                 
-                // Match Text
+                let context = '';
+                const row = el.closest('tr');
+                if (row) {
+                    context = (row.innerText || '').replace(/\\s+/g, ' ').trim().slice(0, 150);
+                } else {
+                    const li = el.closest('li');
+                    if (li) {
+                        context = (li.innerText || '').replace(/\\s+/g, ' ').trim().slice(0, 150);
+                    }
+                }
+                if (info.context && context.toLowerCase() !== info.context.toLowerCase()) continue;
+                
+                if (info.text) {
+                    const text = (el.innerText || el.textContent || '').trim().toLowerCase();
+                    if (text !== info.text.toLowerCase()) continue;
+                }
+                
+                return el;
+            }
+            
+            // Phase 2: Fall back to partial text match and context match
+            for (const el of elements) {
+                const style = window.getComputedStyle(el);
+                if (style.display === 'none' || style.visibility === 'hidden' || el.offsetWidth === 0) continue;
+                
+                if (info.el_id && el.id !== info.el_id) continue;
+                if (info.placeholder && el.placeholder !== info.placeholder) continue;
+                
+                if (info.name) {
+                    const nameAttr = el.getAttribute('name') || '';
+                    const ariaLabel = el.getAttribute('aria-label') || '';
+                    if (nameAttr !== info.name && ariaLabel !== info.name && getLabelText(el) !== info.name) continue;
+                }
+                
+                let context = '';
+                const row = el.closest('tr');
+                if (row) {
+                    context = (row.innerText || '').replace(/\\s+/g, ' ').trim().slice(0, 150);
+                } else {
+                    const li = el.closest('li');
+                    if (li) {
+                        context = (li.innerText || '').replace(/\\s+/g, ' ').trim().slice(0, 150);
+                    }
+                }
+                if (info.context && context.toLowerCase() !== info.context.toLowerCase()) continue;
+                
                 if (info.text) {
                     const text = (el.innerText || el.textContent || '').trim().toLowerCase();
                     if (!text.includes(info.text.toLowerCase())) continue;
@@ -71,15 +172,40 @@ class ElementFinderMixin:
                 
                 return el;
             }
+            
+            // Phase 3: Fall back to partial text match without context match
+            for (const el of elements) {
+                const style = window.getComputedStyle(el);
+                if (style.display === 'none' || style.visibility === 'hidden' || el.offsetWidth === 0) continue;
+                
+                if (info.el_id && el.id !== info.el_id) continue;
+                if (info.placeholder && el.placeholder !== info.placeholder) continue;
+                
+                if (info.name) {
+                    const nameAttr = el.getAttribute('name') || '';
+                    const ariaLabel = el.getAttribute('aria-label') || '';
+                    if (nameAttr !== info.name && ariaLabel !== info.name && getLabelText(el) !== info.name) continue;
+                }
+                
+                if (info.text) {
+                    const text = (el.innerText || el.textContent || '').trim().toLowerCase();
+                    if (!text.includes(info.text.toLowerCase())) continue;
+                }
+                
+                return el;
+            }
+            
             return null;
         }
+
         """
         info_dict = {
             "tag": element.tag,
             "el_id": element.el_id,
             "placeholder": element.placeholder,
             "name": element.name,
-            "text": element.text
+            "text": element.text,
+            "context": getattr(element, "context", "")
         }
         
         try:

@@ -37,6 +37,7 @@ PROFILE_SELECTORS = [
     "[aria-label*='settings' i]",
     "[aria-label*='my account' i]",
     "[data-testid*='user-menu' i]",
+    "[data-testid*='user_menu' i]",
     "[data-testid*='avatar' i]",
     "[data-testid*='profile' i]",
     "[class*='avatar' i]",
@@ -48,6 +49,24 @@ PROFILE_SELECTORS = [
     "img[alt*='user' i]",
     "button:has(img)",           # button wrapping a user avatar image
     "[role='button']:has(img)",
+    # Modern SVG-based Lucide or FontAwesome icon user/settings buttons:
+    "button:has(svg[class*='user' i])",
+    "button:has(svg[class*='avatar' i])",
+    "button:has(svg[class*='profile' i])",
+    "button:has(svg[class*='settings' i])",
+    "[role='button']:has(svg[class*='user' i])",
+    "[role='button']:has(svg[class*='avatar' i])",
+    "[role='button']:has(svg[class*='profile' i])",
+    "button:has(svg.lucide-user)",
+    "button:has(svg.lucide-user-round)",
+    "button:has(svg.lucide-settings)",
+    "button:has(.lucide-user)",
+    "button:has(.lucide-user-round)",
+    # Fallback to any button/role button/link in the top-right
+    "button",
+    "[role='button']",
+    "a[href*='profile' i]",
+    "a[href*='account' i]",
 ]
 
 # Keywords to confirm a post-logout dialog
@@ -189,6 +208,8 @@ class LogoutHandler:
         """
         Finds and clicks the most likely profile/account menu icon.
         Prefers elements in the top-right quadrant of the viewport.
+        Uses continuous scoring based on rightmost (max X) and topmost (min Y) coordinates,
+        plus selector and text-based weights.
         Returns True if a menu icon was found and clicked.
         """
         # Get viewport size for top-right bias calculation
@@ -215,13 +236,41 @@ class LogoutHandler:
                     if not box:
                         continue
 
-                    # Calculate score: top-right position wins
-                    x_score = 1 if box["x"] >= top_right_x_min else 0
-                    y_score = 1 if box["y"] <= top_right_y_max else 0
-                    position_score = x_score + y_score
+                    # Elements must be in the top-right quadrant to be considered
+                    if box["x"] < top_right_x_min or box["y"] > top_right_y_max:
+                        continue
 
-                    if best_candidate is None or position_score > best_candidate[0]:
-                        best_candidate = (position_score, el, selector, box)
+                    # Calculate continuous score: rightmost and topmost wins
+                    x_center = box["x"] + box["width"] / 2
+                    y_center = box["y"] + box["height"] / 2
+                    x_score = x_center / vw
+                    y_score = 1.0 - (y_center / vh)
+
+                    # Base position score: higher weight on X (rightmost) than Y (topmost)
+                    pos_score = x_score * 2.0 + y_score
+
+                    # Specificity score: boost specific selectors over generic ones
+                    selector_lower = selector.lower()
+                    is_generic = selector_lower in ("button", "[role='button']", "a")
+                    specificity_boost = 0.0 if is_generic else 1.0
+
+                    # Text-based score: does the text contain user/profile/settings indicators?
+                    # Or does it look like a username (e.g. short, alphabetic)?
+                    text_boost = 0.0
+                    try:
+                        text_val = (await el.inner_text(timeout=500) or "").lower().strip()
+                        if text_val:
+                            if any(w in text_val for w in ["profile", "account", "settings", "my", "user"]):
+                                text_boost = 1.5
+                            elif len(text_val) < 20 and not any(w in text_val for w in ["search", "download", "notification", "bell", "menu", "sidebar"]):
+                                text_boost = 1.0
+                    except Exception:
+                        pass
+
+                    total_score = pos_score + specificity_boost + text_boost
+
+                    if best_candidate is None or total_score > best_candidate[0]:
+                        best_candidate = (total_score, el, selector, box)
             except Exception as e:
                 logger.error(f"[{__name__}] {type(e).__name__}: {e}")
                 pass
@@ -232,7 +281,7 @@ class LogoutHandler:
                 await el.click(timeout=3000)
                 logger.info(
                     f"[Logout] Layer 2 clicked profile menu: selector='{selector}' "
-                    f"pos=({box['x']:.0f},{box['y']:.0f}) score={score}"
+                    f"pos=({box['x']:.0f},{box['y']:.0f}) score={score:.3f}"
                 )
                 return True
             except Exception as e:

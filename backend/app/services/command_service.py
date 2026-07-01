@@ -77,6 +77,45 @@ _MATCH_PRIORITY = [
 _CACHE_TTL = 300
 
 
+# ── Friendly Click Reply ─────────────────────────────────────────────────────
+_ACTION_VERB_RE = re.compile(
+    r"^(?:click(?:ed)?|tap(?:ped)?|open(?:ed)?|go\s+to|navigate\s+to|toggle(?:d)?|"
+    r"show(?:n)?|press(?:ed)?|launch(?:ed)?|expand(?:ed)?|hit|select(?:ed)?)\s+(?:the\s+|on\s+)?",
+    re.IGNORECASE
+)
+_NAV_WORDS = {"page", "section", "dashboard", "home", "screen", "view", "route"}
+_UI_TOGGLE_WORDS = {"sidebar", "menu", "drawer", "navbar", "toolbar", "hamburger", "navigation", "nav"}
+
+def _friendly_click_reply(raw_text: str) -> str:
+    """
+    Convert a raw click command/label into a short, natural confirmation message.
+    Examples:
+      'open the sidebar'    → 'Opened the sidebar.'
+      'advance request'     → 'Done!'
+      'go to dashboard'     → 'Got it, heading to Dashboard.'
+      'submit'              → 'Done!'
+    """
+    label = _ACTION_VERB_RE.sub("", raw_text).strip()
+    label_lower = label.lower()
+
+    # UI toggle elements (sidebar, menu, etc.)
+    if any(w in label_lower for w in _UI_TOGGLE_WORDS):
+        display = label_lower.replace("the ", "").strip()
+        return f"Opened the {display}."
+
+    # Navigation pages
+    if any(w in label_lower for w in _NAV_WORDS):
+        title = label.title().replace(" Page", "").replace(" Section", "")
+        return f"Got it, heading to {title}."
+
+    # Short single/double-word actions — brief confirmation
+    if len(label.split()) <= 2:
+        return "Done!"
+
+    # Multi-word labels — confirm with the cleaned label
+    return f"Done — selected '{label}'."
+
+
 # ── Voice Credential Normalizer ─────────────────────────────────────────────
 def _normalize_voice_credential(raw: str) -> str:
     """
@@ -964,11 +1003,36 @@ class CommandService:
             except Exception:
                 pass
 
+            # Detect generic "action verb + multi-word target" commands like "view the 6 months installments request"
+            # or "edit the quarterly sales report". These must NOT be intercepted by Layer 0.85/0.9
+            # because those layers do naive first-match text clicks which routinely land on notification
+            # or navigation elements. Instead they fall through to the click_text intent whose DOMAgent
+            # uses context-aware row-level scoring to find the correct element.
+            _is_action_target_cmd = False
+            try:
+                _atc_words = text.lower().split()
+                _atc_verbs = {"view", "edit", "update", "delete", "show", "inspect", "open", "change", "modify"}
+                _nav_words = {"notification", "bell", "profile", "header", "navbar", "nav", "menu", "sidebar", "toast", "alert"}
+                if len(_atc_words) >= 3 and _atc_words[0] in _atc_verbs:
+                    _atc_target = " ".join(_atc_words[1:])
+                    if not any(w in _atc_target for w in _nav_words):
+                        _is_action_target_cmd = True
+            except Exception:
+                pass
+
+            # Guard: cancel/dismiss/escape commands must always route to dismiss_overlay.
+            # Never let Layer 0.85 or 0.9 intercept them as implicit page clicks.
+            import re as _cancel_re
+            _is_cancel_cmd = bool(_cancel_re.match(
+                r'^(?:cancel|escape|dismiss|hide|close\s+it|press\s+escape)(?:\s|$)',
+                _lower_text
+            ))
+
             # Layer 0.85: Snapshot-based Fast Click (cached DOM — no Playwright round-trip)
             # Reads the pre-warmed PageContextService cache and scores every visible element
             # against the voice query using text-similarity scoring.
             # Falls through to Layer 0.9 if the snapshot is stale/missing or nothing scores.
-            if not intent_name and len(text.split()) <= 7 and not _is_auth_cmd and not _is_cred_type_pattern:
+            if not intent_name and len(text.split()) <= 7 and not _is_auth_cmd and not _is_cred_type_pattern and not _is_action_target_cmd and not _is_cancel_cmd:
                 try:
                     from app.services.page_context_service import (
                         page_context_service as _pcs,
@@ -1022,7 +1086,7 @@ class CommandService:
                                     "intent": "implicit_browser_click",
                                     "parameters": {"text": text, "matched_element": _target_text},
                                     "status": "success",
-                                    "result": f"Clicked '{_target_text}' on webpage.",
+                                    "result": _friendly_click_reply(_target_text),
                                     "duration_ms": int((time.perf_counter() - start) * 1000),
                                     "is_fallback": True,
                                 }
@@ -1034,7 +1098,7 @@ class CommandService:
             # matches a visible button/link on the page, click it INSTANTLY.
             # FIX: All Playwright awaits must run on the dedicated _playwright_loop thread.
             # Calling them on the FastAPI/pipeline loop causes silent cross-loop failures.
-            if not intent_name and len(text.split()) <= 5 and not _is_auth_cmd and not _is_cred_type_pattern:
+            if not intent_name and len(text.split()) <= 5 and not _is_auth_cmd and not _is_cred_type_pattern and not _is_action_target_cmd and not _is_cancel_cmd:
 
                 try:
                     from automation.browser.browser_controller import BrowserController
@@ -1139,7 +1203,7 @@ class CommandService:
                                 "intent": "implicit_browser_click",
                                 "parameters": {"text": text},
                                 "status": "success",
-                                "result": f"Clicked '{text}' on webpage.",
+                                "result": _friendly_click_reply(text),
                                 "duration_ms": int((time.perf_counter() - start) * 1000),
                                 "is_fallback": True,
                             }
@@ -1148,7 +1212,7 @@ class CommandService:
                                 "intent": "implicit_browser_click",
                                 "parameters": {"text": text},
                                 "status": "success",
-                                "result": f"Clicked closest match for '{text}' via fuzzy logic.",
+                                "result": _friendly_click_reply(text),
                                 "duration_ms": int((time.perf_counter() - start) * 1000),
                                 "is_fallback": True,
                             }
@@ -1157,7 +1221,7 @@ class CommandService:
                                 "intent": "implicit_browser_click",
                                 "parameters": {"text": text},
                                 "status": "failed",
-                                "result": f"Unable to find '{text}' on the current webpage.",
+                                "result": f"I couldn't find '{text}' on the page. Could you try rephrasing?",
                                 "duration_ms": int((time.perf_counter() - start) * 1000),
                                 "is_fallback": True,
                             }
@@ -1629,7 +1693,7 @@ class CommandService:
                                     "intent": "vision_fallback",
                                     "parameters": {"text": text, "action": _v_action, "target": _v_target},
                                     "status": "success",
-                                    "result": f"[Vision] {_v_action.capitalize()}ed '{_v_target}' on screen.",
+                                    "result": f"Done! I've {_v_action}ed '{_v_target}'.",
                                     "duration_ms": int((time.perf_counter() - start) * 1000),
                                     "routed_by_vision": True,
                                 }
@@ -1650,7 +1714,7 @@ class CommandService:
                         "intent": None,
                         "parameters": {},
                         "status": "failed",
-                        "result": f"Sorry, I didn't understand: '{text}'",
+                        "result": f"I'm not sure what you mean by '{text}'. Could you try saying it differently?",
                         "duration_ms": int((time.perf_counter() - start) * 1000),
                     }
 
@@ -1666,7 +1730,7 @@ class CommandService:
         intent = self._get_intent(intent_name)
         if not intent:
             return {"intent": intent_name, "parameters": params, "status": "failed",
-                    "result": "Intent handler not found", "duration_ms": int((time.perf_counter() - start) * 1000)}
+                    "result": "Sorry, I couldn't process that command. Please try again.", "duration_ms": int((time.perf_counter() - start) * 1000)}
 
         app_target = params.get("app") or params.get("app_name")
         if app_target:
@@ -1744,7 +1808,7 @@ class CommandService:
             if "BrowserType.launch_persistent_context" in error_str or "locked" in error_str.lower():
                 user_msg = "The web browser failed to open because it is locked by another process. Please try again."
             elif "object has no attribute" in error_str or "NoneType" in error_str:
-                user_msg = "I encountered a temporary software error while executing this. Please try again."
+                user_msg = f"I encountered a temporary software error ({error_str}) while executing this. Please try again."
             elif "net::ERR_" in error_str or "Timeout" in error_type:
                 user_msg = "Network connection failed or timed out while trying to reach the website."
             elif "not found" in error_str.lower():

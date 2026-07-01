@@ -37,6 +37,8 @@ class PageElement:
     el_id: str          # element id attribute
     placeholder: str    # input placeholder text
     href: str           # href for links
+    context: str = ""   # Surrounding context (e.g. table row text or list item text)
+    is_nav_header_or_notification: bool = False
 
 
 @dataclass
@@ -120,15 +122,86 @@ _EXTRACT_JS = """
                           el.tagName === 'SELECT' ? 'select' :
                           el.tagName === 'TEXTAREA' ? 'input' : 'other');
 
+            let context = '';
+            const row = el.closest('tr');
+            if (row) {
+                context = (row.innerText || '').replace(/\s+/g, ' ').trim().slice(0, 150);
+            } else {
+                const li = el.closest('li');
+                if (li) {
+                    context = (li.innerText || '').replace(/\s+/g, ' ').trim().slice(0, 150);
+                }
+            }
+
+            const isNavHeaderOrNotification = !!(
+                el.closest('header') ||
+                el.closest('nav') ||
+                el.closest('[role="navigation"]') ||
+                el.closest('[role="banner"]') ||
+                el.closest('[class*="header" i]') ||
+                el.closest('[class*="nav" i]') ||
+                el.closest('[class*="notification" i]') ||
+                el.closest('[class*="toast" i]') ||
+                el.closest('[class*="alert" i]') ||
+                el.closest('[class*="popover" i]') ||
+                el.closest('[id*="header" i]') ||
+                el.closest('[id*="nav" i]') ||
+                el.closest('[id*="notification" i]')
+            );
+
+            let labelText = '';
+            const tagName = el.tagName.toUpperCase();
+            if (tagName === 'INPUT' || tagName === 'SELECT' || tagName === 'TEXTAREA' || el.getAttribute('role') === 'combobox') {
+                if (el.labels && el.labels.length > 0) {
+                    labelText = Array.from(el.labels).map(l => l.innerText || l.textContent || '').join(' ');
+                } else if (el.id) {
+                    const labelFor = document.querySelector(`label[for="${el.id}"]`);
+                    if (labelFor) {
+                        labelText = labelFor.innerText || labelFor.textContent || '';
+                    }
+                }
+                if (!labelText.trim()) {
+                    const parentLabel = el.closest('label');
+                    if (parentLabel) {
+                        labelText = parentLabel.innerText || parentLabel.textContent || '';
+                    }
+                }
+                if (!labelText.trim()) {
+                    let prev = el.previousElementSibling;
+                    while (prev) {
+                        const prevText = (prev.innerText || prev.textContent || '').trim();
+                        if (prevText && prevText.length < 100) {
+                            labelText = prevText;
+                            break;
+                        }
+                        prev = prev.previousElementSibling;
+                    }
+                }
+                if (!labelText.trim()) {
+                    const parent = el.parentElement;
+                    if (parent) {
+                        const parentText = (parent.innerText || parent.textContent || '').trim();
+                        if (parentText && parentText.length < 100) {
+                            labelText = parentText;
+                        }
+                    }
+                }
+            }
+
+            const cleanLabel = labelText.replace(/\s+/g, ' ').trim();
+            const displayName = el.getAttribute('aria-label') || el.getAttribute('name') || cleanLabel || '';
+
             result.push({
-                text:        text,
-                role:        role,
-                tag:         el.tagName.toLowerCase(),
-                el_type:     (el.type || '').toLowerCase(),
-                name:        el.getAttribute('aria-label') || el.getAttribute('name') || '',
-                el_id:       el.id || '',
-                placeholder: el.placeholder || '',
-                href:        el.href || ''
+                text:                          text,
+                role:                          role,
+                tag:                           el.tagName.toLowerCase(),
+                el_type:                       (el.type || '').toLowerCase(),
+                name:                          displayName,
+                el_id:                         el.id || '',
+                placeholder:                   el.placeholder || '',
+                href:                          el.href || '',
+                context:                       context,
+                is_nav_header_or_notification: isNavHeaderOrNotification
             });
 
             if (result.length >= 150) break;  // Safety cap
@@ -227,6 +300,8 @@ class PageContextService:
                             el_id=e.get("el_id", ""),
                             placeholder=e.get("placeholder", ""),
                             href=e.get("href", ""),
+                            context=e.get("context", ""),
+                            is_nav_header_or_notification=e.get("is_nav_header_or_notification", False),
                         )
                         for e in (raw or [])
                     ]
@@ -259,14 +334,7 @@ def find_best_element(
 ) -> Optional[PageElement]:
     """
     Score each element against the voice query and return the best match.
-
-    Scoring:
-      100 — exact text match (case-insensitive)
-       90 — query is a substring of element text
-       70 — element text starts with query
-       variable — word-overlap ratio × 60 (min score = min_score to qualify)
-
-    Only considers elements whose role is in `roles` (default: clickable elements).
+    Takes into account action verb matching, context overlap, and header/nav/notification penalties.
     """
     q = query.lower().strip()
     q_words = set(q.split())
@@ -283,19 +351,84 @@ def find_best_element(
         if not label:
             continue
 
-        # Scoring
-        if label == q:
-            score = 100
-        elif q in label or label in q:
-            score = 90
-        elif label.startswith(q):
-            score = 70
+        # Check if element is in header, nav, or notification
+        in_header_nav_notification = getattr(el, "is_nav_header_or_notification", False)
+        query_mentions_nav_or_notification = any(
+            w in q for w in ["notification", "bell", "profile", "header", "navbar", "navigation", "nav", "menu", "sidebar", "toast", "alert"]
+        )
+
+        # Extract action verb if present
+        action_verb = None
+        q_target = q
+
+        action_patterns = [
+            ("navigate to", "navigate to"),
+            ("go to", "go to"),
+            ("click on", "click on"),
+            ("click", "click"),
+            ("tap on", "tap on"),
+            ("tap", "tap"),
+            ("press", "press"),
+            ("hit", "hit"),
+            ("view", "view"),
+            ("show", "show"),
+            ("inspect", "inspect"),
+            ("edit", "edit"),
+            ("update", "update"),
+            ("delete", "delete"),
+            ("remove", "remove"),
+            ("open", "open"),
+            ("select", "select"),
+        ]
+
+        for pat_str, verb in action_patterns:
+            if q.startswith(pat_str + " "):
+                action_verb = verb
+                q_target = q[len(pat_str) + 1:].strip()
+                break
+
+        filler_words = {"the", "a", "an", "on", "to", "at", "for", "with", "request", "employee", "button", "link", "record", "item"}
+        q_target_words = [w for w in q_target.split() if w not in filler_words]
+        q_target_clean = " ".join(q_target_words)
+
+        score = 0
+
+        # Check if label is a generic action verb
+        is_action_label = label == action_verb or (action_verb and (label.startswith(action_verb + " ") or label.endswith(" " + action_verb)))
+        if action_verb and (label == action_verb or label in action_verb or action_verb in label):
+            is_action_label = True
+
+        if is_action_label and q_target_words:
+            # Check context overlap
+            context = getattr(el, "context", "").lower()
+            if context:
+                context_words = set(context.split())
+                overlap = len(set(q_target_words) & context_words)
+                if overlap > 0:
+                    score = 80 + int((overlap / len(q_target_words)) * 20)
+                else:
+                    score = 10
+            else:
+                score = 20
         else:
-            label_words = set(label.split())
-            overlap = len(q_words & label_words)
-            if overlap == 0:
-                continue
-            score = int((overlap / max(len(q_words), len(label_words))) * 60)
+            if label == q or (q_target_clean and label == q_target_clean):
+                score = 100
+            elif q_target_clean and (q_target_clean in label or label in q_target_clean):
+                score = 90
+            elif q in label or label in q:
+                score = 85
+            elif label.startswith(q) or (q_target_clean and label.startswith(q_target_clean)):
+                score = 75
+            else:
+                label_words = set(label.split())
+                query_words = set(q_target_clean.split()) if q_target_clean else q_words
+                overlap = len(query_words & label_words)
+                if overlap > 0:
+                    score = int((overlap / max(len(query_words), len(label_words))) * 60)
+
+        # Apply penalty for header/nav/notification elements if the query is not targeting them
+        if in_header_nav_notification and not query_mentions_nav_or_notification:
+            score -= 60
 
         if score > best_score:
             best_score = score

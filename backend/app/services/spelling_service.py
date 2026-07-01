@@ -30,46 +30,110 @@ def _is_credential_like(word: str) -> bool:
 def apply_caps_modifier(text: str) -> str:
     """
     Parse phrases like 'reset@123 S caps' or 'S capital reset@123' and capitalize
-    the named letter in the adjacent word.
+    the named letter in the target word.
     
     Supported patterns:
       - "<word> <letter> caps"           e.g. "reset@123 s caps"    -> "reSet@123"
       - "<word> <letter> capital"        e.g. "reset@123 s capital"  -> "reSet@123"
       - "<word> with <letter> caps"      e.g. "reset@123 with s caps"
       - "<letter> caps <word>"           e.g. "s caps reset@123"     -> "reSet@123"
+      - "<phrase> <letter> caps"         e.g. "reset at 123 R caps"  -> "Reset at 123"
     """
-    def _capitalize_char_in_word(word: str, char: str) -> str:
-        char_lower = char.lower()
-        idx = word.lower().find(char_lower)
-        if idx >= 0:
-            return word[:idx] + word[idx].upper() + word[idx + 1:]
-        return word
+    # 1. Normalize joined words like "Rcaps", "rcaps", "Rcapital", "rcapital" -> "R caps"
+    text = re.sub(r'\b([a-zA-Z])(caps|capital)\b', r'\1 \2', text, flags=re.IGNORECASE)
 
-    # Pattern: <word> [with] <letter> (caps|capital)
-    def repl_word_first(m: re.Match) -> str:
-        word, char = m.group(1), m.group(2)
-        return _capitalize_char_in_word(word, char)
+    # 2. Tokenize by whitespace
+    words = text.split()
+    if not words:
+        return text
 
-    text = re.sub(
-        r'(\S+)\s+(?:with\s+)?([a-zA-Z])\s+(?:caps|capital)\b',
-        repl_word_first,
-        text,
-        flags=re.IGNORECASE
-    )
+    i = 0
+    while i < len(words):
+        is_modifier = False
+        char = ""
+        mod_start_idx = -1
+        mod_end_idx = -1
+        
+        # Look for: [with] <letter> caps
+        if i < len(words) - 1:
+            w_curr = words[i].lower().strip(".,!?;:")
+            w_next = words[i+1].lower().strip(".,!?;:")
+            if len(w_curr) == 1 and w_curr.isalpha() and w_next in ("caps", "capital"):
+                is_modifier = True
+                char = w_curr
+                mod_start_idx = i
+                mod_end_idx = i + 1
+                if i > 0 and words[i-1].lower().strip(".,!?;:") == "with":
+                    mod_start_idx = i - 1
+            elif w_curr == "with" and i < len(words) - 2:
+                w_mid = words[i+1].lower().strip(".,!?;:")
+                w_last = words[i+2].lower().strip(".,!?;:")
+                if len(w_mid) == 1 and w_mid.isalpha() and w_last in ("caps", "capital"):
+                    is_modifier = True
+                    char = w_mid
+                    mod_start_idx = i
+                    mod_end_idx = i + 2
+                    
+        # Look for: caps <letter>
+        if not is_modifier and i < len(words) - 1:
+            w_curr = words[i].lower().strip(".,!?;:")
+            w_next = words[i+1].lower().strip(".,!?;:")
+            if w_curr in ("caps", "capital") and len(w_next) == 1 and w_next.isalpha():
+                is_modifier = True
+                char = w_next
+                mod_start_idx = i
+                mod_end_idx = i + 1
 
-    # Pattern: <letter> (caps|capital) <word>
-    def repl_letter_first(m: re.Match) -> str:
-        char, word = m.group(1), m.group(2)
-        return _capitalize_char_in_word(word, char)
+        if is_modifier:
+            target_word_idx = -1
+            
+            # First, check adjacent words (standard behavior)
+            idx_before = mod_start_idx - 1
+            if idx_before >= 0:
+                clean_before = words[idx_before].lower().strip(".,!?;:")
+                if char in clean_before:
+                    target_word_idx = idx_before
+            
+            if target_word_idx == -1:
+                idx_after = mod_end_idx + 1
+                if idx_after < len(words):
+                    clean_after = words[idx_after].lower().strip(".,!?;:")
+                    if char in clean_after:
+                        target_word_idx = idx_after
+            
+            # Second, search backwards for the nearest word containing target letter
+            if target_word_idx == -1:
+                for idx in range(mod_start_idx - 1, -1, -1):
+                    clean_w = words[idx].lower().strip(".,!?;:")
+                    if char in clean_w:
+                        target_word_idx = idx
+                        break
+                        
+            # Third, search forwards for the nearest word containing target letter
+            if target_word_idx == -1:
+                for idx in range(mod_end_idx + 1, len(words)):
+                    clean_w = words[idx].lower().strip(".,!?;:")
+                    if char in clean_w:
+                        target_word_idx = idx
+                        break
+            
+            # Apply capitalization if a target word was found
+            if target_word_idx != -1:
+                word = words[target_word_idx]
+                char_lower = char.lower()
+                idx_in_word = word.lower().find(char_lower)
+                if idx_in_word >= 0:
+                    word = word[:idx_in_word] + word[idx_in_word].upper() + word[idx_in_word + 1:]
+                    words[target_word_idx] = word
+            
+            # Remove the modifier tokens from the list
+            del words[mod_start_idx : mod_end_idx + 1]
+            continue
+            
+        i += 1
 
-    text = re.sub(
-        r'([a-zA-Z])\s+(?:caps|capital)\s+(\S+)',
-        repl_letter_first,
-        text,
-        flags=re.IGNORECASE
-    )
+    return " ".join(words)
 
-    return text
 
 
 class CommandSpellingCorrector:

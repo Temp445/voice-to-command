@@ -1,0 +1,64 @@
+﻿============================= test session starts =============================
+platform win32 -- Python 3.11.9, pytest-9.1.1, pluggy-1.6.0
+rootdir: E:\Nivin_Sync\ACE\Voice\voice-to-command\backend
+configfile: pytest.ini
+plugins: anyio-4.14.0, langsmith-0.9.1, asyncio-1.4.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 3 items
+
+tests\test_intent_registry.py FF.                                        [100%]
+
+================================== FAILURES ===================================
+______________________ test_intent_fast_path_exact_match ______________________
+
+command_service = <app.services.command_service.CommandService object at 0x0000028BB9858510>
+
+    @pytest.mark.asyncio
+    async def test_intent_fast_path_exact_match(command_service):
+        """Test that regex patterns correctly match and extract parameters."""
+        result = await command_service.parse_and_execute("open notepad")
+        # Result should be the dict returned by the command service
+>       assert result["result"] == "Opening notepad"
+E       AssertionError: assert 'Opening ' == 'Opening notepad'
+E         
+E         - Opening notepad
+E         + Opening
+
+tests\test_intent_registry.py:38: AssertionError
+---------------------------- Captured stderr setup ----------------------------
+2026-07-01 13:18:13.099 | DEBUG    | app.services.command_service:register:374 - Registered intent: open_app (1 patterns)
+2026-07-01 13:18:13.100 | DEBUG    | app.services.command_service:register:374 - Registered intent: search_google (1 patterns)
+---------------------------- Captured stderr call -----------------------------
+2026-07-01 13:18:16.180 | DEBUG    | app.core.supabase_client:_force_http1:50 - [anon] PostgREST httpx forced to HTTP/1.1
+2026-07-01 13:18:16.763 | DEBUG    | app.core.supabase_client:_force_http1:62 - [anon] Auth httpx forced to HTTP/1.1
+2026-07-01 13:18:18.517 | DEBUG    | app.core.supabase_client:_force_http1:50 - [admin] PostgREST httpx forced to HTTP/1.1
+2026-07-01 13:18:19.148 | DEBUG    | app.core.supabase_client:_force_http1:62 - [admin] Auth httpx forced to HTTP/1.1
+2026-07-01 13:18:19.474 | DEBUG    | automation.browser.browser_engine:clear_active_page_override:308 - BrowserEngine: cleared active page override
+____________________________ test_intent_no_match _____________________________
+
+command_service = <app.services.command_service.CommandService object at 0x0000028BBAFE93D0>
+
+    @pytest.mark.asyncio
+    async def test_intent_no_match(command_service):
+        """Test behavior when no fast-path regex matches and LLM is disabled."""
+        # Since we didn't mock LLMService here, but LLMService is default disabled
+        # parse_and_execute should return an error or fallback string.
+        result = await command_service.parse_and_execute("do something unknown")
+    
+        # In command_service.py, if no match and LLM is disabled, it returns:
+        # "I didn't understand that command."
+>       assert "didn't understand" in result["result"].lower()
+E       assert "didn't understand" in "\U0001f6ab automation restricted. 'payroll-acesoftcloud.netlify.app' is not in your shortcuts."
+E        +  where "\U0001f6ab automation restricted. 'payroll-acesoftcloud.netlify.app' is not in your shortcuts." = <built-in method lower of str object at 0x0000028BBB4F6C10>()
+E        +    where <built-in method lower of str object at 0x0000028BBB4F6C10> = "\U0001f6ab Automation restricted. 'payroll-acesoftcloud.netlify.app' is not in your shortcuts.".lower
+
+tests\test_intent_registry.py:52: AssertionError
+---------------------------- Captured stderr setup ----------------------------
+2026-07-01 13:18:20.294 | DEBUG    | app.services.command_service:register:374 - Registered intent: open_app (1 patterns)
+2026-07-01 13:18:20.294 | DEBUG    | app.services.command_service:register:374 - Registered intent: search_google (1 patterns)
+---------------------------- Captured stderr call -----------------------------
+2026-07-01 13:18:21.573 | INFO     | automation.browser.browser_engine:_do_ensure:627 - Connecting to Chrome via CDP on port 9222...\n2026-07-01 13:18:22.446 | INFO     | automation.browser.browser_engine:_do_ensure:631 - \u2705 Connected to Chrome via CDP.\n2026-07-01 13:18:22.519 | DEBUG    | automation.browser.tab_registry:register:158 - TabRegistry: registered tab 5737ba41\u2026 url='https://payroll-acesoftcloud.netlify.app/dashboard/advances/request' targetId=0511419F43E02D248DF6C2275A418393\n2026-07-01 13:18:22.520 | DEBUG    | automation.browser.tab_registry:register:158 - TabRegistry: registered tab 16150891\u2026 url='https://crm.acesoftcloud.in/' targetId=BB4D491655F13C7D0E9594A77A4CC977\n2026-07-01 13:18:22.523 | INFO     | automation.browser.tab_registry:set_active:270 - TabRegistry: active tab update (source=disk_recovery_exact) \u2192 5737ba41\u2026 url='https://payroll-acesoftcloud.netlify.app/dashboard/advances/request'\n2026-07-01 13:18:22.525 | INFO     | automation.browser.tab_registry:recover_from_disk:416 - TabRegistry: recovered active tab (exact url) \u2192 'https://payroll-acesoftcloud.netlify.app/dashboard/advances/request'\n2026-07-01 13:18:22.525 | INFO     | automation.browser.browser_engine:_do_ensure:687 - \u2705 TabRegistry: registered 2 existing tab(s), active = 5737ba41-1513-4ad0-a311-e8434d45e1bf\n2026-07-01 13:18:22.561 | INFO     | automation.browser.tab_registry:wire_cdp_session:449 - TabRegistry: established browser-level CDP session\n2026-07-01 13:18:22.574 | INFO     | automation.browser.tab_registry:wire_cdp_session:549 - \u2705 TabRegistry: CDP Target event handlers subscribed\n2026-07-01 13:18:22.575 | INFO     | automation.browser.tab_registry:start_cdp_sync_loop:570 - TabRegistry: CDP REST sync loop started\n2026-07-01 13:18:22.575 | INFO     | automation.browser.tab_registry:_cdp_sync_loop:587 - TabRegistry: _cdp_sync_loop running\n2026-07-01 13:18:22.641 | DEBUG    | automation.browser.browser_engine:clear_active_page_override:308 - BrowserEngine: cleared active page override
+=========================== short test summary info ===========================
+FAILED tests/test_intent_registry.py::test_intent_fast_path_exact_match - Ass...
+FAILED tests/test_intent_registry.py::test_intent_no_match - assert "didn't u...
+======================== 2 failed, 1 passed in 10.09s =========================
