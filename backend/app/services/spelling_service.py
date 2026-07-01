@@ -26,21 +26,20 @@ def _is_credential_like(word: str) -> bool:
         return True
     return False
 
-
 def apply_caps_modifier(text: str) -> str:
     """
-    Parse phrases like 'reset@123 S caps' or 'S capital reset@123' and capitalize
-    the named letter in the target word.
+    Parse phrases like 'reset@123 S caps' or 'niven33456@gmail.com N small'
+    and capitalize or lowercase the named letter in the target word.
     
     Supported patterns:
-      - "<word> <letter> caps"           e.g. "reset@123 s caps"    -> "reSet@123"
-      - "<word> <letter> capital"        e.g. "reset@123 s capital"  -> "reSet@123"
-      - "<word> with <letter> caps"      e.g. "reset@123 with s caps"
-      - "<letter> caps <word>"           e.g. "s caps reset@123"     -> "reSet@123"
-      - "<phrase> <letter> caps"         e.g. "reset at 123 R caps"  -> "Reset at 123"
+      - "<word> <letter> caps/small"       e.g. "reset@123 s caps"    -> "reSet@123"
+      - "<word> <letter> capital"          e.g. "reset@123 s capital"  -> "reSet@123"
+      - "<word> with <letter> caps/small"  e.g. "reset@123 with s caps"
+      - "<letter> caps/small <word>"       e.g. "s caps reset@123"     -> "reSet@123"
+      - "<phrase> <letter> caps/small"     e.g. "reset at 123 R caps"  -> "Reset at 123"
     """
-    # 1. Normalize joined words like "Rcaps", "rcaps", "Rcapital", "rcapital" -> "R caps"
-    text = re.sub(r'\b([a-zA-Z])(caps|capital)\b', r'\1 \2', text, flags=re.IGNORECASE)
+    # 1. Normalize joined words like "Rcaps", "nsmall", "Nsmall", "rcaps", "Rcapital" -> "R caps"
+    text = re.sub(r'\b([a-zA-Z])(caps|capital|small|lowercase|lower)\b', r'\1 \2', text, flags=re.IGNORECASE)
 
     # 2. Tokenize by whitespace
     words = text.split()
@@ -51,16 +50,22 @@ def apply_caps_modifier(text: str) -> str:
     while i < len(words):
         is_modifier = False
         char = ""
+        action = "" # "upper" or "lower"
         mod_start_idx = -1
         mod_end_idx = -1
         
-        # Look for: [with] <letter> caps
+        # Look for: [with] <letter> caps/small
         if i < len(words) - 1:
             w_curr = words[i].lower().strip(".,!?;:")
             w_next = words[i+1].lower().strip(".,!?;:")
-            if len(w_curr) == 1 and w_curr.isalpha() and w_next in ("caps", "capital"):
+            
+            is_up = w_next in ("caps", "capital", "upper", "uppercase")
+            is_down = w_next in ("small", "lowercase", "lower")
+            
+            if len(w_curr) == 1 and w_curr.isalpha() and (is_up or is_down):
                 is_modifier = True
                 char = w_curr
+                action = "upper" if is_up else "lower"
                 mod_start_idx = i
                 mod_end_idx = i + 1
                 if i > 0 and words[i-1].lower().strip(".,!?;:") == "with":
@@ -68,19 +73,25 @@ def apply_caps_modifier(text: str) -> str:
             elif w_curr == "with" and i < len(words) - 2:
                 w_mid = words[i+1].lower().strip(".,!?;:")
                 w_last = words[i+2].lower().strip(".,!?;:")
-                if len(w_mid) == 1 and w_mid.isalpha() and w_last in ("caps", "capital"):
+                is_up = w_last in ("caps", "capital", "upper", "uppercase")
+                is_down = w_last in ("small", "lowercase", "lower")
+                if len(w_mid) == 1 and w_mid.isalpha() and (is_up or is_down):
                     is_modifier = True
                     char = w_mid
+                    action = "upper" if is_up else "lower"
                     mod_start_idx = i
                     mod_end_idx = i + 2
                     
-        # Look for: caps <letter>
+        # Look for: caps/small <letter>
         if not is_modifier and i < len(words) - 1:
             w_curr = words[i].lower().strip(".,!?;:")
             w_next = words[i+1].lower().strip(".,!?;:")
-            if w_curr in ("caps", "capital") and len(w_next) == 1 and w_next.isalpha():
+            is_up = w_curr in ("caps", "capital", "upper", "uppercase")
+            is_down = w_curr in ("small", "lowercase", "lower")
+            if (is_up or is_down) and len(w_next) == 1 and w_next.isalpha():
                 is_modifier = True
                 char = w_next
+                action = "upper" if is_up else "lower"
                 mod_start_idx = i
                 mod_end_idx = i + 1
 
@@ -117,17 +128,22 @@ def apply_caps_modifier(text: str) -> str:
                         target_word_idx = idx
                         break
             
-            # Apply capitalization if a target word was found
+            # Apply capitalization/lowercasing if a target word was found
             if target_word_idx != -1:
                 word = words[target_word_idx]
                 char_lower = char.lower()
                 idx_in_word = word.lower().find(char_lower)
                 if idx_in_word >= 0:
-                    word = word[:idx_in_word] + word[idx_in_word].upper() + word[idx_in_word + 1:]
+                    repl_char = word[idx_in_word].upper() if action == "upper" else word[idx_in_word].lower()
+                    word = word[:idx_in_word] + repl_char + word[idx_in_word + 1:]
                     words[target_word_idx] = word
+                # Remove the modifier tokens from the list since we applied it
+                del words[mod_start_idx : mod_end_idx + 1]
+                continue
             
-            # Remove the modifier tokens from the list
-            del words[mod_start_idx : mod_end_idx + 1]
+            # If no target word was found, keep the modifier tokens intact
+            # so they can be processed contextually (e.g. against existing page input values)
+            i = mod_end_idx + 1
             continue
             
         i += 1

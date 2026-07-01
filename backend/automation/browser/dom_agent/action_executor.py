@@ -197,12 +197,26 @@ class ActionExecutorMixin:
 
         formatted_value = raw_value
         current_value = None
-        
+        try:
+            current_value = await handle.evaluate("el => el.value")
+        except Exception:
+            pass
+
+        if current_value:
+            # Check if raw_value is a case modifier (e.g. "nsmall", "r caps", "r capital")
+            raw_value_spaced = re.sub(
+                r'\b([a-zA-Z])(caps|capital|small|lowercase|lower)\b',
+                r'\1 \2', raw_value, flags=re.IGNORECASE
+            ).strip()
+            if re.match(r'^[a-zA-Z]\s+(caps|capital|small|lowercase|lower)s?$', raw_value_spaced, re.IGNORECASE):
+                from app.services.spelling_service import apply_caps_modifier
+                combined = f"{current_value} {raw_value_spaced}"
+                modified = apply_caps_modifier(combined).strip()
+                if modified and modified != current_value and modified != raw_value:
+                    logger.info(f"Modifier applied to existing value in _fill_input: '{current_value}' + '{raw_value}' → '{modified}'")
+                    formatted_value = modified
+
         if el_type in ("month", "date", "week"):
-            try:
-                current_value = await handle.evaluate("el => el.value")
-            except Exception:
-                pass
 
             if el_type == "month":
                 parsed = parse_month_value(raw_value, current_value)

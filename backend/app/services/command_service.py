@@ -1459,6 +1459,19 @@ class CommandService:
                                 else:
                                     _loc = page.locator("input[type='password'], input[name*='pass' i], input[placeholder*='pass' i]").first
                                 if await _loc.count() > 0:
+                                    _existing = await _loc.evaluate("el => el.value")
+                                    if _existing:
+                                        _val_spaced = _re.sub(
+                                            r'\b([a-zA-Z])(caps|capital|small|lowercase|lower)\b',
+                                            r'\1 \2', _val, flags=_re.IGNORECASE
+                                        ).strip()
+                                        if _re.match(r'^[a-zA-Z]\s+(caps|capital|small|lowercase|lower)s?$', _val_spaced, _re.IGNORECASE):
+                                            from app.services.spelling_service import apply_caps_modifier
+                                            _combined = f"{_existing} {_val_spaced}"
+                                            _modified = apply_caps_modifier(_combined).strip()
+                                            if _modified and _modified != _existing and _modified != _val:
+                                                logger.info(f"Implicit Type Modifier: '{_existing}' + '{_val}' → '{_modified}'")
+                                                _val = _modified
                                     await _loc.fill(_val)
                                     await _loc.press("Enter")
                                     return True
