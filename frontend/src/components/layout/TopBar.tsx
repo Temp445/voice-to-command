@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { User, Wifi, WifiOff, Activity } from "lucide-react";
+import { User, Wifi, WifiOff, Activity, Menu } from "lucide-react";
 import { useVoiceStore } from "@/store/voiceStore";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { useEffect, useState } from "react";
@@ -16,7 +16,7 @@ const STATE_BADGE: Record<string, string> = {
 };
 
 export function TopBar() {
-  const { pipelineState } = useVoiceStore();
+  const { pipelineState, sidebarCollapsed: collapsed, setSidebarCollapsed } = useVoiceStore();
   const { connected, activeTabTitle, activeTabUrl } = useWebSocket();
   const badge = STATE_BADGE[pipelineState] || STATE_BADGE.idle;
   
@@ -83,6 +83,15 @@ export function TopBar() {
       data-tauri-drag-region 
       className="h-16 flex items-center px-6 gap-4 border-b border-[var(--border)] bg-[var(--background)] shrink-0 select-none"
     >
+      {/* Mobile Hamburger menu trigger */}
+      <button 
+        onClick={() => setSidebarCollapsed(!collapsed)}
+        className="md:hidden p-2 -ml-2 mr-1 rounded-lg hover:bg-[var(--secondary)]/80 text-zinc-500 hover:text-[var(--foreground)] transition-colors cursor-pointer border-none bg-transparent flex items-center justify-center shrink-0"
+        title="Toggle Menu"
+      >
+        <Menu size={20} />
+      </button>
+
       {/* Active Tab Badge on the left */}
      <div className="flex-1 flex items-center">
         {tabName && connected && (

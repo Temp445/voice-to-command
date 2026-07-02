@@ -33,34 +33,35 @@ WEB_APP_URLS: dict[str, str] = {
 }
 
 async def handle_open_app(app: str = "", text: str = "", **_) -> str:
-    from automation.desktop.app_controller import AppController
-    ctrl = AppController()
-    app_name = app.strip()
-    try:
-        res = await ctrl.open_application(app_name)
-    except Exception as e:
-        res = str(e)
-    
-    if "not found" in res.lower() or "could not find" in res.lower() or "application" in res.lower():
-        # Check if it's a known web app
-        app_lower = app_name.lower()
-        url = None
-        for key, web_url in WEB_APP_URLS.items():
-            if key in app_lower or app_lower in key:
-                url = web_url
-                break
-        
-        if url:
-            logger.info(f"Desktop app '{app_name}' not found. Opening web URL: {url}")
-            from automation.browser.browser_controller import BrowserController
-            bc = BrowserController()
-            nav_result = await bc.navigate(url)
-            return f"'{app_name}' is not installed. Opened {url} in browser instead."
-            
-        # Fallback to conversational search prompt
-        return f"PENDING_SEARCH_APP:{app_name}"
-
-    return res
+    # from automation.desktop.app_controller import AppController
+    # ctrl = AppController()
+    # app_name = app.strip()
+    # try:
+    #     res = await ctrl.open_application(app_name)
+    # except Exception as e:
+    #     res = str(e)
+    # 
+    # if "not found" in res.lower() or "could not find" in res.lower() or "application" in res.lower():
+    #     # Check if it's a known web app
+    #     app_lower = app_name.lower()
+    #     url = None
+    #     for key, web_url in WEB_APP_URLS.items():
+    #         if key in app_lower or app_lower in key:
+    #             url = web_url
+    #             break
+    #     
+    #     if url:
+    #         logger.info(f"Desktop app '{app_name}' not found. Opening web URL: {url}")
+    #         from automation.browser.browser_controller import BrowserController
+    #         bc = BrowserController()
+    #         nav_result = await bc.navigate(url)
+    #         return f"'{app_name}' is not installed. Opened {url} in browser instead."
+    #         
+    #     # Fallback to conversational search prompt
+    #     return f"PENDING_SEARCH_APP:{app_name}"
+    # 
+    # return res
+    return "Application launching is disabled."
 
 
 async def handle_dynamic_dom_action(action: str = "", **_) -> str:
@@ -79,13 +80,15 @@ async def handle_dynamic_dom_action(action: str = "", **_) -> str:
 
 
 async def handle_close_app(app: str = "", **_) -> str:
-    from automation.desktop.app_controller import AppController
-    return await AppController().close_application(app.strip())
+    # from automation.desktop.app_controller import AppController
+    # return await AppController().close_application(app.strip())
+    return "Application closing is disabled."
 
 
 async def handle_close_heavy_apps(**_) -> str:
-    from automation.desktop.app_controller import AppController
-    return await AppController().close_heavy_applications(threshold_mb=500)
+    # from automation.desktop.app_controller import AppController
+    # return await AppController().close_heavy_applications(threshold_mb=500)
+    return "Closing heavy applications is disabled."
 
 
 async def handle_search_google(query: str = "", browser: str | None = None, text: str = "", **_) -> str:
@@ -1771,212 +1774,221 @@ async def handle_analyze_screen(query: str = "", **_) -> str:
     return await VisionService.describe_screen(query)
 
 async def handle_open_folder(path: str = "", disambiguation: str | None = None, **_) -> str:
-    from automation.desktop.file_operations import FileOperations
-    return FileOperations().open_folder(path.strip(), disambiguation)
+    # from automation.desktop.file_operations import FileOperations
+    # return FileOperations().open_folder(path.strip(), disambiguation)
+    return "Opening folders is disabled."
 
 
 async def handle_close_folder(path: str = "", **_) -> str:
-    from automation.desktop.window_manager import WindowManager
-    folder_name = path.strip()
-    if WindowManager().close_window_by_title(folder_name):
-        return f"Closed folder: {folder_name}"
-    return f"Folder '{folder_name}' is not currently open."
+    # from automation.desktop.window_manager import WindowManager
+    # folder_name = path.strip()
+    # if WindowManager().close_window_by_title(folder_name):
+    #     return f"Closed folder: {folder_name}"
+    # return f"Folder '{folder_name}' is not currently open."
+    return "Closing folders is disabled."
 
 
 async def handle_open_project(project_name: str = "", **_) -> str:
-    from app.services.context_state import get_context
-    import subprocess
-    import os
-    
-    clean = project_name.replace("project", "").strip()
-    
-    # 1. Try to fetch from explicit projects.json mapping
-    ctx = get_context()
-    project_path = ctx.get_project_path(clean)
-    
-    if not project_path:
-        # 2. Fallback to Windows Search API
-        from automation.desktop.file_indexer import get_indexer
-        indexer = get_indexer()
-        results = indexer.search(clean, is_folder=True, limit=5)
-        if results:
-            project_path = results[0]["path"]
-            
-    if not project_path:
-        return f"Could not find a project folder named {clean}"
-        
-    ctx.set("active_project_path", project_path)
-    
-    # Open in VS Code (assuming code is in PATH)
-    try:
-        subprocess.Popen(["code", project_path], cwd=project_path, shell=True)
-        return f"Opened project '{clean}' in VS Code"
-    except Exception as e:
-        return f"Found project but failed to open in VS Code: {e}"
+    # from app.services.context_state import get_context
+    # import subprocess
+    # import os
+    # 
+    # clean = project_name.replace("project", "").strip()
+    # 
+    # # 1. Try to fetch from explicit projects.json mapping
+    # ctx = get_context()
+    # project_path = ctx.get_project_path(clean)
+    # 
+    # if not project_path:
+    #     # 2. Fallback to Windows Search API
+    #     from automation.desktop.file_indexer import get_indexer
+    #     indexer = get_indexer()
+    #     results = indexer.search(clean, is_folder=True, limit=5)
+    #     if results:
+    #         project_path = results[0]["path"]
+    #         
+    # if not project_path:
+    #     return f"Could not find a project folder named {clean}"
+    #     
+    # ctx.set("active_project_path", project_path)
+    # 
+    # # Open in VS Code (assuming code is in PATH)
+    # try:
+    #     subprocess.Popen(["code", project_path], cwd=project_path, shell=True)
+    #     return f"Opened project '{clean}' in VS Code"
+    # except Exception as e:
+    #     return f"Found project but failed to open in VS Code: {e}"
+    return "Opening projects is disabled."
 
 
 async def handle_create_project(project_type: str = "", project_name: str = "", **_) -> str:
-    from app.services.context_manager import context_manager
-    import subprocess
-    import os
-    
-    # Clean inputs
-    project_type = project_type.lower().strip() if project_type else ""
-    project_name = project_name.lower().strip() if project_name else "my-app"
-    project_name = project_name.replace(" ", "-") # normalize for npm
-    
-    desktop = os.path.expanduser("~/Desktop")
-    target_path = os.path.join(desktop, project_name)
-    
-    original_project_name = project_name
-    counter = 1
-    while os.path.exists(target_path):
-        project_name = f"{original_project_name}-{counter}"
-        target_path = os.path.join(desktop, project_name)
-        counter += 1
-    # Determine scaffolding command
-    if "react" in project_type or "vite" in project_type:
-        scaffold_cmd = f"npm create vite@latest {project_name} --yes -- --template react"
-        post_cmd = "npm install"
-    elif "next" in project_type:
-        scaffold_cmd = f"npx create-next-app@latest {project_name} --yes --use-npm --eslint --tailwind --app"
-        post_cmd = "" # Next.js does npm install automatically
-    else:
-        # Generic fallback
-        scaffold_cmd = f"mkdir {project_name}"
-        post_cmd = ""
-        
-    try:
-        # 1. Run the fast scaffold command
-        # 2. IMMEDIATELY open VS Code so the user isn't waiting
-        # 3. CD into the directory and run the slow `npm install` (so the user has a fully working project)
-        full_cmd = f"echo Scaffolding {project_type} project (downloading template)... && {scaffold_cmd} && echo Opening VS Code... && code {project_name}"
-        if post_cmd:
-            full_cmd += f" && echo. && echo Installing dependencies from npm (this may take 2-5 minutes depending on network)... && cd {project_name} && {post_cmd}"
-            
-        full_cmd += " && echo. && echo Finished! You can now close this terminal."
-        
-        # Spawn terminal to show progress
-        subprocess.Popen(f"start cmd /k \"cd /d {desktop} && {full_cmd}\"", shell=True)
-        
-        # Track context
-        context_manager.last_project_path = target_path
-        
-        return f"Creating a new {project_type} project named {project_name} on your Desktop..."
-    except Exception as e:
-        return f"Failed to create project: {e}"
+    # from app.services.context_manager import context_manager
+    # import subprocess
+    # import os
+    # 
+    # # Clean inputs
+    # project_type = project_type.lower().strip() if project_type else ""
+    # project_name = project_name.lower().strip() if project_name else "my-app"
+    # project_name = project_name.replace(" ", "-") # normalize for npm
+    # 
+    # desktop = os.path.expanduser("~/Desktop")
+    # target_path = os.path.join(desktop, project_name)
+    # 
+    # original_project_name = project_name
+    # counter = 1
+    # while os.path.exists(target_path):
+    #     project_name = f"{original_project_name}-{counter}"
+    #     target_path = os.path.join(desktop, project_name)
+    #     counter += 1
+    # # Determine scaffolding command
+    # if "react" in project_type or "vite" in project_type:
+    #     scaffold_cmd = f"npm create vite@latest {project_name} --yes -- --template react"
+    #     post_cmd = "npm install"
+    # elif "next" in project_type:
+    #     scaffold_cmd = f"npx create-next-app@latest {project_name} --yes --use-npm --eslint --tailwind --app"
+    #     post_cmd = "" # Next.js does npm install automatically
+    # else:
+    #     # Generic fallback
+    #     scaffold_cmd = f"mkdir {project_name}"
+    #     post_cmd = ""
+    #     
+    # try:
+    #     # 1. Run the fast scaffold command
+    #     # 2. IMMEDIATELY open VS Code so the user isn't waiting
+    #     # 3. CD into the directory and run the slow `npm install` (so the user has a fully working project)
+    #     full_cmd = f"echo Scaffolding {project_type} project (downloading template)... && {scaffold_cmd} && echo Opening VS Code... && code {project_name}"
+    #     if post_cmd:
+    #         full_cmd += f" && echo. && echo Installing dependencies from npm (this may take 2-5 minutes depending on network)... && cd {project_name} && {post_cmd}"
+    #         
+    #     full_cmd += " && echo. && echo Finished! You can now close this terminal."
+    #     
+    #     # Spawn terminal to show progress
+    #     subprocess.Popen(f"start cmd /k \"cd /d {desktop} && {full_cmd}\"", shell=True)
+    #     
+    #     # Track context
+    #     context_manager.last_project_path = target_path
+    #     
+    #     return f"Creating a new {project_type} project named {project_name} on your Desktop..."
+    # except Exception as e:
+    #     return f"Failed to create project: {e}"
+    return "Creating projects is disabled."
 
 
 async def handle_run_dev_server(cmd: str = "", **_) -> str:
-    from app.services.context_manager import context_manager
-    import subprocess
-    import os
-    
-    if not context_manager.last_project_path:
-        return "I don't know which project to run. Please open a project first."
-        
-    project_path = context_manager.last_project_path
-    
-    # Simple detection logic
-    if os.path.exists(os.path.join(project_path, "package.json")):
-        start_cmd = "npm run dev"
-        context_manager.last_dev_server_url = "http://localhost:3000"
-    elif os.path.exists(os.path.join(project_path, "requirements.txt")) or os.path.exists(os.path.join(project_path, "main.py")):
-        start_cmd = "python main.py" # Simple fallback
-        context_manager.last_dev_server_url = "http://localhost:8000"
-    else:
-        start_cmd = cmd or "npm start"
-        
-    try:
-        # We spawn in a new console window so the user can see the dev server
-        subprocess.Popen(f"start cmd /k \"cd /d {project_path} && {start_cmd}\"", shell=True)
-        return f"Started dev server in {os.path.basename(project_path)}"
-    except Exception as e:
-        return f"Failed to start dev server: {e}"
+    # from app.services.context_manager import context_manager
+    # import subprocess
+    # import os
+    # 
+    # if not context_manager.last_project_path:
+    #     return "I don't know which project to run. Please open a project first."
+    #     
+    # project_path = context_manager.last_project_path
+    # 
+    # # Simple detection logic
+    # if os.path.exists(os.path.join(project_path, "package.json")):
+    #     start_cmd = "npm run dev"
+    #     context_manager.last_dev_server_url = "http://localhost:3000"
+    # elif os.path.exists(os.path.join(project_path, "requirements.txt")) or os.path.exists(os.path.join(project_path, "main.py")):
+    #     start_cmd = "python main.py" # Simple fallback
+    #     context_manager.last_dev_server_url = "http://localhost:8000"
+    # else:
+    #     start_cmd = cmd or "npm start"
+    #     
+    # try:
+    #     # We spawn in a new console window so the user can see the dev server
+    #     subprocess.Popen(f"start cmd /k \"cd /d {project_path} && {start_cmd}\"", shell=True)
+    #     return f"Started dev server in {os.path.basename(project_path)}"
+    # except Exception as e:
+    #     return f"Failed to start dev server: {e}"
+    return "Running development server is disabled."
 
 
 async def handle_open_dev_server(**_) -> str:
-    from app.services.context_manager import context_manager
-    from automation.browser.browser_controller import BrowserController as BrowserController
-    
-    url = context_manager.last_dev_server_url
-    if not url:
-        return "I don't have a dev server URL tracked in context."
-        
-    bc = BrowserController()
-    await bc.navigate(url)
-    return f"Opened application in browser at {url}"
+    # from app.services.context_manager import context_manager
+    # from automation.browser.browser_controller import BrowserController as BrowserController
+    # 
+    # url = context_manager.last_dev_server_url
+    # if not url:
+    #     return "I don't have a dev server URL tracked in context."
+    #     
+    # bc = BrowserController()
+    # await bc.navigate(url)
+    # return f"Opened application in browser at {url}"
+    return "Opening development server is disabled."
 
 
 async def handle_search_file(file_name: str = "", explicit_type: str = None, **_) -> str:
-    from automation.desktop.file_operations import FileOperations
-    from app.services.intent_registry import handle_open_app
-    query = file_name.strip()
-    
-    if explicit_type:
-        explicit_type = explicit_type.lower()
-        if explicit_type in ("folder", "directory"):
-            return FileOperations().open_folder(query)
-        elif explicit_type in ("app", "application", "program"):
-            return await handle_open_app(query)
-        else:
-            return FileOperations().search_file(query)
-            
-    # Omni Search
-    from automation.desktop.file_indexer import get_indexer
-    from automation.desktop.app_scanner import get_scanner
-    from rapidfuzz import process, fuzz
-    
-    indexer = get_indexer()
-    scanner = get_scanner()
-    
-    found_files = indexer.search(query, is_folder=False, limit=3)
-    found_folders = indexer.search(query, is_folder=True, limit=3)
-    
-    found_apps = []
-    if scanner.apps:
-        choices = list(scanner.apps.keys())
-        matches = process.extract(query.lower(), choices, scorer=fuzz.WRatio, limit=3)
-        for m in matches:
-            if m[1] > 75:
-                found_apps.append(scanner.apps[m[0]].name)
-                
-    if not found_files and not found_folders and not found_apps:
-        raise FileNotFoundError(f"Could not find any file, folder, or application named '{query}'")
-        
-    options = []
-    if found_files: options.append("files")
-    if found_folders: options.append("folders")
-    if found_apps: options.append("applications")
-    
-    opts_str = ", ".join(options)
-    
-    # Replace last comma with 'and' if multiple
-    if len(options) > 1:
-        opts_str = " and ".join(opts_str.rsplit(", ", 1))
-    
-    from app.services.command_service import command_service
-    command_service._pending_action = {
-        "intent": "omni_search_disambiguate",
-        "params": {
-            "query": query,
-            "files": [f['path'] for f in found_files],
-            "folders": [f['path'] for f in found_folders],
-            "apps": [a for a in found_apps]
-        }
-    }
-    
-    return f"I found matching {opts_str}. Would you like to open a file, folder, application, or search Google?"
+    # from automation.desktop.file_operations import FileOperations
+    # from app.services.intent_registry import handle_open_app
+    # query = file_name.strip()
+    # 
+    # if explicit_type:
+    #     explicit_type = explicit_type.lower()
+    #     if explicit_type in ("folder", "directory"):
+    #         return FileOperations().open_folder(query)
+    #     elif explicit_type in ("app", "application", "program"):
+    #         return await handle_open_app(query)
+    #     else:
+    #         return FileOperations().search_file(query)
+    #         
+    # # Omni Search
+    # from automation.desktop.file_indexer import get_indexer
+    # from automation.desktop.app_scanner import get_scanner
+    # from rapidfuzz import process, fuzz
+    # 
+    # indexer = get_indexer()
+    # scanner = get_scanner()
+    # 
+    # found_files = indexer.search(query, is_folder=False, limit=3)
+    # found_folders = indexer.search(query, is_folder=True, limit=3)
+    # 
+    # found_apps = []
+    # if scanner.apps:
+    #     choices = list(scanner.apps.keys())
+    #     matches = process.extract(query.lower(), choices, scorer=fuzz.WRatio, limit=3)
+    #     for m in matches:
+    #         if m[1] > 75:
+    #             found_apps.append(scanner.apps[m[0]].name)
+    #             
+    # if not found_files and not found_folders and not found_apps:
+    #     raise FileNotFoundError(f"Could not find any file, folder, or application named '{query}'")
+    #     
+    # options = []
+    # if found_files: options.append("files")
+    # if found_folders: options.append("folders")
+    # if found_apps: options.append("applications")
+    # 
+    # opts_str = ", ".join(options)
+    # 
+    # # Replace last comma with 'and' if multiple
+    # if len(options) > 1:
+    #     opts_str = " and ".join(opts_str.rsplit(", ", 1))
+    # 
+    # from app.services.command_service import command_service
+    # command_service._pending_action = {
+    #     "intent": "omni_search_disambiguate",
+    #     "params": {
+    #         "query": query,
+    #         "files": [f['path'] for f in found_files],
+    #         "folders": [f['path'] for f in found_folders],
+    #         "apps": [a for a in found_apps]
+    #     }
+    # }
+    # 
+    # return f"I found matching {opts_str}. Would you like to open a file, folder, application, or search Google?"
+    return "File search is disabled."
 
 
 async def handle_create_folder(folder_name: str = "", drive: str | None = None, **_) -> str:
-    from automation.desktop.file_operations import FileOperations
-    return FileOperations().create_folder(folder_name.strip(), drive)
+    # from automation.desktop.file_operations import FileOperations
+    # return FileOperations().create_folder(folder_name.strip(), drive)
+    return "Folder creation is disabled."
 
 
 async def handle_run_command(cmd: str = "", **_) -> str:
-    from automation.desktop.app_controller import AppController
-    return await AppController().run_terminal_command(cmd.strip())
+    # from automation.desktop.app_controller import AppController
+    # return await AppController().run_terminal_command(cmd.strip())
+    return "Running commands is disabled."
 
 
 async def handle_volume_up(**_) -> str:
@@ -2751,28 +2763,30 @@ async def handle_ask_and_type(question: str = "", **_) -> str:
 
 
 async def handle_vscode_terminal(**_) -> str:
-    from automation.desktop.window_manager import WindowManager
-    from automation.input.keyboard_controller import KeyboardController
-    import asyncio
-    
-    wm = WindowManager()
-    # Try to focus VS Code or a popular fork
-    if (wm.focus_by_title("Visual Studio Code") or 
-        wm.focus_by_title("Cursor") or 
-        wm.focus_by_title("Windsurf") or 
-        wm.focus_by_title("Antigravity") or 
-        wm.focus_by_title("Voice_Controller_v1")):
-        await asyncio.sleep(0.5)
-        # Ctrl + ` shortcut for terminal
-        KeyboardController().press_keys(["ctrl", "`"])
-        return "Opened terminal in the code editor."
-    return "Could not find an active code editor window."
+    # from automation.desktop.window_manager import WindowManager
+    # from automation.input.keyboard_controller import KeyboardController
+    # import asyncio
+    # 
+    # wm = WindowManager()
+    # # Try to focus VS Code or a popular fork
+    # if (wm.focus_by_title("Visual Studio Code") or 
+    #     wm.focus_by_title("Cursor") or 
+    #     wm.focus_by_title("Windsurf") or 
+    #     wm.focus_by_title("Antigravity") or 
+    #     wm.focus_by_title("Voice_Controller_v1")):
+    #     await asyncio.sleep(0.5)
+    #     # Ctrl + ` shortcut for terminal
+    #     KeyboardController().press_keys(["ctrl", "`"])
+    #     return "Opened terminal in the code editor."
+    # return "Could not find an active code editor window."
+    return "VS Code terminal control is disabled."
 
 # ─── New Integrations Handlers (Audio, Clipboard, Trash, Summary) ────────────
 
 async def handle_delete_file(target: str = "", **_) -> str:
-    from automation.desktop.file_operations import FileOperations
-    return FileOperations().delete_target(target.strip())
+    # from automation.desktop.file_operations import FileOperations
+    # return FileOperations().delete_target(target.strip())
+    return "File deletion is disabled."
 
 async def handle_clipboard_copy(text: str = "", **_) -> str:
     from automation.system.clipboard import ClipboardManager
@@ -2944,16 +2958,16 @@ def register_all_intents() -> None:
             examples=["mute spotify", "mute chrome"],
             param_names=["app_name"],
         ),
-        # Safe Delete
-        Intent(
-            name="delete_file",
-            domain="desktop",
-            patterns=[r"^delete\s+(?:the\s+)?(?:file|folder\s+)?(?P<target>.+)$"],
-            handler=handle_delete_file,
-            description="Safely delete a file or folder by moving it to the Recycle Bin",
-            examples=["delete the demo file", "delete reports folder"],
-            param_names=["target"],
-        ),
+        # # Safe Delete
+        # Intent(
+        #     name="delete_file",
+        #     domain="desktop",
+        #     patterns=[r"^delete\s+(?:the\s+)?(?:file|folder\s+)?(?P<target>.+)$"],
+        #     handler=handle_delete_file,
+        #     description="Safely delete a file or folder by moving it to the Recycle Bin",
+        #     examples=["delete the demo file", "delete reports folder"],
+        #     param_names=["target"],
+        # ),
         # Clipboard
         Intent(
             name="clipboard_copy",
@@ -3102,69 +3116,69 @@ def register_all_intents() -> None:
             description="Use AI vision to describe what is currently on the screen",
             examples=["what is on my screen?", "read my screen"],
         ),
-        Intent(
-            name="open_folder",
-            domain="desktop",
-            patterns=[
-                # "open folder <name>" or "open directory <name>" — keyword FIRST (highest priority)
-                r"open\s+(?:the\s+)?(?:folder|directory)\s+(?P<path>.+)",
-                # "show me <name> folder"
-                r"show\s+(?:me\s+)?(?:the\s+)?(?P<path>[\w\s]+?)\s+(?:folder|directory)",
-                # "open <name> folder" — keyword at END; guard ensures path doesn't start with 'folder'
-                r"open\s+(?:the\s+)?(?P<path>(?!folder\b|directory\b)[\w\s]+?)\s+(?:folder|directory)",
-                # "go to downloads", "go to documents"
-                r"go\s+to\s+(?P<path>downloads|documents|desktop|pictures|music|videos|home)",
-            ],
-            handler=handle_open_folder,
-            description="Open a folder in Windows Explorer",
-            examples=["open the payroll folder", "open folder downloads", "show me documents folder"],
-            param_names=["path"],
-        ),
-        Intent(
-            name="search_file",
-            domain="desktop",
-            is_fallback=True,
-            patterns=[
-                r"^(?:search|find|locate|open)\s+(?:for\s+)?(?:the\s+)?(?P<explicit_type>file|folder|app|application|program|pdf|document|doc|image|video|spreadsheet|notepad|excel|word|powerpoint|text)\s+(?P<file_name>.+)$",
-                r"^(?:search|find|locate)\s+(?:for\s+)?(?:the\s+)?(?P<file_name>.+)$",
-            ],
-            handler=handle_search_file,
-            description="Search for a file, folder, or application",
-            examples=["search for invoice pdf", "find the file report.docx", "search payroll"],
-            param_names=["file_name", "explicit_type"],
-        ),
-        Intent(
-            name="open_project",
-            patterns=[
-                r"open\s+(?:the\s+)?(?:my\s+)?(?P<project_name>.+?)\s+project",
-                r"open\s+(?:the\s+)?(?:my\s+)?project\s+(?P<project_name>.+)",
-            ],
-            handler=handle_open_project,
-            description="Open a software project in VS Code",
-            examples=["open my react project", "open the website project"],
-            param_names=["project_name"],
-        ),
-        Intent(
-            name="vscode_terminal",
-            patterns=[
-                r"open\s+(?:the\s+)?terminal",
-                r"show\s+(?:the\s+)?terminal",
-            ],
-            handler=handle_vscode_terminal,
-            description="Open the VS Code integrated terminal",
-            examples=["open the terminal", "show terminal"],
-        ),
-        Intent(
-            name="create_project",
-            patterns=[
-                r"create\s+(?:a\s+)?(?:the\s+)?(?:new\s+)?(?P<project_type>\w+)\s+project(?:\s+(?:called|named)\s+(?P<project_name>.+))?",
-                r"make\s+(?:a\s+)?(?:the\s+)?(?:new\s+)?(?P<project_type>\w+)\s+project(?:\s+(?:called|named)\s+(?P<project_name>.+))?",
-            ],
-            handler=handle_create_project,
-            description="Create a new software project (like React, Next.js) on the Desktop",
-            examples=["create a new react project", "create a next project called my website"],
-            param_names=["project_type", "project_name"],
-        ),
+        # Intent(
+        #     name="open_folder",
+        #     domain="desktop",
+        #     patterns=[
+        #         # "open folder <name>" or "open directory <name>" — keyword FIRST (highest priority)
+        #         r"open\s+(?:the\s+)?(?:folder|directory)\s+(?P<path>.+)",
+        #         # "show me <name> folder"
+        #         r"show\s+(?:me\s+)?(?:the\s+)?(?P<path>[\w\s]+?)\s+(?:folder|directory)",
+        #         # "open <name> folder" — keyword at END; guard ensures path doesn't start with 'folder'
+        #         r"open\s+(?:the\s+)?(?P<path>(?!folder\b|directory\b)[\w\s]+?)\s+(?:folder|directory)",
+        #         # "go to downloads", "go to documents"
+        #         r"go\s+to\s+(?P<path>downloads|documents|desktop|pictures|music|videos|home)",
+        #     ],
+        #     handler=handle_open_folder,
+        #     description="Open a folder in Windows Explorer",
+        #     examples=["open the payroll folder", "open folder downloads", "show me documents folder"],
+        #     param_names=["path"],
+        # ),
+        # Intent(
+        #     name="search_file",
+        #     domain="desktop",
+        #     is_fallback=True,
+        #     patterns=[
+        #         r"^(?:search|find|locate|open)\s+(?:for\s+)?(?:the\s+)?(?P<explicit_type>file|folder|app|application|program|pdf|document|doc|image|video|spreadsheet|notepad|excel|word|powerpoint|text)\s+(?P<file_name>.+)$",
+        #         r"^(?:search|find|locate)\s+(?:for\s+)?(?:the\s+)?(?P<file_name>.+)$",
+        #     ],
+        #     handler=handle_search_file,
+        #     description="Search for a file, folder, or application",
+        #     examples=["search for invoice pdf", "find the file report.docx", "search payroll"],
+        #     param_names=["file_name", "explicit_type"],
+        # ),
+        # Intent(
+        #     name="open_project",
+        #     patterns=[
+        #         r"open\s+(?:the\s+)?(?:my\s+)?(?P<project_name>.+?)\s+project",
+        #         r"open\s+(?:the\s+)?(?:my\s+)?project\s+(?P<project_name>.+)",
+        #     ],
+        #     handler=handle_open_project,
+        #     description="Open a software project in VS Code",
+        #     examples=["open my react project", "open the website project"],
+        #     param_names=["project_name"],
+        # ),
+        # Intent(
+        #     name="vscode_terminal",
+        #     patterns=[
+        #         r"open\s+(?:the\s+)?terminal",
+        #         r"show\s+(?:the\s+)?terminal",
+        #     ],
+        #     handler=handle_vscode_terminal,
+        #     description="Open the VS Code integrated terminal",
+        #     examples=["open the terminal", "show terminal"],
+        # ),
+        # Intent(
+        #     name="create_project",
+        #     patterns=[
+        #         r"create\s+(?:a\s+)?(?:the\s+)?(?:new\s+)?(?P<project_type>\w+)\s+project(?:\s+(?:called|named)\s+(?P<project_name>.+))?",
+        #         r"make\s+(?:a\s+)?(?:the\s+)?(?:new\s+)?(?P<project_type>\w+)\s+project(?:\s+(?:called|named)\s+(?P<project_name>.+))?",
+        #     ],
+        #     handler=handle_create_project,
+        #     description="Create a new software project (like React, Next.js) on the Desktop",
+        #     examples=["create a new react project", "create a next project called my website"],
+        #     param_names=["project_type", "project_name"],
+        # ),
         Intent(
             name="browser_new_tab",
             domain="browser",
@@ -3424,102 +3438,102 @@ def register_all_intents() -> None:
             examples=["open my crm", "create a new lead", "open ace crm", "login", "create new quote", "search lead john"],
             param_names=["action"]
         ),
-        Intent(
-            name="run_dev_server",
-            patterns=[
-                r"run\s+(?:the\s+)?(?:dev\s+)?(?:server|project|app)",
-                r"start\s+(?:the\s+)?(?:dev\s+)?(?:server|project|app)",
-                r"run\s+it",
-                r"start\s+it"
-            ],
-            handler=handle_run_dev_server,
-            description="Run the development server for the currently active project",
-            examples=["run the dev server", "start the project", "run it"],
-        ),
-        Intent(
-            name="open_dev_server",
-            patterns=[
-                r"open\s+(?:the\s+)?(?:dev\s+)?(?:server|app|project)\s+(?:in\s+)?(?:the\s+)?browser",
-                r"open\s+it\s+(?:in\s+)?(?:the\s+)?browser",
-            ],
-            handler=handle_open_dev_server,
-            description="Open the currently running dev server in the web browser",
-            examples=["open it in browser", "open the dev server in the browser"],
-        ),
-
-        Intent(
-            name="open_app",
-            domain="desktop",
-            is_fallback=True,
-            patterns=[
-                # Exclude common UI element names so they fall through to click_text
-                r"^(?:open|launch|start)\s+(?!(?:my\s+)?(?:ace\s+)?crm\b)(?!(?:the\s+)?(?:sidebar|side\s*bar|menu|drawer|panel|tab|modal|dialog|popup|pop-up|dropdown|drop-down|overlay|widget|toolbar|navbar|nav\s*bar|hamburger|navigation)\b)(?P<app>.+)$",
-            ],
-            handler=handle_open_app,
-            description="Open a desktop application",
-            examples=["open notepad", "launch vs code", "start chrome", "open spotify"],
-            param_names=["app"],
-        ),
-        Intent(
-            name="close_heavy_apps",
-            domain="desktop",
-            patterns=[
-                r"close\s+(?:all\s+)?heavy\s+(?:applications|apps)",
-                r"free\s+(?:up\s+)?(?:some\s+)?(?:memory|ram)",
-                r"kill\s+heavy\s+(?:applications|apps)"
-            ],
-            handler=handle_close_heavy_apps,
-            description="Close heavy applications taking up excessive memory",
-            examples=["close heavy applications", "free up some memory", "kill heavy apps"],
-        ),
-        Intent(
-            name="close_folder",
-            patterns=[
-                r"close\s+(?:the\s+)?(?:folder|directory)\s+(?P<path>.+)",
-                r"close\s+(?:the\s+)?(?P<path>[\w\s]+?)\s+(?:folder|directory)",
-            ],
-            handler=handle_close_folder,
-            description="Close an open folder window",
-            examples=["close the folder friday", "close downloads folder"],
-            param_names=["path"],
-        ),
-        Intent(
-            name="close_app",
-            domain="desktop",
-            patterns=[
-                r"close\s+(?!(?:the\s+)?(?:sidebar|side\s*bar|modal|dialog|dialogue|drawer|panel|tab|menu|dropdown|drop-down|popup|pop-up|overlay|tooltip|widget|toolbar|navbar|nav\s*bar|window|form|banner|notification|toast|alert|badge|chip)(?:\s|$))(?P<app>.+)",
-                r"quit\s+(?!(?:the\s+)?(?:sidebar|side\s*bar|modal|dialog|dialogue|drawer|panel|tab|menu|dropdown|drop-down|popup|pop-up|overlay|tooltip|widget|toolbar|navbar|nav\s*bar|window|form)(?:\s|$))(?P<app>.+)",
-                r"exit\s+(?!(?:the\s+)?(?:sidebar|side\s*bar|modal|dialog|dialogue|drawer|panel|tab|menu|dropdown|drop-down|popup|pop-up|overlay|tooltip|widget|toolbar|navbar|nav\s*bar|window|form)(?:\s|$))(?P<app>.+)",
-                r"kill\s+(?P<app>.+)",
-            ],
-            handler=handle_close_app,
-            description="Close a running application",
-            examples=["close notepad", "quit chrome", "kill explorer"],
-            param_names=["app"],
-        ),
-
-        Intent(
-            name="create_folder",
-            patterns=[
-                r"(?:create|make)\s+(?:a\s+|the\s+)?(?:new\s+)?(?:folder|directory)(?:\s+(?:named|name))?\s+(?P<folder_name>.+?)(?:\s+(?:in|on)\s+(?:the\s+)?(?:drive\s+)?(?P<drive>[A-Za-z])(?:\s+drive)?)?$",
-            ],
-            handler=handle_create_folder,
-            description="Create a new folder on the Desktop or a specific drive",
-            examples=["create a new folder demo45 on drive E", "make directory test in D drive", "create folder my docs"],
-            param_names=["folder_name", "drive"],
-        ),
-        Intent(
-            name="run_command",
-            patterns=[
-                r"run\s+(?:command\s+)?(?P<cmd>.+)",
-                r"execute\s+(?P<cmd>.+)",
-                r"terminal\s+(?P<cmd>.+)",
-            ],
-            handler=handle_run_command,
-            description="Run a terminal command",
-            examples=["run ipconfig", "execute ping google.com", "run dir"],
-            param_names=["cmd"],
-        ),
+        # Intent(
+        #     name="run_dev_server",
+        #     patterns=[
+        #         r"run\s+(?:the\s+)?(?:dev\s+)?(?:server|project|app)",
+        #         r"start\s+(?:the\s+)?(?:dev\s+)?(?:server|project|app)",
+        #         r"run\s+it",
+        #         r"start\s+it"
+        #     ],
+        #     handler=handle_run_dev_server,
+        #     description="Run the development server for the currently active project",
+        #     examples=["run the dev server", "start the project", "run it"],
+        # ),
+        # Intent(
+        #     name="open_dev_server",
+        #     patterns=[
+        #         r"open\s+(?:the\s+)?(?:dev\s+)?(?:server|app|project)\s+(?:in\s+)?(?:the\s+)?browser",
+        #         r"open\s+it\s+(?:in\s+)?(?:the\s+)?browser",
+        #     ],
+        #     handler=handle_open_dev_server,
+        #     description="Open the currently running dev server in the web browser",
+        #     examples=["open it in browser", "open the dev server in the browser"],
+        # ),
+        # 
+        # Intent(
+        #     name="open_app",
+        #     domain="desktop",
+        #     is_fallback=True,
+        #     patterns=[
+        #         # Exclude common UI element names so they fall through to click_text
+        #         r"^(?:open|launch|start)\s+(?!(?:my\s+)?(?:ace\s+)?crm\b)(?!(?:the\s+)?(?:sidebar|side\s*bar|menu|drawer|panel|tab|modal|dialog|popup|pop-up|dropdown|drop-down|overlay|widget|toolbar|navbar|nav\s*bar|hamburger|navigation)\b)(?P<app>.+)$",
+        #     ],
+        #     handler=handle_open_app,
+        #     description="Open a desktop application",
+        #     examples=["open notepad", "launch vs code", "start chrome", "open spotify"],
+        #     param_names=["app"],
+        # ),
+        # Intent(
+        #     name="close_heavy_apps",
+        #     domain="desktop",
+        #     patterns=[
+        #         r"close\s+(?:all\s+)?heavy\s+(?:applications|apps)",
+        #         r"free\s+(?:up\s+)?(?:some\s+)?(?:memory|ram)",
+        #         r"kill\s+heavy\s+(?:applications|apps)"
+        #     ],
+        #     handler=handle_close_heavy_apps,
+        #     description="Close heavy applications taking up excessive memory",
+        #     examples=["close heavy applications", "free up some memory", "kill heavy apps"],
+        # ),
+        # Intent(
+        #     name="close_folder",
+        #     patterns=[
+        #         r"close\s+(?:the\s+)?(?:folder|directory)\s+(?P<path>.+)",
+        #         r"close\s+(?:the\s+)?(?P<path>[\w\s]+?)\s+(?:folder|directory)",
+        #     ],
+        #     handler=handle_close_folder,
+        #     description="Close an open folder window",
+        #     examples=["close the folder friday", "close downloads folder"],
+        #     param_names=["path"],
+        # ),
+        # Intent(
+        #     name="close_app",
+        #     domain="desktop",
+        #     patterns=[
+        #         r"close\s+(?!(?:the\s+)?(?:sidebar|side\s*bar|modal|dialog|dialogue|drawer|panel|tab|menu|dropdown|drop-down|popup|pop-up|overlay|tooltip|widget|toolbar|navbar|nav\s*bar|window|form|banner|notification|toast|alert|badge|chip)(?:\s|$))(?P<app>.+)",
+        #         r"quit\s+(?!(?:the\s+)?(?:sidebar|side\s*bar|modal|dialog|dialogue|drawer|panel|tab|menu|dropdown|drop-down|popup|pop-up|overlay|tooltip|widget|toolbar|navbar|nav\s*bar|window|form)(?:\s|$))(?P<app>.+)",
+        #         r"exit\s+(?!(?:the\s+)?(?:sidebar|side\s*bar|modal|dialog|dialogue|drawer|panel|tab|menu|dropdown|drop-down|popup|pop-up|overlay|tooltip|widget|toolbar|navbar|nav\s*bar|window|form)(?:\s|$))(?P<app>.+)",
+        #         r"kill\s+(?P<app>.+)",
+        #     ],
+        #     handler=handle_close_app,
+        #     description="Close a running application",
+        #     examples=["close notepad", "quit chrome", "kill explorer"],
+        #     param_names=["app"],
+        # ),
+        # 
+        # Intent(
+        #     name="create_folder",
+        #     patterns=[
+        #         r"(?:create|make)\s+(?:a\s+|the\s+)?(?:new\s+)?(?:folder|directory)(?:\s+(?:named|name))?\s+(?P<folder_name>.+?)(?:\s+(?:in|on)\s+(?:the\s+)?(?:drive\s+)?(?P<drive>[A-Za-z])(?:\s+drive)?)?$",
+        #     ],
+        #     handler=handle_create_folder,
+        #     description="Create a new folder on the Desktop or a specific drive",
+        #     examples=["create a new folder demo45 on drive E", "make directory test in D drive", "create folder my docs"],
+        #     param_names=["folder_name", "drive"],
+        # ),
+        # Intent(
+        #     name="run_command",
+        #     patterns=[
+        #         r"run\s+(?:command\s+)?(?P<cmd>.+)",
+        #         r"execute\s+(?P<cmd>.+)",
+        #         r"terminal\s+(?P<cmd>.+)",
+        #     ],
+        #     handler=handle_run_command,
+        #     description="Run a terminal command",
+        #     examples=["run ipconfig", "execute ping google.com", "run dir"],
+        #     param_names=["cmd"],
+        # ),
         Intent(
             name="volume_up",
             domain="desktop",

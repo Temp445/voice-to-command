@@ -16,46 +16,27 @@ export default function DashboardPage() {
   const { notAuthenticated } = useWSStore();
 
   return (
-    <div style={{ display: "flex", height: "100vh", overflow: "hidden", background: "var(--background)" }}>
+    <div className="flex h-screen overflow-hidden bg-[var(--background)]">
       <Sidebar />
-      <div style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }}>
+      <div className="flex flex-col flex-1 overflow-hidden">
         <TopBar />
-        <main style={{ flex: 1, overflowY: "auto", padding: "2.5rem 3.5rem" }}>
-          <div style={{ maxWidth: "1280px", margin: "0 auto", display: "flex", flexDirection: "column", gap: "2rem" }}>
+        <main className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-10">
+          <div className="max-w-7xl mx-auto w-full flex flex-col gap-8">
 
             {/* Login required banner */}
             {notAuthenticated && (
               <motion.div
                 initial={{ opacity: 0, y: -8 }}
                 animate={{ opacity: 1, y: 0 }}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "0.75rem",
-                  padding: "0.75rem 1.125rem",
-                  borderRadius: "0.75rem",
-                  border: "1px solid rgba(245,158,11,0.35)",
-                  background: "rgba(245,158,11,0.08)",
-                }}
+                className="flex flex-col sm:flex-row items-start sm:items-center gap-3 p-4 rounded-xl border border-amber-500/35 bg-amber-500/8"
               >
-                <LogIn style={{ width: "1rem", height: "1rem", color: "#f59e0b", flexShrink: 0 }} />
-                <span style={{ fontSize: "0.875rem", color: "#f59e0b", flex: 1 }}>
+                <LogIn className="w-4 h-4 text-amber-500 shrink-0" />
+                <span className="text-sm text-amber-500 flex-1">
                   You are not logged in. Voice commands and automations will not work until you sign in.
                 </span>
                 <a
                   href="/auth/login"
-                  style={{
-                    padding: "0.3rem 0.875rem",
-                    borderRadius: "0.5rem",
-                    background: "rgba(245,158,11,0.15)",
-                    border: "1px solid rgba(245,158,11,0.4)",
-                    color: "#f59e0b",
-                    fontSize: "0.8125rem",
-                    fontWeight: 600,
-                    textDecoration: "none",
-                    whiteSpace: "nowrap",
-                    cursor: "pointer",
-                  }}
+                  className="px-3.5 py-1.5 rounded-lg bg-amber-500/15 border border-amber-500/40 text-amber-500 text-[13px] font-semibold no-underline hover:bg-amber-500/25 transition-colors cursor-pointer whitespace-nowrap self-start sm:self-auto"
                 >
                   Log In
                 </a>
@@ -64,10 +45,10 @@ export default function DashboardPage() {
 
             {/* Header */}
             <div>
-              <h1 style={{ fontSize: "1.75rem", fontWeight: 600, color: "var(--foreground)", letterSpacing: "-0.02em" }}>
-               Dashboard
+              <h1 className="text-2xl sm:text-3xl font-semibold text-[var(--foreground)] tracking-tight">
+                Dashboard
               </h1>
-              <p style={{ color: "var(--muted-foreground)", marginTop: "0.375rem", fontSize: "0.9375rem" }}>
+              <p className="text-zinc-400 mt-1.5 text-sm sm:text-base">
                 Your AI-powered desktop assistant — always listening, always ready.
               </p>
             </div>
@@ -76,18 +57,18 @@ export default function DashboardPage() {
             <StatusBar />
 
             {/* 2-column grid */}
-    <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: "1.5rem" }}>
+            <div className="grid grid-cols-1 lg:grid-cols-[1fr_2fr] gap-6">
               <VoicePanel />
-              <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+              <div className="flex flex-col gap-5">
                 <QuickActions />
                 {(partialTranscript || transcript) && (
-                  <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: "1rem", padding: "1rem" }}>
-                    <p style={{ fontSize: "0.6875rem", fontWeight: 600, color: "var(--muted-foreground)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "0.5rem" }}>
+                  <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 shadow-sm">
+                    <p className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider mb-2">
                       {partialTranscript ? "Live Transcript" : "Last Transcript"}
                     </p>
-                    <p style={{ color: "var(--foreground)", fontFamily: "var(--font-mono)", fontSize: "0.875rem" }}>
+                    <p className="text-[var(--foreground)] font-mono text-sm leading-relaxed">
                       {partialTranscript || transcript}
-                      {partialTranscript && <span style={{ animation: "pulse 1.5s infinite" }}>...</span>}
+                      {partialTranscript && <span className="animate-pulse">...</span>}
                     </p>
                   </div>
                 )}

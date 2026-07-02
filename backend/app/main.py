@@ -134,7 +134,7 @@ async def lifespan(app: FastAPI):
     # ── Sync: instant tasks only ──────────────────────────────────────────────
     from automation.desktop.app_scanner import get_scanner
     scanner = get_scanner()
-    scanner.load_cache()   # pure JSON disk read — <50ms
+    # scanner.load_cache()   # pure JSON disk read — <50ms
     app.state.app_scanner = scanner
 
     register_all_intents()  # pure Python regex compile — <100ms
@@ -330,20 +330,21 @@ async def _background_init(app_state, running_loop: asyncio.AbstractEventLoop):
     asyncio.create_task(_prewarm_all())
 
     # ── Phase 4: Background housekeeping ─────────────────────────────────────
-    if _scan_mode == "auto":
-        async def _refresh_scan():
-            await asyncio.to_thread(app_state.app_scanner._scan_all_parallel)
-            app_state.app_scanner.save_cache()
-            logger.info(f"✅ App scan complete — {len(app_state.app_scanner.apps)} apps")
-        asyncio.create_task(_refresh_scan())
-
-        from automation.desktop.file_indexer import get_indexer
-        file_indexer = get_indexer()
-        file_indexer.start_background_indexing()
-        app_state.file_indexer = file_indexer
-        logger.info("✅ File indexer running in background")
-    else:
-        logger.info("✅ Manual scan mode — skipping auto app scan and file indexer")
+    # if _scan_mode == "auto":
+    #     async def _refresh_scan():
+    #         await asyncio.to_thread(app_state.app_scanner._scan_all_parallel)
+    #         app_state.app_scanner.save_cache()
+    #         logger.info(f"✅ App scan complete — {len(app_state.app_scanner.apps)} apps")
+    #     asyncio.create_task(_refresh_scan())
+    # 
+    #     from automation.desktop.file_indexer import get_indexer
+    #     file_indexer = get_indexer()
+    #     file_indexer.start_background_indexing()
+    #     app_state.file_indexer = file_indexer
+    #     logger.info("✅ File indexer running in background")
+    # else:
+    #     logger.info("✅ Manual scan mode — skipping auto app scan and file indexer")
+    logger.info("✅ Desktop application scanning and file indexing are disabled.")
 
     # Desktop Overlay (only after pipeline is confirmed running)
     if getattr(gs, "enable_desktop_overlay", False) and getattr(gs, "owner_user_id", None):

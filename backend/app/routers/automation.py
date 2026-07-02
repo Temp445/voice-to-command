@@ -41,31 +41,40 @@ async def list_apps(request: Request, q: str = ""):
     Returns all applications discovered by the AppScanner.
     Pass ?q=<query> to fuzzy-search the list.
     """
-    from automation.desktop.app_scanner import get_scanner
-    scanner = get_scanner()
-    if q:
-        entry = scanner.find(q)
-        if entry:
-            from dataclasses import asdict
-            return {"found": True, "app": asdict(entry)}
-        return {"found": False, "app": None}
+    # from automation.desktop.app_scanner import get_scanner
+    # scanner = get_scanner()
+    # if q:
+    #     entry = scanner.find(q)
+    #     if entry:
+    #         from dataclasses import asdict
+    #         return {"found": True, "app": asdict(entry)}
+    #     return {"found": False, "app": None}
+    # return {
+    #     "total": len(scanner.apps),
+    #     "apps": scanner.all_apps(),
+    # }
     return {
-        "total": len(scanner.apps),
-        "apps": scanner.all_apps(),
+        "total": 0,
+        "apps": [],
     }
 
 
 @router.post("/apps/rescan", summary="Trigger a fresh app discovery scan")
 async def rescan_apps(request: Request):
     """Forces the AppScanner to re-scan all sources and update the cache."""
-    import asyncio
-    from automation.desktop.app_scanner import get_scanner
-    scanner = get_scanner()
-    await scanner.scan_and_cache()
+    # import asyncio
+    # from automation.desktop.app_scanner import get_scanner
+    # scanner = get_scanner()
+    # await scanner.scan_and_cache()
+    # return {
+    #     "status": "ok",
+    #     "total": len(scanner.apps),
+    #     "message": f"Rescan complete. {len(scanner.apps)} apps discovered.",
+    # }
     return {
-        "status": "ok",
-        "total": len(scanner.apps),
-        "message": f"Rescan complete. {len(scanner.apps)} apps discovered.",
+        "status": "disabled",
+        "total": 0,
+        "message": "App scanning is disabled.",
     }
 
 

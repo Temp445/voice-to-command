@@ -1,12 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { Mic, Cpu, Zap, Clock, Bot } from "lucide-react";
+import { Mic, Cpu, Zap, Bot } from "lucide-react";
 import { useVoiceStore } from "@/store/voiceStore";
 import { useCommandStore } from "@/store/commandStore";
 import { useSettingsStore } from "@/store/settingsStore";
-
-
 
 const STATS = [
   { key: "voice",    icon: Mic,   label: "Voice",       color: "var(--foreground)" },
@@ -20,7 +17,6 @@ export function StatusBar() {
   const { history } = useCommandStore();
   const settings = useSettingsStore();
 
-
   const values: Record<string, string> = {
     voice:    pipelineState,
     commands: `${history.length} total`,
@@ -30,21 +26,30 @@ export function StatusBar() {
   };
 
   return (
-    <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: "1rem", padding: "1.5rem", display: "flex", flexDirection: "column", gap: "1.25rem" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <h3 style={{ fontSize: "0.8125rem", fontWeight: 600, color: "var(--foreground)", textTransform: "uppercase", letterSpacing: "0.06em" }}>System Status</h3>
-
+    <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 sm:p-6 flex flex-col gap-4 sm:gap-5 shadow-sm">
+      <div className="flex justify-between items-center">
+        <h3 className="text-[13px] font-bold text-[var(--foreground)] uppercase tracking-wider opacity-90">
+          System Status
+        </h3>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "1rem" }}>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {STATS.map(({ key, icon: Icon, label, color }) => (
-          <div key={key} style={{ background: "var(--secondary)", border: "1px solid var(--border)", borderRadius: "0.75rem", padding: "1.25rem", display: "flex", alignItems: "center", gap: "1rem" }}>
-            <div style={{ width: "2.5rem", height: "2.5rem", borderRadius: "0.5rem", background: "var(--background)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-              <Icon style={{ width: "1.25rem", height: "1.25rem", color }} />
+          <div 
+            key={key} 
+            className="bg-[var(--secondary)] border border-[var(--border)] rounded-xl p-4 flex items-center gap-3.5 shadow-xs"
+          >
+            <div className="w-10 h-10 rounded-lg bg-[var(--background)] border border-[var(--border)]/40 flex items-center justify-center shrink-0">
+              <Icon size={18} style={{ color }} className="shrink-0" />
             </div>
-            <div style={{ minWidth: 0 }}>
-              <p style={{ fontSize: "0.6875rem", color: "var(--muted-foreground)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "0.125rem" }}>{label}</p>
-              <p style={{ fontSize: "0.9375rem", fontWeight: 600, color, textTransform: "capitalize", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            <div className="min-w-0 flex-1">
+              <p className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider mb-0.5">
+                {label}
+              </p>
+              <p 
+                style={{ color }} 
+                className="text-[14px] font-bold capitalize truncate"
+              >
                 {values[key]}
               </p>
             </div>

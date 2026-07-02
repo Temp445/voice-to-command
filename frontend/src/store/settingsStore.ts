@@ -105,7 +105,7 @@ export const useSettingsStore = create<SettingsStore>((set) => ({
   llmSystemError: null,
 
   // Scanning
-  scanMode:       "auto",
+  scanMode:       "manual",
 
   // ElevenLabs
   elevenlabsApiKey: "",
@@ -168,7 +168,7 @@ export const useSettingsStore = create<SettingsStore>((set) => ({
     llmSystemError: null,
 
     // Scanning
-    scanMode:       "auto",
+    scanMode:       "manual",
 
     // ElevenLabs
     elevenlabsApiKey: "",

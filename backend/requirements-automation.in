@@ -1,9 +1,9 @@
-pywinauto; sys_platform == 'win32'
+# pywinauto; sys_platform == 'win32'
 pynput
 psutil
 playwright
 playwright-stealth
-watchfiles
+# watchfiles
 pystray; sys_platform == 'win32'
 Pillow
 mss

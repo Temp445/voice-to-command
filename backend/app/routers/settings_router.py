@@ -562,30 +562,31 @@ async def trigger_scan(request: Request, user_id: str = Depends(get_current_user
     Manually trigger an app discovery + file index scan.
     Works regardless of whether scan_mode is 'auto' or 'manual'.
     """
-    import asyncio
-    from datetime import datetime, timezone
-
-    scanner = getattr(request.app.state, "app_scanner", None)
-    file_indexer = getattr(request.app.state, "file_indexer", None)
-
-    if not scanner and not file_indexer:
-        from fastapi import HTTPException
-        raise HTTPException(status_code=503, detail="Scanner not initialised yet. Try again in a moment.")
-
-    async def _do_scan():
-        if scanner:
-            await scanner.scan_and_cache()
-        if file_indexer:
-            file_indexer.start_background_indexing()
-        app_count = len(scanner.apps) if scanner else 0
-        await ws_manager.broadcast("scan_complete", {
-            "app_count": app_count,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-        })
-        logger.info(f"✅ Manual scan complete — {app_count} apps")
-
-    asyncio.create_task(_do_scan())
-    return {"status": "scanning", "message": "Scan started in background"}
+    # import asyncio
+    # from datetime import datetime, timezone
+    # 
+    # scanner = getattr(request.app.state, "app_scanner", None)
+    # file_indexer = getattr(request.app.state, "file_indexer", None)
+    # 
+    # if not scanner and not file_indexer:
+    #     from fastapi import HTTPException
+    #     raise HTTPException(status_code=503, detail="Scanner not initialised yet. Try again in a moment.")
+    # 
+    # async def _do_scan():
+    #     if scanner:
+    #         await scanner.scan_and_cache()
+    #     if file_indexer:
+    #         file_indexer.start_background_indexing()
+    #     app_count = len(scanner.apps) if scanner else 0
+    #     await ws_manager.broadcast("scan_complete", {
+    #         "app_count": app_count,
+    #         "timestamp": datetime.now(timezone.utc).isoformat(),
+    #     })
+    #     logger.info(f"✅ Manual scan complete — {app_count} apps")
+    # 
+    # asyncio.create_task(_do_scan())
+    # return {"status": "scanning", "message": "Scan started in background"}
+    return {"status": "disabled", "message": "Manual scanning is disabled."}
 
 
 # ── Global Website Shortcuts ──────────────────────────────────────────────────

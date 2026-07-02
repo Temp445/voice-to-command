@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Settings, Mic, Volume2, Globe, Shield, CheckCircle2, Eye, EyeOff, Bot, Loader2, Link2, RefreshCw, HardDrive, Lock } from "lucide-react";
+import { Settings, Mic, Volume2, Globe, Shield, CheckCircle2, Eye, EyeOff, Bot, Loader2, Link2, RefreshCw, HardDrive, Lock, User } from "lucide-react";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { TopBar } from "@/components/layout/TopBar";
 import { useSettingsStore } from "@/store/settingsStore";
@@ -102,7 +102,6 @@ const PERMISSION_FIELDS = [
       { key: "enable_desktop_overlay", label: "Desktop Overlay Toggle" },
       { key: "startup_on_boot", label: "Start on Boot Toggle" },
       { key: "minimize_to_tray", label: "Minimize to Tray Toggle" },
-      { key: "scan_mode", label: "App & File Scan Mode Selector" },
     ]
   }
 ];
@@ -134,6 +133,7 @@ export default function SettingsPage() {
 
   // Admin Panel State
   const [usersPolicies, setUsersPolicies] = useState<any[]>([]);
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [loadingPolicies, setLoadingPolicies] = useState(false);
   const [adminSavingUser, setAdminSavingUser] = useState<string | null>(null);
   const [adminError, setAdminError] = useState<string | null>(null);
@@ -308,6 +308,10 @@ export default function SettingsPage() {
             return { ...u, permissions: perms };
           });
           setUsersPolicies(normalized);
+          const nonAdmins = normalized.filter((user) => user.role !== "admin");
+          if (nonAdmins.length > 0) {
+            setSelectedUserId(nonAdmins[0].user_id);
+          }
         })
         .catch(err => {
           console.error(err);
@@ -638,7 +642,7 @@ export default function SettingsPage() {
               )}
 
               {isVisible("stt_noise_cancellation") && (
-                <div className={`flex items-center justify-between mt-4 p-5 bg-[var(--secondary)] rounded-xl ${isMutable("stt_noise_cancellation") ? "opacity-100" : "opacity-60"}`}>
+                <div className={`flex flex-col sm:flex-row sm:items-center justify-between gap-4 mt-4 p-5 bg-[var(--secondary)] rounded-xl ${isMutable("stt_noise_cancellation") ? "opacity-100" : "opacity-60"}`}>
                   <div>
                     <p className="text-[15px] font-semibold text-[var(--foreground)] flex items-center gap-1.5">
                       Noise Cancellation
@@ -656,7 +660,7 @@ export default function SettingsPage() {
                     Interaction Mode
                     {!isMutable("require_wake_word_always") && <span title="Locked by Administrator" className="inline-flex items-center ml-1.5"><Lock className="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500 shrink-0" /></span>}
                   </p>
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     {[
                       { key: "require", label: "Require Wake Word", desc: "Say the wake word for every task" },
                       { key: "continuous", label: "Continuous Listening", desc: "Stay awake for follow-up commands" },
@@ -754,14 +758,14 @@ export default function SettingsPage() {
               )}
 
               <div className="mt-4 p-5 bg-[var(--secondary)] rounded-xl border border-[var(--border)]">
-                <div className="flex items-center justify-between mb-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
                   <div>
                     <p className="text-[15px] font-semibold text-[var(--foreground)]">Live STT Tester</p>
                     <p className="text-[13px] text-zinc-500">Speak into your microphone to instantly test transcription speed and accuracy. No commands will be executed.</p>
                   </div>
                   <button 
                     onClick={handleToggleSttTest} 
-                    className={`shrink-0 px-5 py-2 rounded-lg text-sm font-semibold cursor-pointer flex items-center gap-2 shadow-sm transition-all duration-200 border ${sttTestActive ? "bg-red-500/10 border-red-500/20 text-red-500" : "bg-[var(--background)] border-[var(--border)] text-[var(--foreground)]"}`}
+                    className={`w-full sm:w-auto shrink-0 px-5 py-2 rounded-lg text-sm font-semibold cursor-pointer flex items-center justify-center gap-2 shadow-sm transition-all duration-200 border ${sttTestActive ? "bg-red-500/10 border-red-500/20 text-red-500" : "bg-[var(--background)] border-[var(--border)] text-[var(--foreground)]"}`}
                   >
                     {sttTestActive ? <Loader2 size={16} className="animate-spin" /> : <Mic size={16} />}
                     {sttTestActive ? "Stop Test" : "Start Test"}
@@ -794,7 +798,7 @@ export default function SettingsPage() {
                     TTS Provider
                     {!isMutable("tts_provider") && <span title="Locked by Administrator" className="inline-flex items-center ml-1.5"><Lock className="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500 shrink-0" /></span>}
                   </p>
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     {[
                       { key: "piper", label: "Piper TTS", desc: "Fully offline · Fast" },
                       { key: "gtts", label: "Google TTS", desc: "High quality · Requires internet" },
@@ -843,7 +847,7 @@ export default function SettingsPage() {
               )}
 
               {isVisible("reply_sound") && (
-                <div className={`flex items-center justify-between mt-6 p-5 bg-[var(--secondary)] rounded-xl ${isMutable("reply_sound") ? "opacity-100" : "opacity-60"}`}>
+                <div className={`flex flex-col sm:flex-row sm:items-center justify-between gap-4 mt-6 p-5 bg-[var(--secondary)] rounded-xl ${isMutable("reply_sound") ? "opacity-100" : "opacity-60"}`}>
                   <div>
                     <p className="text-[15px] font-semibold text-[var(--foreground)] flex items-center gap-1.5">
                       Reply Sound
@@ -927,7 +931,7 @@ export default function SettingsPage() {
                       <button onClick={() => settings.update({ llmSystemError: null })} className="bg-transparent border-none text-red-600 cursor-pointer font-bold px-2">×</button>
                     </div>
                   )}
-                  <div className="grid grid-cols-2 gap-6">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                     {isVisible("llm_provider") && (
                       <div className={isMutable("llm_provider") ? "opacity-100" : "opacity-60"}>
                         <p className="text-[13px] font-semibold text-[var(--foreground)] mb-1.5 flex items-center gap-1.5">
@@ -998,7 +1002,7 @@ export default function SettingsPage() {
                     </div>
                   )}
 
-                  <div className="grid grid-cols-2 gap-6">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                     {isVisible("llm_mode") && (
                       <div className={isMutable("llm_mode") ? "opacity-100" : "opacity-60"}>
                         <p className="text-[13px] font-semibold text-[var(--foreground)] mb-1.5 flex items-center gap-1.5">
@@ -1035,7 +1039,7 @@ export default function SettingsPage() {
                     )}
                   </div>
 
-                  <div className="mt-4 p-5 bg-[var(--secondary)] rounded-xl border border-[var(--border)] flex items-center justify-between">
+                  <div className="mt-4 p-5 bg-[var(--secondary)] rounded-xl border border-[var(--border)] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div>
                       <p className="text-[15px] font-semibold text-[var(--foreground)]">Test Connection</p>
                       <p className="text-[13px] text-zinc-500">Verify your API key and model</p>
@@ -1091,7 +1095,7 @@ export default function SettingsPage() {
               )}
 
               {isVisible("browser_animations_enabled") && (
-                <div className={`flex items-center justify-between mt-4 p-5 bg-[var(--secondary)] rounded-xl ${isMutable("browser_animations_enabled") ? "opacity-100" : "opacity-60"}`}>
+                <div className={`flex flex-col sm:flex-row sm:items-center justify-between gap-4 mt-4 p-5 bg-[var(--secondary)] rounded-xl ${isMutable("browser_animations_enabled") ? "opacity-100" : "opacity-60"}`}>
                   <div>
                     <p className="text-[15px] font-semibold text-[var(--foreground)] flex items-center gap-1.5">
                       Browser Animations
@@ -1104,7 +1108,7 @@ export default function SettingsPage() {
               )}
 
               {isVisible("restrict_browser_automation") && (
-                <div className={`flex items-center justify-between mt-4 p-5 bg-[var(--secondary)] rounded-xl ${isMutable("restrict_browser_automation") ? "opacity-100" : "opacity-60"}`}>
+                <div className={`flex flex-col sm:flex-row sm:items-center justify-between gap-4 mt-4 p-5 bg-[var(--secondary)] rounded-xl ${isMutable("restrict_browser_automation") ? "opacity-100" : "opacity-60"}`}>
                   <div>
                     <p className="text-[15px] font-semibold text-[var(--foreground)] flex items-center gap-1.5">
                       Restrict Website Automation
@@ -1119,13 +1123,13 @@ export default function SettingsPage() {
               {/* ── Website Shortcuts ── */}
               {isVisible("crm_sites") && (
                 <div className={`mt-4 pt-6 border-t border-[var(--border)] ${isMutable("crm_sites") ? "opacity-100" : "opacity-60"}`}>
-                  <div className="flex items-center justify-between mb-2">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-2">
                     <div>
                       <p className="text-base font-semibold text-[var(--foreground)] flex items-center gap-1.5">
                         Website Shortcuts
                         {!isMutable("crm_sites") && <span title="Locked by Administrator" className="inline-flex items-center ml-1.5"><Lock className="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500 shrink-0" /></span>}
                       </p>
-                      <p className="text-xs text-zinc-500 mt-1">Say a keyword to instantly open any website — CRM, dashboards, tools, anything.</p>
+                      <p className="text-xs text-zinc-500 mt-1">Say a keyword to instantly open any website — CRM, dashboards.</p>
                     </div>
                     {isMutable("crm_sites") && (
                       <button
@@ -1138,61 +1142,77 @@ export default function SettingsPage() {
                     )}
                   </div>
 
-                  <div className="flex flex-col gap-3.5">
-                    {settings.crmSites.map((site, idx) => (
-                      <div key={idx} className="bg-[var(--secondary)] rounded-xl p-4 border border-[var(--border)]">
-                        {/* Site header */}
-                        <div className="flex items-center justify-between mb-3">
-                          <span className="text-[13px] font-semibold text-zinc-500">Website {idx + 1}</span>
-                          {settings.crmSites.length > 1 && isMutable("crm_sites") && (
-                            <button
-                              onClick={() => {
-                                const updated = settings.crmSites.filter((_, i) => i !== idx);
-                                settings.update({ crmSites: updated, crmUrl: updated[0]?.url || "", crmKeywords: updated[0]?.keywords || "" });
-                              }}
-                              className="bg-transparent border-none cursor-pointer text-zinc-500 text-base px-1 leading-none hover:text-red-500 active:scale-90 transition-colors"
-                              title="Remove this website"
-                            >
-                              ✕
-                            </button>
-                          )}
-                        </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {settings.crmSites.map((site, idx) => ({ site, idx })).reverse().map(({ site, idx }) => {
+                      const isNew = !site.url || !site.url.trim();
+                      return (
+                        <div 
+                          key={idx} 
+                          className={`rounded-xl p-3.5 transition-all duration-300 flex flex-col justify-between ${
+                            isNew 
+                              ? "bg-[var(--primary)]/5 border border-dashed border-[var(--primary)]/40 shadow-inner" 
+                              : "bg-[var(--secondary)] border border-[var(--border)]"
+                          }`}
+                        >
+                          {/* Site header */}
+                          <div className="flex items-center justify-between mb-2.5">
+                            <span className="text-[13px] font-semibold text-[var(--foreground)] flex items-center gap-1.5">
+                              <span className="text-zinc-500">Website {idx + 1}</span>
+                              {isNew && (
+                                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-[var(--primary)]/10 text-[var(--primary)] animate-pulse">
+                                  Unconfigured
+                                </span>
+                              )}
+                            </span>
+                            {settings.crmSites.length > 1 && isMutable("crm_sites") && (
+                              <button
+                                onClick={() => {
+                                  const updated = settings.crmSites.filter((_, i) => i !== idx);
+                                  settings.update({ crmSites: updated, crmUrl: updated[0]?.url || "", crmKeywords: updated[0]?.keywords || "" });
+                                }}
+                                className="bg-transparent border-none cursor-pointer text-zinc-500 text-base px-1 leading-none hover:text-red-500 active:scale-90 transition-colors"
+                                title="Remove this website"
+                              >
+                                ✕
+                              </button>
+                            )}
+                          </div>
 
-                        {/* URL row */}
-                        <div className="mb-2.5">
-                          <p className="text-[13px] font-semibold text-[var(--foreground)] mb-1.5">Website URL</p>
-                          <input
-                            className={inpClass}
-                            disabled={!isMutable("crm_sites")}
-                            value={site.url}
-                            placeholder="https://example.com/"
-                            onChange={(e) => {
-                              const updated = settings.crmSites.map((s, i) => i === idx ? { ...s, url: e.target.value } : s);
-                              settings.update({ crmSites: updated, ...(idx === 0 ? { crmUrl: e.target.value } : {}) });
-                            }}
-                          />
+                          {/* Inputs grid with proper labels and separator line */}
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3">
+                            <div className="pb-3 sm:pb-0 border-b border-[var(--border)] sm:border-b-0 sm:border-r sm:border-[var(--border)] sm:pr-3">
+                              <p className="text-[12px] font-semibold text-[var(--foreground)] mb-1 opacity-80">Website URL</p>
+                              <input
+                                className={`${inpClass} py-2 px-3 text-[13px] h-9`}
+                                disabled={!isMutable("crm_sites")}
+                                value={site.url}
+                                placeholder="https://example.com"
+                                onChange={(e) => {
+                                  const updated = settings.crmSites.map((s, i) => i === idx ? { ...s, url: e.target.value } : s);
+                                  settings.update({ crmSites: updated, ...(idx === 0 ? { crmUrl: e.target.value } : {}) });
+                                }}
+                              />
+                            </div>
+                            <div className="pt-1 sm:pt-0 sm:pl-3">
+                              <p className="text-[12px] font-semibold text-[var(--foreground)] mb-1 opacity-80">Voice Keywords</p>
+                              <input
+                                className={`${inpClass} py-2 px-3 text-[13px] h-9`}
+                                disabled={!isMutable("crm_sites")}
+                                value={site.keywords}
+                                placeholder="open dashboard, open crm"
+                                onChange={(e) => {
+                                  const updated = settings.crmSites.map((s, i) => i === idx ? { ...s, keywords: e.target.value } : s);
+                                  settings.update({ crmSites: updated, ...(idx === 0 ? { crmKeywords: e.target.value } : {}) });
+                                }}
+                              />
+                            </div>
+                          </div>
                         </div>
-
-                        {/* Keywords row */}
-                        <div>
-                          <p className="text-[13px] font-semibold text-[var(--foreground)] mb-1.5">Voice Keywords <span className="font-normal text-zinc-500">(comma separated)</span></p>
-                          <input
-                            className={inpClass}
-                            disabled={!isMutable("crm_sites")}
-                            value={site.keywords}
-                            placeholder="open my dashboard, open analytics"
-                            onChange={(e) => {
-                              const updated = settings.crmSites.map((s, i) => i === idx ? { ...s, keywords: e.target.value } : s);
-                              settings.update({ crmSites: updated, ...(idx === 0 ? { crmKeywords: e.target.value } : {}) });
-                            }}
-                          />
-                          <p className={subClass}>Say any of these phrases to instantly open this website.</p>
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
 
                     {settings.crmSites.length === 0 && (
-                      <p className="text-sm text-zinc-500 text-center p-4">
+                      <p className="col-span-full text-sm text-zinc-500 text-center p-4">
                         No websites configured.
                       </p>
                     )}
@@ -1203,7 +1223,7 @@ export default function SettingsPage() {
               {/* ── Global Website Shortcuts ── */}
               {isVisible("global_website_shortcuts") && (
                 <div className={`mt-6 pt-6 border-t border-[var(--border)] ${isMutable("global_website_shortcuts") ? "opacity-100" : "opacity-60"}`}>
-                  <div className="flex items-center justify-between mb-2">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-2">
                     <div>
                       <p className="text-base font-semibold text-[var(--foreground)] flex items-center gap-1.5">
                         Global Website Shortcuts
@@ -1279,7 +1299,7 @@ export default function SettingsPage() {
                       </div>
                     ) : (
                       globalShortcuts.map((site) => (
-                        <div key={site.id} className="bg-[var(--secondary)] rounded-xl p-4 border border-[var(--border)] flex items-center justify-between">
+                        <div key={site.id} className="bg-[var(--secondary)] rounded-xl p-4 border border-[var(--border)] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                           <div className="flex-1 min-w-0 pr-4">
                             <p className="text-sm font-semibold text-[var(--foreground)] truncate">{site.url}</p>
                             <p className="text-xs text-zinc-500 mt-0.5">Keywords: <span className="font-mono text-zinc-400">{site.keywords}</span></p>
@@ -1350,7 +1370,7 @@ export default function SettingsPage() {
                   const val = settings[key as "startupOnBoot" | "minimizeToTray" | "enableDesktopOverlay"];
                   const disabled = !isMutable(dbKey);
                   return (
-                    <div key={key} className={`flex items-center justify-between p-5 bg-[var(--secondary)] rounded-xl ${disabled ? "opacity-60" : "opacity-100"}`}>
+                    <div key={key} className={`flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 bg-[var(--secondary)] rounded-xl ${disabled ? "opacity-60" : "opacity-100"}`}>
                       <div>
                         <p className="text-[15px] font-semibold text-[var(--foreground)] flex items-center gap-1.5">
                           {label}
@@ -1364,200 +1384,214 @@ export default function SettingsPage() {
                 })}
               </div>
 
-              {/* ── App & File Scanning ── */}
-              {isVisible("scan_mode") && (
-                <div className={`mt-6 pt-6 border-t border-[var(--border)] ${isMutable("scan_mode") ? "opacity-100" : "opacity-60"}`}>
-                  <div className="flex items-center gap-2.5 mb-4">
-                    <HardDrive className="w-[18px] h-[18px] text-[var(--primary)]" />
-                    <p className="text-[15px] font-semibold text-[var(--foreground)] flex items-center gap-1.5">
-                      App &amp; File Scanning
-                      {!isMutable("scan_mode") && <span title="Locked by Administrator" className="inline-flex items-center ml-1.5"><Lock className="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500 shrink-0" /></span>}
-                    </p>
-                  </div>
 
-                  {/* Mode selector */}
-                  <div className="grid grid-cols-2 gap-4 mb-5">
-                    {([
-                      { key: "auto", label: "Auto", desc: "Scan on startup and refresh automatically", icon: "🔄" },
-                      { key: "manual", label: "Manual", desc: "Only scan when you click the button below", icon: "🖐" },
-                    ] as const).map(({ key, label, desc, icon }) => {
-                      const active = settings.scanMode === key;
-                      return (
-                        <button 
-                          key={key} 
-                          disabled={!isMutable("scan_mode")} 
-                          onClick={() => settings.update({ scanMode: key })}
-                          className={`text-left p-4.5 rounded-xl transition-all duration-200 ${!isMutable("scan_mode") ? "cursor-not-allowed" : "cursor-pointer"} ${active ? "bg-[var(--secondary)] border-2 border-[var(--primary)] shadow-md" : "bg-transparent border border-[var(--border)] shadow-none"}`}
-                        >
-                          <div className="flex items-center gap-2 mb-1.5">
-                            <span className="text-[17.6px]">{icon}</span>
-                            <span className="text-[15px] font-semibold text-[var(--foreground)]">{label}</span>
-                          </div>
-                          <p className="text-[13px] text-zinc-500">{desc}</p>
-                          {active && (
-                            <div className="mt-2.5 flex items-center gap-1 text-[var(--primary)] text-xs font-semibold">
-                              <CheckCircle2 className="w-3.5 h-3.5" /> Selected
-                            </div>
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
-
-                  {/* Scan Now row */}
-                  <div className="flex items-center justify-between p-4 bg-[var(--secondary)] rounded-xl border border-[var(--border)]">
-                    <div>
-                      <p className="text-sm font-semibold text-[var(--foreground)]">Scan Now</p>
-                      <p className="text-xs text-zinc-500 mt-1">
-                        {scanLastAt
-                          ? `Last scanned: ${new Date(scanLastAt).toLocaleTimeString()} · ${scanAppCount ?? "?"} apps found`
-                          : "Not scanned yet this session"}
-                      </p>
-                    </div>
-                    <button
-                      id="scan-now-btn"
-                      onClick={async () => {
-                        if (scanning) return;
-                        setScanning(true);
-                        try { await api.triggerScan(); } catch (e) { console.error(e); setScanning(false); }
-                      }}
-                      disabled={scanning}
-                      className={`flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-semibold border shadow-sm transition-all duration-200 ${scanning ? "cursor-not-allowed opacity-70 bg-[var(--background)] border-[var(--border)] text-[var(--foreground)]" : "cursor-pointer bg-[var(--background)] border-[var(--border)] text-[var(--foreground)] hover:bg-[var(--secondary)] active:scale-95"}`}
-                    >
-                      {scanning
-                        ? <><Loader2 size={15} className="animate-spin" /> Scanning...</>
-                        : <><RefreshCw size={15} /> Scan Now</>}
-                    </button>
-                  </div>
-                </div>
-              )}
             </div>
           </section>
         );
       case "admin":
+        const nonAdmins = usersPolicies.filter((user) => user.role !== "admin");
+        const currentUser = nonAdmins.find((u) => u.user_id === selectedUserId) || nonAdmins[0];
+
         return (
-          <section className={cardClass}>
-            <div className={hdrClass}>
-              <Shield className="w-5 h-5 text-[var(--primary)]" />
-              <span className="text-base font-semibold text-[var(--foreground)]">Policy Administration</span>
-            </div>
-            <div className={bodyClass}>
-              <p className="text-sm text-zinc-500 mb-6">
-                Configure screen settings visibility and modify fine-grained permissions for each user.
-              </p>
-
-              {adminError && (
-                <div className="p-4 rounded-lg bg-red-500/10 text-red-500 border border-red-500/20 text-sm font-medium mb-4">
-                  {adminError}
+          <section className="flex flex-col gap-6">
+            {/* Main Admin Wrapper */}
+            <div className="flex flex-col lg:grid lg:grid-cols-[280px_1fr] gap-6">
+              
+              {/* Left Pane - User Accounts List */}
+              <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 flex flex-col gap-4 shadow-sm lg:self-start">
+                <div className="flex items-center justify-between pb-3 border-b border-[var(--border)]">
+                  <span className="text-[14px] font-bold text-[var(--foreground)] flex items-center gap-2">
+                    <User size={16} className="text-zinc-500" />
+                    Accounts ({nonAdmins.length})
+                  </span>
                 </div>
-              )}
 
-              {adminSuccess && (
-                <div className="p-4 rounded-lg bg-green-500/10 text-green-600 border border-green-500/20 text-sm font-medium mb-4">
-                  {adminSuccess}
-                </div>
-              )}
-
-              {loadingPolicies ? (
-                <div className="flex items-center justify-center min-h-[10rem] gap-2 text-zinc-500">
-                  <Loader2 size={20} className="animate-spin" />
-                  <span>Loading user policies...</span>
-                </div>
-              ) : (
-                <div className="flex flex-col gap-6">
-                  {usersPolicies.filter((user) => user.role !== "admin").map((user) => (
-                    <div key={user.user_id} className="p-6 bg-[var(--secondary)] rounded-xl border border-[var(--border)]">
-
-                      {/* User Header Info */}
-                      <div className="flex items-center justify-between border-b border-[var(--border)] pb-4 mb-4">
-                        <div>
-                          <p className="text-base font-semibold text-[var(--foreground)]">{user.display_name || "Unnamed User"}</p>
-                          <p className="text-[13px] text-zinc-500">{user.email} (Role: <span className="text-[var(--primary)] font-semibold">{user.role}</span>)</p>
-                        </div>
-
-                        {/* Save Action for this user */}
+                {loadingPolicies ? (
+                  <div className="flex flex-col items-center justify-center py-10 gap-2 text-zinc-500">
+                    <Loader2 size={16} className="animate-spin" />
+                    <span className="text-xs">Loading...</span>
+                  </div>
+                ) : nonAdmins.length === 0 ? (
+                  <div className="text-center py-8 text-zinc-500 text-xs">
+                    No user accounts found.
+                  </div>
+                ) : (
+                  <div className="flex lg:flex-col overflow-x-auto lg:overflow-x-visible lg:overflow-y-auto scrollbar-none gap-2 pb-2 lg:pb-0 max-h-[400px]">
+                    {nonAdmins.map((user) => {
+                      const isSelected = selectedUserId === user.user_id;
+                      return (
                         <button
-                          onClick={() => handleUpdatePolicy(user.user_id, user.permissions, user.screen_settings_visible_to_users)}
-                          disabled={adminSavingUser === user.user_id}
-                          className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-[13px] font-semibold border-none ${adminSavingUser === user.user_id ? "cursor-not-allowed bg-[var(--primary)]/60 text-[var(--primary-foreground)]/60" : "cursor-pointer bg-[var(--primary)] text-[var(--primary-foreground)] hover:opacity-90 active:scale-95 transition-all"}`}
+                          key={user.user_id}
+                          onClick={() => {
+                            setSelectedUserId(user.user_id);
+                            setAdminError(null);
+                            setAdminSuccess(null);
+                          }}
+                          className={`flex items-center gap-2.5 p-2 px-3 lg:p-3 rounded-xl border text-left cursor-pointer transition-all duration-200 shrink-0 ${
+                            isSelected
+                              ? "bg-[var(--primary)]/10 border-[var(--primary)]/40 shadow-sm"
+                              : "bg-[var(--secondary)]/30 border-transparent hover:bg-[var(--secondary)]/70"
+                          }`}
                         >
-                          {adminSavingUser === user.user_id ? (
-                            <><Loader2 size={14} className="animate-spin" /> Saving...</>
-                          ) : "Save Changes"}
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 text-xs font-semibold ${
+                            isSelected ? "bg-[var(--primary)] text-[var(--primary-foreground)]" : "bg-[var(--secondary)] text-zinc-400 border border-[var(--border)]"
+                          }`}>
+                            {(user.display_name || user.email || "?").charAt(0).toUpperCase()}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-[13px] font-semibold text-[var(--foreground)] truncate leading-tight max-w-[120px] lg:max-w-none">
+                              {user.display_name || "Unnamed User"}
+                            </p>
+                            <p className="text-[11px] text-zinc-500 truncate mt-0.5 max-w-[120px] lg:max-w-none">
+                              {user.email}
+                            </p>
+                          </div>
                         </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Right Pane - Permissions Configuration detail */}
+              <div className="flex flex-col gap-6">
+                
+                {/* Status Messages */}
+                {adminError && (
+                  <div className="p-4 rounded-xl bg-red-500/10 text-red-500 border border-red-500/20 text-sm font-medium">
+                    {adminError}
+                  </div>
+                )}
+                {adminSuccess && (
+                  <div className="p-4 rounded-xl bg-green-500/10 text-green-600 border border-green-500/20 text-sm font-medium">
+                    {adminSuccess}
+                  </div>
+                )}
+
+                {currentUser ? (
+                  <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl overflow-hidden shadow-sm flex flex-col">
+                    
+                    {/* Selected User Header Info */}
+                    <div className="px-4 sm:px-6 py-5 border-b border-[var(--border)] bg-white/[0.02] flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-full bg-[var(--primary)]/10 text-[var(--primary)] flex items-center justify-center text-sm font-bold animate-fade-in">
+                          {(currentUser.display_name || currentUser.email || "?").charAt(0).toUpperCase()}
+                        </div>
+                        <div>
+                          <h2 className="text-base font-bold text-[var(--foreground)] leading-tight flex items-center gap-2">
+                            {currentUser.display_name || "Unnamed User"}
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[var(--primary)]/10 text-[var(--primary)] uppercase">
+                              {currentUser.role}
+                            </span>
+                          </h2>
+                          <p className="text-[12px] text-zinc-500 mt-1">
+                            {currentUser.email}
+                          </p>
+                        </div>
                       </div>
 
-                      {/* Fine-grained permissions controls */}
-                      <div>
-                        <p className="text-sm font-semibold text-[var(--foreground)] mb-3">Setting Permissions Matrix</p>
+                      <button
+                        onClick={() => handleUpdatePolicy(currentUser.user_id, currentUser.permissions, currentUser.screen_settings_visible_to_users)}
+                        disabled={adminSavingUser === currentUser.user_id}
+                        className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-[13px] font-semibold border-none self-start sm:self-auto ${
+                          adminSavingUser === currentUser.user_id
+                            ? "cursor-not-allowed bg-[var(--primary)]/60 text-[var(--primary-foreground)]/60"
+                            : "cursor-pointer bg-[var(--primary)] text-[var(--primary-foreground)] hover:opacity-90 active:scale-95 transition-all shadow-sm"
+                        }`}
+                      >
+                        {adminSavingUser === currentUser.user_id ? (
+                          <><Loader2 size={14} className="animate-spin" /> Saving...</>
+                        ) : (
+                          "Save Policy"
+                        )}
+                      </button>
+                    </div>
 
-                        <div className="flex flex-col gap-4">
-                          {PERMISSION_FIELDS.map((group) => (
-                            <div key={group.category} className="border border-[var(--border)] rounded-xl p-4 bg-[var(--background)]">
-                              <p className="text-[13px] font-bold text-[var(--primary)] uppercase tracking-wider mb-3">{group.category}</p>
-                              <div className="flex flex-col gap-2">
-                                {group.items.map((field) => {
-                                  const perm = user.permissions[field.key] || (field.key === "global_website_shortcuts" ? { visible: true, mutable: false } : { visible: true, mutable: true });
-                                  return (
-                                    <div key={field.key} className="grid grid-cols-[1.5fr_1fr_1fr] items-center px-3.5 py-2.5 bg-[var(--secondary)] rounded-lg border border-[var(--border)]">
-                                      <span className="text-[13px] font-medium text-[var(--foreground)]">{field.label}</span>
+                    {/* Permissions Grid */}
+                    <div className="p-4 sm:p-6 flex flex-col gap-6">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-[var(--border)]">
+                        <span className="text-[13px] font-bold text-[var(--foreground)] flex items-center gap-2 uppercase tracking-wider opacity-90">
+                          <Shield size={15} className="text-[var(--primary)]" /> Setting Permissions Matrix
+                        </span>
+                        <div className="flex items-center gap-2 text-xs text-zinc-500">
+                          <Eye size={13} /> Visibility &amp; <Lock size={12} /> Edit Locks
+                        </div>
+                      </div>
 
-                                      {/* Visible Option toggle */}
-                                      <div className="flex items-center gap-1.5">
-                                        <span className="text-xs text-zinc-500">Visible:</span>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                        {PERMISSION_FIELDS.map((group) => (
+                          <div key={group.category} className="border border-[var(--border)] rounded-xl overflow-hidden bg-[var(--background)] shadow-sm flex flex-col h-full">
+                            {/* Category Header */}
+                            <div className="px-4 py-3 bg-[var(--secondary)]/60 border-b border-[var(--border)]">
+                              <p className="text-[12px] font-bold text-[var(--primary)] uppercase tracking-wider">
+                                {group.category}
+                              </p>
+                            </div>
+                            
+                            {/* Table Headers */}
+                            <div className="grid grid-cols-[1fr_60px_60px] sm:grid-cols-[1fr_80px_80px] gap-2 px-3 sm:px-4 py-2.5 border-b border-[var(--border)]/50 bg-[var(--secondary)]/20 text-[10.5px] font-bold text-zinc-400 uppercase tracking-wider">
+                              <span>Setting Name</span>
+                              <span className="text-center">Visible</span>
+                              <span className="text-center">Editable</span>
+                            </div>
+
+                            {/* Rows */}
+                            <div className="divide-y divide-[var(--border)]/40 flex-1">
+                              {group.items.map((field) => {
+                                const perm = currentUser.permissions[field.key] || (field.key === "global_website_shortcuts" ? { visible: true, mutable: false } : { visible: true, mutable: true });
+                                return (
+                                  <div key={field.key} className="grid grid-cols-[1fr_60px_60px] sm:grid-cols-[1fr_80px_80px] gap-2 items-center px-3 sm:px-4 py-2.5 sm:py-3 hover:bg-[var(--secondary)]/20 transition-all duration-150">
+                                    <span className="text-[12px] sm:text-[13px] font-medium text-[var(--foreground)] leading-tight pr-1">
+                                      {field.label}
+                                    </span>
+                                    
+                                    <div className="flex justify-center">
+                                      <Toggle
+                                        checked={perm.visible}
+                                        onChange={() => {
+                                          const updatedPerms = {
+                                            ...currentUser.permissions,
+                                            [field.key]: { ...perm, visible: !perm.visible }
+                                          };
+                                          setUsersPolicies(usersPolicies.map(u => u.user_id === currentUser.user_id ? { ...u, permissions: updatedPerms } : u));
+                                          handleUpdatePolicy(currentUser.user_id, updatedPerms, currentUser.screen_settings_visible_to_users);
+                                        }}
+                                      />
+                                    </div>
+
+                                    <div className="flex justify-center">
+                                      {!(field as any).hideMutable ? (
                                         <Toggle
-                                          checked={perm.visible}
+                                          checked={perm.mutable}
                                           onChange={() => {
                                             const updatedPerms = {
-                                              ...user.permissions,
-                                              [field.key]: { ...perm, visible: !perm.visible }
+                                              ...currentUser.permissions,
+                                              [field.key]: { ...perm, mutable: !perm.mutable }
                                             };
-                                            setUsersPolicies(usersPolicies.map(u => u.user_id === user.user_id ? { ...u, permissions: updatedPerms } : u));
-                                            handleUpdatePolicy(user.user_id, updatedPerms, user.screen_settings_visible_to_users);
+                                            setUsersPolicies(usersPolicies.map(u => u.user_id === currentUser.user_id ? { ...u, permissions: updatedPerms } : u));
+                                            handleUpdatePolicy(currentUser.user_id, updatedPerms, currentUser.screen_settings_visible_to_users);
                                           }}
                                         />
-                                      </div>
-
-                                      {/* Mutable Option toggle */}
-                                      <div className="flex items-center gap-1.5">
-                                        {!(field as any).hideMutable ? (
-                                          <>
-                                            <span className="text-xs text-zinc-500">Editable:</span>
-                                            <Toggle
-                                              checked={perm.mutable}
-                                              onChange={() => {
-                                                const updatedPerms = {
-                                                  ...user.permissions,
-                                                  [field.key]: { ...perm, mutable: !perm.mutable }
-                                                };
-                                                setUsersPolicies(usersPolicies.map(u => u.user_id === user.user_id ? { ...u, permissions: updatedPerms } : u));
-                                                handleUpdatePolicy(user.user_id, updatedPerms, user.screen_settings_visible_to_users);
-                                              }}
-                                            />
-                                          </>
-                                        ) : (
-                                          <span className="text-xs text-zinc-500 italic">N/A</span>
-                                        )}
-                                      </div>
+                                      ) : (
+                                        <span className="text-[10px] font-bold text-zinc-500 font-mono select-none tracking-tight">LOCKED</span>
+                                      )}
                                     </div>
-                                  );
-                                })}
-                              </div>
+                                  </div>
+                                );
+                              })}
                             </div>
-                          ))}
-                        </div>
+                          </div>
+                        ))}
                       </div>
-
                     </div>
-                  ))}
+                  </div>
+                ) : (
+                  <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-10 text-center text-zinc-500 shadow-sm">
+                    No active user accounts selected. Click on an account to manage their policies.
+                  </div>
+                )}
+              </div>
 
-                  {usersPolicies.filter((user) => user.role !== "admin").length === 0 && (
-                    <p className="text-center text-zinc-500 text-sm p-8">
-                      No users found.
-                    </p>
-                  )}
-                </div>
-              )}
             </div>
           </section>
         );
@@ -1570,54 +1604,54 @@ export default function SettingsPage() {
       <Sidebar />
       <div className="flex flex-col flex-1 overflow-hidden">
         <TopBar />
-        <main className="flex-1 overflow-y-auto p-10">
+        <main className="flex-1 overflow-y-auto flex flex-col">
 
-          <div className="w-full flex gap-16 relative">
+          <div className="w-full flex flex-col relative">
 
-            {/* Left Navigation Sidebar */}
-            <nav className="w-[240px] shrink-0 sticky top-0 flex flex-col gap-1.5">
-              <div className="mb-8">
-                <h1 className="text-3xl font-semibold text-[var(--foreground)] tracking-tight flex items-center gap-2.5">
-                  <Settings className="w-7 h-7 text-[var(--primary)]" /> Settings
+            {/* Top Navigation Bar */}
+            <nav className="w-full flex flex-col gap-6 border-b border-[var(--border)] pb-6 mb-8 px-4 sm:px-6 md:px-10 pt-4 sm:pt-6 md:pt-10 sticky top-0 bg-[var(--background)] z-20">
+              <div className="flex items-center justify-between gap-4">
+                <h1 className="text-2xl sm:text-3xl font-semibold text-[var(--foreground)] tracking-tight flex items-center gap-2">
+                  <Settings className="w-6 h-6 sm:w-7 sm:h-7 text-[var(--primary)]" /> Settings
                 </h1>
+                
+                <div className="flex items-center gap-2 text-zinc-500 text-[11px] sm:text-sm bg-[var(--secondary)]/50 px-2.5 sm:px-3.5 py-1.5 rounded-full border border-[var(--border)] shadow-sm shrink-0">
+                  <div className={`w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full transition-colors duration-300 ${saved ? "bg-[var(--primary)]" : "bg-zinc-500"} ${saving ? "opacity-50" : "opacity-100"}`} />
+                  <span>{saving ? "Saving..." : saved ? "Saved" : "Auto-saving"}</span>
+                </div>
               </div>
 
-              {(() => {
-                let visibleTabs = TABS;
-                if (settings.role !== "admin") {
-                  visibleTabs = TABS.filter((tab) => {
-                    const perm = settings.permissions[`tab_${tab.id}`];
-                    return perm?.visible !== false;
+              <div className="flex overflow-x-auto scrollbar-none gap-2 pb-1">
+                {(() => {
+                  let visibleTabs = TABS;
+                  if (settings.role !== "admin") {
+                    visibleTabs = TABS.filter((tab) => {
+                      const perm = settings.permissions[`tab_${tab.id}`];
+                      return perm?.visible !== false;
+                    });
+                  } else {
+                    visibleTabs = [...TABS, { id: "admin", label: "Admin Panel", icon: Shield }];
+                  }
+                  return visibleTabs.map((tab) => {
+                    const isActive = activeTab === tab.id;
+                    const Icon = tab.icon;
+                    return (
+                      <button 
+                        key={tab.id} 
+                        onClick={() => setActiveTab(tab.id)}
+                        className={`flex items-center gap-2 px-4 py-2.5 rounded-lg border border-transparent cursor-pointer transition-all duration-200 text-left shrink-0 ${isActive ? "bg-[var(--secondary)] text-[var(--foreground)] font-semibold border-[var(--border)] shadow-sm" : "bg-transparent text-zinc-500 font-medium hover:text-[var(--foreground)] hover:bg-[var(--secondary)]/30"}`}
+                      >
+                        <Icon size={16} className={isActive ? "text-[var(--primary)]" : "text-inherit"} />
+                        <span className="text-[14px]">{tab.label}</span>
+                      </button>
+                    );
                   });
-                } else {
-                  visibleTabs = [...TABS, { id: "admin", label: "Admin Panel", icon: Shield }];
-                }
-                return visibleTabs.map((tab) => {
-                  const isActive = activeTab === tab.id;
-                  const Icon = tab.icon;
-                  return (
-                    <button 
-                      key={tab.id} 
-                      onClick={() => setActiveTab(tab.id)}
-                      className={`flex items-center gap-3.5 w-full px-4 py-3.5 rounded-lg border-none cursor-pointer transition-all duration-200 text-left ${isActive ? "bg-[var(--secondary)] text-[var(--foreground)] font-semibold" : "bg-transparent text-zinc-500 font-medium"}`}
-                    >
-                      <Icon size={18} className={isActive ? "text-[var(--primary)]" : "text-inherit"} />
-                      {tab.label}
-                    </button>
-                  );
-                });
-              })()}
-
-              <div className="mt-8 pt-8 border-t border-[var(--border)] flex flex-col gap-4">
-                <div className="flex items-center gap-3 text-zinc-500 text-sm">
-                  <div className={`w-2 h-2 rounded-full transition-colors duration-300 ${saved ? "bg-[var(--primary)]" : "bg-zinc-500"} ${saving ? "opacity-50" : "opacity-100"}`} />
-                  {saving ? "Saving changes..." : saved ? "All changes saved" : "Auto-saving is active"}
-                </div>
+                })()}
               </div>
             </nav>
 
             {/* Main Content Area */}
-            <div className="flex-1 min-w-0 pb-16">
+            <div className="flex-1 min-w-0 px-4 sm:px-6 md:px-10 pb-16">
               {!connected && (
                 <div className="bg-red-500/10 border border-red-500/30 text-red-500 p-4 rounded-xl mb-6 flex items-center gap-3 font-medium text-sm">
                   Server is currently offline. Settings cannot be modified.
