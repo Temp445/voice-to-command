@@ -20,20 +20,23 @@ def setup_logging() -> None:
     logger.remove()
 
     # Force UTF-8 on Windows terminals that default to cp1252
-    stdout_utf8 = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
-
-    # Console — colourised
-    logger.add(
-        stdout_utf8,
-        level=settings.log_level,
-        format=(
-            "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | "
-            "<level>{level: <8}</level> | "
-            "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> — "
-            "<level>{message}</level>"
-        ),
-        colorize=True,
-    )
+    if sys.stdout is not None and hasattr(sys.stdout, "buffer"):
+        try:
+            stdout_utf8 = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+            # Console — colourised
+            logger.add(
+                stdout_utf8,
+                level=settings.log_level,
+                format=(
+                    "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | "
+                    "<level>{level: <8}</level> | "
+                    "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> — "
+                    "<level>{message}</level>"
+                ),
+                colorize=True,
+            )
+        except Exception:
+            pass
 
     # File — JSON-structured for parsing.
     #
