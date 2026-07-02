@@ -1,6 +1,29 @@
 import os
 import sys
 
+# PyInstaller windowed mode (console=False) overrides stdout/stderr to None,
+# which crashes uvicorn logging formatter when it tries to check .isatty().
+# We patch them with dummy or devnull streams if they are None.
+if sys.stdout is None:
+    try:
+        sys.stdout = open(os.devnull, "w", encoding="utf-8")
+    except Exception:
+        class DummyStream:
+            def write(self, *args, **kwargs): pass
+            def flush(self, *args, **kwargs): pass
+            def isatty(self): return False
+        sys.stdout = DummyStream()
+
+if sys.stderr is None:
+    try:
+        sys.stderr = open(os.devnull, "w", encoding="utf-8")
+    except Exception:
+        class DummyStream:
+            def write(self, *args, **kwargs): pass
+            def flush(self, *args, **kwargs): pass
+            def isatty(self): return False
+        sys.stderr = DummyStream()
+
 # Ensure the backend root is in the path
 backend_root = os.path.dirname(os.path.abspath(__file__))
 if backend_root not in sys.path:
