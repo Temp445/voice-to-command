@@ -343,8 +343,9 @@ async def handle_browser_list_options(element: str = "", **_) -> str:
         from automation.browser.dom_agent import DOMAgent
         agent = DOMAgent(page)
         res = await agent.execute_intent(f"click the {element} dropdown")
-        if "couldn't find" not in res.lower() and "failed" not in res.lower():
-            return res
+        res_lower = res.lower()
+        if any(ok in res_lower for ok in ["clicked", "selected", "opened", "entered", "checked"]):
+            return f"Opened {element} dropdown."
             
         return f"Could not find a dropdown matching '{element}' on the page."
     except Exception as e:
@@ -3246,7 +3247,7 @@ def register_all_intents() -> None:
                 # Pattern 3: implicit label-value (e.g. "deduction start month june")
                 # Negative lookahead excludes action verbs AND dismiss/cancel/escape keywords
                 # so they always route to dismiss_overlay instead.
-                r"^(?P<text>(?!(?:click|tap|press|hit|open|close|go\s+to|navigate\s+to|view|show|inspect|edit|update|delete|remove|refresh|reload|scroll|hover|copy|cut|paste|select\s+all|cancel|escape|dismiss|hide|close\s+it|press\s+escape)\b)[\w\s]{2,25}?\s+.+)$",
+                r"^(?P<text>(?!(?:click|tap|press|hit|open|close|go\s+to|navigate\s+to|view|show|inspect|edit|update|delete|remove|refresh|reload|scroll|hover|copy|cut|paste|select\s+all|select|choose|cancel|escape|dismiss|hide|close\s+it|press\s+escape)\b)[\w\s]{2,25}?\s+.+)$",
             ],
             handler=handle_set_field,
             description="Type a value into a form input field or select an option in a dropdown",

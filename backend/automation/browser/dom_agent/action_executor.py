@@ -751,23 +751,90 @@ class ActionExecutorMixin:
                     await BrowserEngine()._animate_action(self.page, direct_handle, "click")
                     await self._click_element(direct_handle)
                     return f"Clicked '{option}' directly."
+                    
+        # 1.5 Check Single Option selection (e.g. "select cms", "select standard")
+        m_single = re.match(r'^(?:select|choose)\s+(?:the\s+)?(.+?)(?:\s+option)?$', cmd)
+        if m_single and not (dropdown and option):
+            option_val = m_single.group(1).strip()
+            
+            # Step A: Search for the option in the current snapshot
+            option_candidates = [
+                el for el in snapshot.elements 
+                if el.role in ("option", "button", "link", "listitem") 
+                or el.tag in ("option", "li", "span", "div")
+            ]
+            option_el = find_best_element(option_candidates, option_val, min_score=40, roles=None)
+            
+            if option_el:
+                handle = await self.get_element_handle(option_el)
+                if handle:
+                    await BrowserEngine()._animate_action(self.page, handle, "click")
+                    await self._click_element(handle)
+                    return f"Selected option '{option_val}'."
+            
+            # Step B: If the option was not found, the dropdown might be closed.
+            # Let's search for dropdown/select/combobox elements to open.
+            dropdown_candidates = [
+                el for el in snapshot.elements 
+                if el.role in ("combobox", "select") 
+                or el.tag in ("select",) 
+                or (el.role == "button" and any(w in (el.text or el.name or "").lower() for w in ("select", "dropdown", "choose")))
+            ]
+            
+            if dropdown_candidates:
+                # Click the first/best dropdown candidate to open it
+                dropdown_el = dropdown_candidates[0]
+                handle = await self.get_element_handle(dropdown_el)
+                if handle:
+                    logger.info(f"Dropdown '{dropdown_el.text or dropdown_el.name}' might be closed. Clicking it to open.")
+                    await BrowserEngine()._animate_action(self.page, handle, "click")
+                    await self._click_element(handle)
+                    await asyncio.sleep(0.5)
+                    
+                    # Refresh snapshot
+                    page_context_service.invalidate()
+                    fresh_snapshot = await page_context_service.get_snapshot()
+                    if fresh_snapshot:
+                        fresh_candidates = [
+                            el for el in fresh_snapshot.elements 
+                            if el.role in ("option", "button", "link", "listitem") 
+                            or el.tag in ("option", "li", "span", "div")
+                        ]
+                        option_el = find_best_element(fresh_candidates, option_val, min_score=40, roles=None)
+                        if option_el:
+                            opt_handle = await self.get_element_handle(option_el)
+                            if opt_handle:
+                                await BrowserEngine()._animate_action(self.page, opt_handle, "click")
+                                await self._click_element(opt_handle)
+                                return f"Opened dropdown and selected option '{option_val}'."
+                                
+            # Step C: Fallback to direct page-level text search/click
+            try:
+                # Look for a visible text match for the option on the page
+                loc = self.page.locator(f"text=/{re.escape(option_val)}/i").last
+                if await loc.count() > 0 and await loc.is_visible():
+                    await BrowserEngine()._animate_action(self.page, loc, "click")
+                    await loc.click(force=True)
+                    return f"Selected option '{option_val}' via direct text match."
+            except Exception as e:
+                logger.debug(f"Direct text match fallback failed: {e}")
   
         # 2. Check type/fill/write/set target patterns (e.g. "type text into field", "set field to value", "deduction start month jun")
         field_target = None
         fill_value = None
         
         # Pattern A: explicit verbs like "set deduction start month to jun" or "type jun in deduction start month"
-        m = re.match(r'^(?:set|change|fill)\s+(.+?)\s+(?:to|with|as)\s+(.+)$', cmd)
+        m = re.match(r'^(?:set|change|fill)\s+(.+?)\s+(?:to|with|as)\s+(.+)$', intent_text.strip(), re.IGNORECASE)
         if m:
             field_target = m.group(1).strip()
             fill_value = m.group(2).strip()
         else:
-            m = re.match(r'^(?:type|write|enter)\s+(.+?)\s+(?:into|in|to)\s+(?:the\s+)?(.+)$', cmd)
+            m = re.match(r'^(?:type|write|enter)\s+(.+?)\s+(?:into|in|to)\s+(?:the\s+)?(.+)$', intent_text.strip(), re.IGNORECASE)
             if m:
                 fill_value = m.group(1).strip()
                 field_target = m.group(2).strip()
             else:
-                m = re.match(r'^(.+?)\s+(?:is|to|set\s+to)\s+(.+)$', cmd)
+                m = re.match(r'^(.+?)\s+(?:is|to|set\s+to)\s+(.+)$', intent_text.strip(), re.IGNORECASE)
                 if m:
                     field_target = m.group(1).strip()
                     fill_value = m.group(2).strip()
@@ -780,13 +847,13 @@ class ActionExecutorMixin:
                     # Check if cmd starts with label (e.g. "deduction start month jun" starts with "deduction start month")
                     if cmd.startswith(label + " "):
                         field_target = label
-                        fill_value = cmd[len(label):].strip()
+                        fill_value = intent_text.strip()[len(label):].strip()
                         break
                     # Also check without common filler words in the label
                     clean_label = label.replace("optional", "").replace("*", "").strip()
                     if clean_label and len(clean_label) >= 3 and cmd.startswith(clean_label + " "):
                         field_target = clean_label
-                        fill_value = cmd[len(clean_label):].strip()
+                        fill_value = intent_text.strip()[len(clean_label):].strip()
                         break
                     # Support matching core credential keywords (password, email, username) if the placeholder or name
                     # is a longer string containing the keyword (e.g., placeholder "Enter your password" matched by "password")
@@ -794,7 +861,7 @@ class ActionExecutorMixin:
                     for kw in core_kws:
                         if kw in label and cmd.startswith(kw + " "):
                             field_target = kw
-                            fill_value = cmd[len(kw):].strip()
+                            fill_value = intent_text.strip()[len(kw):].strip()
                             break
                     if field_target:
                         break

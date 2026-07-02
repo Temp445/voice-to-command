@@ -95,12 +95,31 @@ _EXTRACT_JS = """
 () => {
     const selector = [
         'a[href]', 'button', 'input', 'select', 'textarea',
+        'li',
         "[role='button']", "[role='link']", "[role='tab']",
         "[role='menuitem']", "[role='option']", "[role='checkbox']",
-        "[role='radio']", "[role='switch']", "[role='combobox']"
+        "[role='radio']", "[role='switch']", "[role='combobox']",
+        "[class*='option' i]", "[class*='dropdown-item' i]", "[class*='select-item' i]"
     ].join(', ');
 
     const elements = Array.from(document.querySelectorAll(selector));
+
+    // Scan for custom option elements inside open listboxes/menus/dropdowns/popups/dialogs
+    const popupContainers = document.querySelectorAll(
+        '[role="listbox"], [role="menu"], [role="dialog"], ' +
+        '[class*="dropdown-menu" i], [class*="select-options" i], ' +
+        '[class*="popover" i], [class*="modal" i], [class*="popup" i]'
+    );
+    for (const popup of popupContainers) {
+        const descendants = popup.querySelectorAll('*');
+        for (const desc of descendants) {
+            if (desc.children.length === 0 && (desc.innerText || desc.textContent || '').trim()) {
+                if (!elements.includes(desc)) {
+                    elements.push(desc);
+                }
+            }
+        }
+    }
     const result = [];
 
     for (const el of elements) {
