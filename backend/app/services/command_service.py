@@ -1451,13 +1451,21 @@ class CommandService:
                             logger.info(f"Credential intercept: field='{_field_type}' value='{_val}' (from '{text}')")
 
                             async def _do_implicit_type():
-                                page = await bc.engine.get_active_page()
+                                page = await bc.engine.get_active_page(allow_restricted=True)
                                 if not page:
                                     return False
                                 if _field_type in ["email", "username"]:
                                     _loc = page.locator("input[type='email'], input[name*='email' i], input[placeholder*='email' i], input[name*='user' i]").first
                                 else:
                                     _loc = page.locator("input[type='password'], input[name*='pass' i], input[placeholder*='pass' i]").first
+                                
+                                # Wait for the element to be ready in the DOM context to prevent race conditions
+                                # immediately following uvicorn server startup/CDP reconnection.
+                                try:
+                                    await _loc.wait_for(state="attached", timeout=2000)
+                                except Exception:
+                                    pass
+
                                 if await _loc.count() > 0:
                                     _existing = await _loc.evaluate("el => el.value")
                                     if _existing:
@@ -1757,7 +1765,10 @@ class CommandService:
             params["text"] = text
 
         try:
-            result = await intent.handler(**params)
+            from automation.browser.browser_engine import _run_in_playwright as _rip
+            async def _run_handler():
+                return await intent.handler(**params)
+            result = await _rip(_run_handler())
             duration_ms = int((time.perf_counter() - start) * 1000)
 
             if isinstance(result, str):

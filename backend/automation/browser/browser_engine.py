@@ -771,8 +771,43 @@ class BrowserEngine:
 
     async def navigate(self, url: str, new_tab: bool = False) -> str:
         async def _do_nav():
+            target = f"https://{url}" if not url.startswith(("http://", "https://")) else url
+
+            if getattr(settings, "restrict_browser_automation", False) and not self._is_shortcut_url(target):
+                from urllib.parse import urlparse
+                host = urlparse(target).netloc or target
+                raise PermissionError(
+                    f"Automation restricted. '{host}' is not in your shortcuts."
+                )
+
+            await self.ensure_browser()
+
+            # ── Tab-reuse: if target domain is already open, switch to that
+            # tab instead of navigating the current one. This gives voice
+            # commands the same multi-tab awareness as the command console.
+            if not new_tab and self._context:
+                from urllib.parse import urlparse as _up
+                target_netloc = _up(target).netloc.lower()
+                if target_netloc:
+                    for _p in self._context.pages:
+                        try:
+                            if _p.is_closed():
+                                continue
+                            existing_netloc = _up(_p.url).netloc.lower()
+                            if existing_netloc == target_netloc:
+                                await _p.bring_to_front()
+                                self.pin_active_page(_p)
+                                try:
+                                    from automation.browser.tab_registry import tab_registry as _tr
+                                    _tr.set_active(_p, source="navigate_tab_reuse")
+                                except Exception:
+                                    pass
+                                logger.info(f"navigate: reusing existing tab for {target_netloc}")
+                                return f"Switched to existing tab: {target}"
+                        except Exception:
+                            continue
+
             if new_tab:
-                await self.ensure_browser()
                 if not self._context:
                     raise RuntimeError("Browser context not initialized.")
                 new_page = await self._context.new_page()
@@ -789,14 +824,6 @@ class BrowserEngine:
                 page = new_page
             else:
                 page = await self.get_active_page(allow_restricted=True)
-            target = f"https://{url}" if not url.startswith(("http://", "https://")) else url
-
-            if getattr(settings, "restrict_browser_automation", False) and not self._is_shortcut_url(target):
-                from urllib.parse import urlparse
-                host = urlparse(target).netloc or target
-                raise PermissionError(
-                    f"Automation restricted. '{host}' is not in your shortcuts."
-                )
 
             # Bring to front and maximize BEFORE goto() to avoid main-thread block
             try:
@@ -858,6 +885,7 @@ class BrowserEngine:
             self.pin_active_page(page)
             return f"Navigated to {target}"
         return await _run_in_playwright(_do_nav())
+
 
     async def go_back(self) -> str:
         async def _do():

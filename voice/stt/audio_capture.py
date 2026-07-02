@@ -160,13 +160,11 @@ class AudioCapture:
     def stop_recording_early(self) -> None:
         self._force_stop_recording = True
 
-    def get_speech_segment(self, silence_chunks: int = 15, timeout: float = 10.0) -> bytes:
+    def get_speech_segment(self, silence_chunks: int = 6, timeout: float = 10.0) -> bytes:
         """
         Collect speech until `silence_chunks` consecutive silent frames (each ~100ms).
-        Default 15 chunks = ~1.5s of trailing silence — covers natural mid-sentence pauses
-        (e.g. "open... Notepad") without cutting off words prematurely.
-        Increased from 10 (1.0s) which was too aggressive and caused Whisper to receive
-        truncated audio, degrading transcription accuracy.
+        Default 6 chunks = ~0.6s of trailing silence — fast response for short commands
+        (e.g. "sign in", "open CRM") while still covering brief mid-sentence pauses.
         Returns concatenated audio bytes.
         """
         import time
@@ -189,10 +187,11 @@ class AudioCapture:
 
         return b"".join(frames)
 
-    def stream_speech_segment(self, silence_chunks: int = 15, timeout: float = 10.0, yield_interval_chunks: int = 15, max_initial_silence_chunks: int = 20):
+    def stream_speech_segment(self, silence_chunks: int = 6, timeout: float = 10.0, yield_interval_chunks: int = 15, max_initial_silence_chunks: int = 20):
         """
         Generator that yields (audio_bytes, is_final) periodically as speech is collected.
         yield_interval_chunks of 15 ~ 450ms between partial yields.
+        silence_chunks of 6 = ~0.6s trailing silence — fast end-of-speech for short commands.
         """
         import time
         frames: list[bytes] = []

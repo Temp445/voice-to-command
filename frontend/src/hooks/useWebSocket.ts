@@ -21,6 +21,9 @@ interface WSStore {
   activeTabTitle: string | null;
   activeTabUrl: string | null;
   setActiveTab: (title: string | null, url: string | null) => void;
+  // Auth state
+  notAuthenticated: boolean;
+  setNotAuthenticated: (v: boolean) => void;
 }
 export const useWSStore = create<WSStore>((set) => ({
   connected: false,
@@ -33,6 +36,8 @@ export const useWSStore = create<WSStore>((set) => ({
   activeTabTitle: null,
   activeTabUrl: null,
   setActiveTab: (title, url) => set({ activeTabTitle: title, activeTabUrl: url }),
+  notAuthenticated: false,
+  setNotAuthenticated: (v) => set({ notAuthenticated: v }),
 }));
 
 export function WebSocketManager() {
@@ -119,6 +124,9 @@ export function WebSocketManager() {
           case "scan_complete":
             useWSStore.getState().setScanResult(data.timestamp, data.app_count);
             break;
+          case "not_authenticated":
+            useWSStore.getState().setNotAuthenticated(true);
+            break;
         }
       } catch {}
     };
@@ -142,6 +150,10 @@ export function WebSocketManager() {
         user_id: user?.id || null
       }));
       console.log("📤 Sent auth_sync via WebSocket:", user?.id || "logged-out");
+      // Clear the not-authenticated flag when user logs in
+      if (user?.id) {
+        useWSStore.getState().setNotAuthenticated(false);
+      }
     }
   }, [user, connected]);
 
@@ -159,6 +171,6 @@ export function WebSocketManager() {
 }
 
 export function useWebSocket() {
-  const { connected, activeTabTitle, activeTabUrl } = useWSStore();
-  return { connected, activeTabTitle, activeTabUrl };
+  const { connected, activeTabTitle, activeTabUrl, notAuthenticated } = useWSStore();
+  return { connected, activeTabTitle, activeTabUrl, notAuthenticated };
 }

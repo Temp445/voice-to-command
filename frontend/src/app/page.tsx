@@ -1,5 +1,7 @@
 "use client";
 
+import { motion } from "framer-motion";
+import { LogIn } from "lucide-react";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { TopBar } from "@/components/layout/TopBar";
 import { VoicePanel } from "@/components/voice/VoicePanel";
@@ -7,9 +9,11 @@ import { ActivityFeed } from "@/components/dashboard/ActivityFeed";
 import { QuickActions } from "@/components/dashboard/QuickActions";
 import { StatusBar } from "@/components/dashboard/StatusBar";
 import { useVoiceStore } from "@/store/voiceStore";
+import { useWSStore } from "@/hooks/useWebSocket";
 
 export default function DashboardPage() {
   const { transcript, partialTranscript } = useVoiceStore();
+  const { notAuthenticated } = useWSStore();
 
   return (
     <div style={{ display: "flex", height: "100vh", overflow: "hidden", background: "var(--background)" }}>
@@ -18,6 +22,45 @@ export default function DashboardPage() {
         <TopBar />
         <main style={{ flex: 1, overflowY: "auto", padding: "2.5rem 3.5rem" }}>
           <div style={{ maxWidth: "1280px", margin: "0 auto", display: "flex", flexDirection: "column", gap: "2rem" }}>
+
+            {/* Login required banner */}
+            {notAuthenticated && (
+              <motion.div
+                initial={{ opacity: 0, y: -8 }}
+                animate={{ opacity: 1, y: 0 }}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.75rem",
+                  padding: "0.75rem 1.125rem",
+                  borderRadius: "0.75rem",
+                  border: "1px solid rgba(245,158,11,0.35)",
+                  background: "rgba(245,158,11,0.08)",
+                }}
+              >
+                <LogIn style={{ width: "1rem", height: "1rem", color: "#f59e0b", flexShrink: 0 }} />
+                <span style={{ fontSize: "0.875rem", color: "#f59e0b", flex: 1 }}>
+                  You are not logged in. Voice commands and automations will not work until you sign in.
+                </span>
+                <a
+                  href="/auth/login"
+                  style={{
+                    padding: "0.3rem 0.875rem",
+                    borderRadius: "0.5rem",
+                    background: "rgba(245,158,11,0.15)",
+                    border: "1px solid rgba(245,158,11,0.4)",
+                    color: "#f59e0b",
+                    fontSize: "0.8125rem",
+                    fontWeight: 600,
+                    textDecoration: "none",
+                    whiteSpace: "nowrap",
+                    cursor: "pointer",
+                  }}
+                >
+                  Log In
+                </a>
+              </motion.div>
+            )}
 
             {/* Header */}
             <div>

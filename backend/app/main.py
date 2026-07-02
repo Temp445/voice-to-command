@@ -142,6 +142,9 @@ async def lifespan(app: FastAPI):
 
     # Server is now fully ready to accept requests
     loop = asyncio.get_running_loop()
+    # Give ws_manager a reference to the main loop so background threads
+    # (BrowserThread, VoicePipelineLoop) can safely schedule WS broadcasts.
+    ws_manager._main_loop = loop
     asyncio.create_task(_background_init(app.state, loop))
 
     yield
@@ -496,6 +499,10 @@ async def websocket_endpoint(websocket: WebSocket):
                         user_id = data.get("user_id")
                         logger.info(f"WebSocket auth sync: settings.owner_user_id = {user_id}")
                         settings.owner_user_id = user_id
+                        if not user_id:
+                            await ws_manager.send_to(websocket, "not_authenticated", {
+                                "message": "Please log in to use voice commands and execute instructions."
+                            })
                 except json.JSONDecodeError:
                     pass
     except (WebSocketDisconnect, RuntimeError):

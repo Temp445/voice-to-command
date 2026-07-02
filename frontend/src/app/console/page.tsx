@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Send, Terminal, Trash2, CheckCircle2, XCircle, Loader2, Mic } from "lucide-react";
+import { Send, Terminal, Trash2, CheckCircle2, XCircle, Loader2, Mic, LogIn } from "lucide-react";
 import { api } from "@/lib/api";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { TopBar } from "@/components/layout/TopBar";
@@ -19,7 +19,7 @@ export default function ConsolePage() {
   const { history, clear } = useCommandStore();
   const endRef = useRef<HTMLDivElement>(null);
   useWebSocket();
-  const { connected } = useWSStore();
+  const { connected, notAuthenticated } = useWSStore();
   const { wakeWord } = useSettingsStore();
 
   useEffect(() => { 
@@ -49,6 +49,47 @@ export default function ConsolePage() {
       <div style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }}>
         <TopBar />
         <main style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", padding: "1.75rem", gap: "1rem" }}>
+
+          {/* Login required banner */}
+          {notAuthenticated && (
+            <motion.div
+              initial={{ opacity: 0, y: -8 }}
+              animate={{ opacity: 1, y: 0 }}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "0.75rem",
+                padding: "0.75rem 1.125rem",
+                borderRadius: "0.75rem",
+                border: "1px solid rgba(245,158,11,0.35)",
+                background: "rgba(245,158,11,0.08)",
+                flexShrink: 0,
+              }}
+            >
+              <LogIn style={{ width: "1rem", height: "1rem", color: "#f59e0b", flexShrink: 0 }} />
+              <span style={{ fontSize: "0.875rem", color: "#f59e0b", flex: 1 }}>
+                You are not logged in. Commands will not execute until you sign in.
+              </span>
+              <a
+                href="/auth/login"
+                style={{
+                  padding: "0.3rem 0.875rem",
+                  borderRadius: "0.5rem",
+                  background: "rgba(245,158,11,0.15)",
+                  border: "1px solid rgba(245,158,11,0.4)",
+                  color: "#f59e0b",
+                  fontSize: "0.8125rem",
+                  fontWeight: 600,
+                  textDecoration: "none",
+                  whiteSpace: "nowrap",
+                  cursor: "pointer",
+                  transition: "all 0.15s",
+                }}
+              >
+                Log In
+              </a>
+            </motion.div>
+          )}
 
           {/* Header */}
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>

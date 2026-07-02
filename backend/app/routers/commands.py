@@ -86,11 +86,15 @@ async def execute_command(
         now = datetime.now(timezone.utc)
         entry_id = body.id or str(uuid.uuid4())
 
+        # ── Reset pipeline to IDLE immediately so the overlay dismisses ─────────────
+        # This MUST happen before background tasks (TTS speak) to avoid the overlay
+        # staying stuck for the full duration of browser automation + TTS playback.
+        if pipeline:
+            from voice.pipeline import PipelineState
+            pipeline._set_state(PipelineState.IDLE)
+            pipeline._active_task = None
+
         # ── Broadcast to overlay IMMEDIATELY after execution, before browser opens ─
-        # Previously the overlay received command_executed only after navigate() +
-        # focus + CDP maximize all completed — causing a 10–25s overlay delay.
-        # Now we fire it here so the overlay pops up instantly on command success,
-        # regardless of how long the browser navigation takes afterward.
         asyncio.create_task(ws_manager.broadcast("command_executed", {
             "id": entry_id,
             "raw_text": body.text,
@@ -117,9 +121,11 @@ async def execute_command(
             executed_at=now,
         )
     finally:
+        # Safety net: ensure pipeline is always reset, even if an exception occurred
         if pipeline:
             from voice.pipeline import PipelineState
-            pipeline._set_state(PipelineState.IDLE)
+            if pipeline._state != PipelineState.IDLE:
+                pipeline._set_state(PipelineState.IDLE)
             pipeline._active_task = None
 
 

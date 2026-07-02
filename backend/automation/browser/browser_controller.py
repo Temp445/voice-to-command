@@ -275,23 +275,22 @@ class VoiceBrowserCommands:
         _cred_action_verbs = _re.search(r'\b(login|log in|log into|sign in|sign into|authenticate)\b', transcript_lower)
         if _email_cands and _pass_cands and not _cred_action_verbs:
             try:
-                page = await self.ctrl._ensure_page()
-                email_val = _email_cands[0]
-                pass_val = _pass_cands[-1]
-                
-                # Fill Email
-                email_loc = page.locator("input[type='email'], input[name*='email' i], input[placeholder*='email' i]").first
-                if await email_loc.count() > 0:
-                    await email_loc.fill(email_val)
-                    
-                # Fill Password
-                pass_loc = page.locator("input[type='password'], input[name*='pass' i], input[placeholder*='pass' i]").first
-                if await pass_loc.count() > 0:
-                    await pass_loc.fill(pass_val)
-                    # Attempt to press enter to submit
-                    await pass_loc.press("Enter")
-                    
-                return "Filled credentials and submitted."
+                from automation.browser.browser_engine import _run_in_playwright
+                async def _fill_creds():
+                    page = await self.ctrl._ensure_page()
+                    email_val = _email_cands[0]
+                    pass_val = _pass_cands[-1]
+                    # Fill Email
+                    email_loc = page.locator("input[type='email'], input[name*='email' i], input[placeholder*='email' i]").first
+                    if await email_loc.count() > 0:
+                        await email_loc.fill(email_val)
+                    # Fill Password
+                    pass_loc = page.locator("input[type='password'], input[name*='pass' i], input[placeholder*='pass' i]").first
+                    if await pass_loc.count() > 0:
+                        await pass_loc.fill(pass_val)
+                        await pass_loc.press("Enter")
+                    return "Filled credentials and submitted."
+                return await _run_in_playwright(_fill_creds())
             except Exception as _e:
                 logger.debug(f"Credential shortcut failed, continuing: {_e}")
         # ── End credential-pair shortcut ─────────────────────────────────────
@@ -339,14 +338,15 @@ class VoiceBrowserCommands:
 
         # --- Deterministic Fallbacks (Zero LLM Tokens) ---
         try:
+            from automation.browser.browser_engine import _run_in_playwright as _rip
             page = active_page
             import re
-            
+
             # 1. Exact "click <text>" or matching a short phrase directly to a button
             target_text = transcript_lower
             if transcript_lower.startswith("click ") and len(transcript_lower) > 6:
                 target_text = transcript_lower[6:].strip()
-                
+
             if len(target_text) > 0 and len(target_text.split()) <= 4:
                 locators = [
                     # 1. Exact Matches
@@ -360,12 +360,17 @@ class VoiceBrowserCommands:
                 ]
                 for loc in locators:
                     try:
-                        count = await loc.count()
-                        for i in range(count):
-                            element = loc.nth(i)
-                            if await element.is_visible():
-                                await element.click(timeout=1000)
-                                return f"Clicked '{target_text}'"
+                        async def _try_click(loc=loc):
+                            count = await loc.count()
+                            for i in range(count):
+                                element = loc.nth(i)
+                                if await element.is_visible():
+                                    await element.click(timeout=1000)
+                                    return True
+                            return False
+                        clicked = await _rip(_try_click())
+                        if clicked:
+                            return f"Clicked '{target_text}'"
                     except Exception as e:
                         logger.error(f"[{__name__}] {type(e).__name__}: {e}")
                         pass
@@ -381,8 +386,13 @@ class VoiceBrowserCommands:
                 ]
                 for loc in locators:
                     try:
-                        if await loc.count() > 0:
-                            await loc.first.fill(value, timeout=1000)
+                        async def _try_fill(loc=loc, value=value):
+                            if await loc.count() > 0:
+                                await loc.first.fill(value, timeout=1000)
+                                return True
+                            return False
+                        filled = await _rip(_try_fill())
+                        if filled:
                             return f"Typed '{value}' into '{field}'"
                     except Exception as e:
                         logger.error(f"[{__name__}] {type(e).__name__}: {e}")
@@ -402,53 +412,55 @@ class VoiceBrowserCommands:
             _want_enabled = _action in ("enable", "turn on", "activate")
             _want_disabled = _action in ("disable", "turn off", "deactivate")
             try:
-                # Strategy: find any checkbox/toggle/switch near text matching the target
-                _clicked = await active_page.evaluate("""
-                    (args) => {
-                        const { target, wantEnabled, wantDisabled } = args;
+                from automation.browser.browser_engine import _run_in_playwright as _rip
+                async def _do_toggle():
+                    return await active_page.evaluate("""
+                        (args) => {
+                            const { target, wantEnabled, wantDisabled } = args;
 
-                        // Helper: does this element or its ancestors contain the target text?
-                        function nearText(el) {
-                            const row = el.closest('tr, li, div.device, div.card, div.item, section, article, [class*="row"], [class*="card"], [class*="item"], [class*="device"]');
-                            const scope = row || el.parentElement?.parentElement || document;
-                            return scope.innerText?.toLowerCase().includes(target);
-                        }
+                            // Helper: does this element or its ancestors contain the target text?
+                            function nearText(el) {
+                                const row = el.closest('tr, li, div.device, div.card, div.item, section, article, [class*="row"], [class*="card"], [class*="item"], [class*="device"]');
+                                const scope = row || el.parentElement?.parentElement || document;
+                                return scope.innerText?.toLowerCase().includes(target);
+                            }
 
-                        // 1. Look for role=switch or input[type=checkbox] near the target text
-                        const toggles = Array.from(document.querySelectorAll(
-                            'input[type=checkbox], [role=switch], [role=checkbox], button[class*="toggle" i], button[class*="switch" i], span[class*="toggle" i], div[class*="toggle" i]'
-                        ));
-                        
-                        for (const t of toggles) {
-                            if (!nearText(t)) continue;
-                            const isChecked = t.checked ?? t.getAttribute('aria-checked') === 'true' 
-                                ?? t.classList.contains('active') ?? t.classList.contains('enabled');
+                            // 1. Look for role=switch or input[type=checkbox] near the target text
+                            const toggles = Array.from(document.querySelectorAll(
+                                'input[type=checkbox], [role=switch], [role=checkbox], button[class*="toggle" i], button[class*="switch" i], span[class*="toggle" i], div[class*="toggle" i]'
+                            ));
                             
-                            if (wantEnabled && isChecked) return 'already_on';
-                            if (wantDisabled && !isChecked) return 'already_off';
-                            t.click();
-                            return 'clicked';
+                            for (const t of toggles) {
+                                if (!nearText(t)) continue;
+                                const isChecked = t.checked ?? t.getAttribute('aria-checked') === 'true' 
+                                    ?? t.classList.contains('active') ?? t.classList.contains('enabled');
+                                
+                                if (wantEnabled && isChecked) return 'already_on';
+                                if (wantDisabled && !isChecked) return 'already_off';
+                                t.click();
+                                return 'clicked';
+                            }
+                            
+                            // 2. Look for any element with visible text "DISABLED" or "ENABLED" near the target
+                            const labels = Array.from(document.querySelectorAll('*')).filter(el => {
+                                const txt = el.innerText?.trim().toUpperCase();
+                                return (txt === 'DISABLED' || txt === 'ENABLED') && el.children.length === 0;
+                            });
+                            for (const lbl of labels) {
+                                if (!nearText(lbl)) continue;
+                                const txt = lbl.innerText?.trim().toUpperCase();
+                                if (wantEnabled && txt === 'ENABLED') return 'already_on';
+                                if (wantDisabled && txt === 'DISABLED') return 'already_off';
+                                // click the parent toggle container
+                                const clickTarget = lbl.closest('button, [role=switch], label, [class*="toggle" i]') || lbl.parentElement;
+                                clickTarget?.click();
+                                return 'clicked_label';
+                            }
+                            
+                            return 'not_found';
                         }
-                        
-                        // 2. Look for any element with visible text "DISABLED" or "ENABLED" near the target
-                        const labels = Array.from(document.querySelectorAll('*')).filter(el => {
-                            const txt = el.innerText?.trim().toUpperCase();
-                            return (txt === 'DISABLED' || txt === 'ENABLED') && el.children.length === 0;
-                        });
-                        for (const lbl of labels) {
-                            if (!nearText(lbl)) continue;
-                            const txt = lbl.innerText?.trim().toUpperCase();
-                            if (wantEnabled && txt === 'ENABLED') return 'already_on';
-                            if (wantDisabled && txt === 'DISABLED') return 'already_off';
-                            // click the parent toggle container
-                            const clickTarget = lbl.closest('button, [role=switch], label, [class*="toggle" i]') || lbl.parentElement;
-                            clickTarget?.click();
-                            return 'clicked_label';
-                        }
-                        
-                        return 'not_found';
-                    }
-                """, {"target": _target, "wantEnabled": _want_enabled, "wantDisabled": _want_disabled})
+                    """, {"target": _target, "wantEnabled": _want_enabled, "wantDisabled": _want_disabled})
+                _clicked = await _rip(_do_toggle())
 
                 if _clicked == "clicked" or _clicked == "clicked_label":
                     state = "enabled" if _want_enabled else ("disabled" if _want_disabled else "toggled")
@@ -557,8 +569,8 @@ class VoiceBrowserCommands:
                 return await self.crm.login(username=cred_match.group(1), password=cred_match.group(2))
                 
             _login_signup_keywords = ["log in", "login", "sign in", "sign up", "signup", "register", "create account"]
-            is_search_or_url = transcript.startswith("search ") or re.search(r"https?://", transcript)
-            if any(w in transcript for w in _login_signup_keywords) and not is_search_or_url:
+            is_search_or_url = transcript_lower.startswith("search ") or re.search(r"https?://", transcript_lower)
+            if any(w in transcript_lower for w in _login_signup_keywords) and not is_search_or_url:
                 page = active_page or await self.ctrl._ensure_page()
                 url = await self.ctrl.engine.get_url()
                 from app.config import settings
@@ -566,19 +578,20 @@ class VoiceBrowserCommands:
                 is_on_crm = bool(url and crm_host and crm_host in url)
                 wants_crm = "crm" in transcript_lower
                 
-                if (wants_crm or is_on_crm) and not any(w in transcript for w in ["sign up", "signup", "register"]):
+                if (wants_crm or is_on_crm) and not any(w in transcript_lower for w in ["sign up", "signup", "register"]):
                     return await self.crm.login()
                 else:
                     # Generic login/signup: click button on the current page.
                     # Build ordered list: prioritize spoken keywords first.
                     search_words = []
                     for w in _login_signup_keywords:
-                        if w in transcript:
+                        if w in transcript_lower:
                             search_words.append(w)
                     for w in _login_signup_keywords + ["submit"]:
                         if w not in search_words:
                             search_words.append(w)
 
+                    from automation.browser.browser_engine import _run_in_playwright as _rip
                     for btn_text in search_words:
                         locators = [
                             page.get_by_role("button", name=re.compile(f"^{re.escape(btn_text)}$", re.IGNORECASE)),
@@ -587,9 +600,14 @@ class VoiceBrowserCommands:
                         ]
                         for loc in locators:
                             try:
-                                if await loc.count() > 0:
-                                    await loc.first.click(timeout=1000)
-                                    return f"Clicked '{btn_text}'"
+                                async def _try_click_btn(loc=loc, btn_text=btn_text):
+                                    if await loc.count() > 0:
+                                        await loc.first.click(timeout=1000)
+                                        return btn_text
+                                    return None
+                                clicked_text = await _rip(_try_click_btn())
+                                if clicked_text:
+                                    return f"Clicked '{clicked_text}'"
                             except Exception as e:
                                 logger.error(f"[{__name__}] {type(e).__name__}: {e}")
                                 pass
@@ -620,11 +638,11 @@ class VoiceBrowserCommands:
                     return await handler.smart_logout()
             
             # Dynamic creation handling
-            if "new " in transcript or "create " in transcript or "add " in transcript or "make " in transcript or "generate " in transcript:
+            if "new " in transcript_lower or "create " in transcript_lower or "add " in transcript_lower or "make " in transcript_lower or "generate " in transcript_lower:
                 import re
-                m = re.search(r'(?:create|add|make|generate)(?:\s+(?:a\s+)?(?:new\s+)?)?\s+(lead|quote|quotation|contact|customer|account|opportunity|order|product|task)', transcript)
+                m = re.search(r'(?:create|add|make|generate)(?:\s+(?:a\s+)?(?:new\s+)?)?\s+(lead|quote|quotation|contact|customer|account|opportunity|order|product|task)', transcript_lower)
                 if not m:
-                    m = re.search(r'new\s+(lead|quote|quotation|contact|customer|account|opportunity|order|product|task)', transcript)
+                    m = re.search(r'new\s+(lead|quote|quotation|contact|customer|account|opportunity|order|product|task)', transcript_lower)
                 if m:
                     entity = m.group(1)
                     if entity == "quotation": entity = "quote"
@@ -633,9 +651,9 @@ class VoiceBrowserCommands:
             
             # Dynamic module navigation
             import re
-            m = re.search(r'\b(leads|contacts|opportunities|accounts|customers|quotes|quotations|orders|products|dashboard|tasks|reports|home)\b', transcript)
-            if m and not ("new " in transcript or "create " in transcript or "add " in transcript or "make " in transcript or "generate " in transcript or "search " in transcript or "edit " in transcript or "update " in transcript or "assign " in transcript):
-                if "go to" in transcript or "open" in transcript or "show" in transcript or transcript == m.group(1):
+            m = re.search(r'\b(leads|contacts|opportunities|accounts|customers|quotes|quotations|orders|products|dashboard|tasks|reports|home)\b', transcript_lower)
+            if m and not ("new " in transcript_lower or "create " in transcript_lower or "add " in transcript_lower or "make " in transcript_lower or "generate " in transcript_lower or "search " in transcript_lower or "edit " in transcript_lower or "update " in transcript_lower or "assign " in transcript_lower):
+                if "go to" in transcript_lower or "open" in transcript_lower or "show" in transcript_lower or transcript_lower == m.group(1):
                     mod = m.group(1)
                     if mod == "quotations": mod = "quotes"
                     if mod == "customers": mod = "accounts"
@@ -643,9 +661,9 @@ class VoiceBrowserCommands:
                     return await self.crm.navigate_to_module(mod)
                     
             # Search Handling
-            if "search " in transcript:
+            if "search " in transcript_lower:
                 import re
-                m = re.search(r'search\s+(lead|opportunity|customer|order|quote|task|account|contact)\s+(.+)', transcript)
+                m = re.search(r'search\s+(lead|opportunity|customer|order|quote|task|account|contact)\s+(.+)', transcript_lower)
                 if m:
                     entity = m.group(1)
                     query = m.group(2)
@@ -653,7 +671,7 @@ class VoiceBrowserCommands:
                     return await self.crm.search_record(entity, query)
                 
                 # Generic search fallback for the browser
-                m_gen = re.match(r"^search\s+(?:for\s+)?(.+)$", transcript)
+                m_gen = re.match(r"^search\s+(?:for\s+)?(.+)$", transcript_lower)
                 if m_gen:
                     query = m_gen.group(1).strip()
                     
@@ -675,9 +693,9 @@ class VoiceBrowserCommands:
                     return await self.ctrl.engine.search_google(query)
                     
             # Grid Interaction Handling
-            if "first " in transcript or "top " in transcript:
+            if "first " in transcript_lower or "top " in transcript_lower:
                 import re
-                m = re.search(r'(?:open|select|click)\s+(?:first|top)\s+(?:record|row|lead|opportunity|customer|order|quote|task|account|contact)', transcript)
+                m = re.search(r'(?:open|select|click)\s+(?:first|top)\s+(?:record|row|lead|opportunity|customer|order|quote|task|account|contact)', transcript_lower)
                 if m:
                     return await self.crm.open_first_record()
                     
@@ -688,87 +706,88 @@ class VoiceBrowserCommands:
             # intent and DOMAgent would get confused by the date syntax.
             _is_date_filter_cmd = bool(re.search(
                 r'\b(?:filter|set|change|update|from|between)\b.{1,30}\b\d{1,2}\b.{1,20}\bto\b.{1,20}\b\d{4}\b',
-                transcript, re.IGNORECASE
+                transcript_lower, re.IGNORECASE
             ))
-            if not _is_date_filter_cmd and re.search(r'\b(edit|assign|update|change|modify|revise|correct|alter|fix|replace|type|fill|enter|write|put|set|input|select|choose|pick|grab|check|uncheck|tick|untick|mark|unmark|deselect|clear|upload|attach|enable|disable|toggle|activate|deactivate|switch|turn\s+on|turn\s+off)\b', transcript, re.IGNORECASE):
+            if not _is_date_filter_cmd and re.search(r'\b(edit|assign|update|change|modify|revise|correct|alter|fix|replace|type|fill|enter|write|put|set|input|select|choose|pick|grab|check|uncheck|tick|untick|mark|unmark|deselect|clear|upload|attach|enable|disable|toggle|activate|deactivate|switch|turn\s+on|turn\s+off)\b', transcript_lower, re.IGNORECASE):
                 from automation.browser.dom_agent import DOMAgent
                 page = active_page or await self.ctrl._ensure_page()
                 agent = DOMAgent(page)
                 return await agent.execute_intent(transcript)
                     
-            if "cancel" in transcript:
+            if "cancel" in transcript_lower:
                 return await self.ctrl.find_and_click("Cancel")
         
         # --- Tab Management ---
-        if "new tab" in transcript:
+        if "new tab" in transcript_lower:
             return await self.ctrl.new_tab()
-        if "close all tabs" in transcript:
+        if "close all tabs" in transcript_lower:
             return await self.ctrl.close_all_tabs()
-        if "close tab" in transcript or "close this tab" in transcript:
+        if "close tab" in transcript_lower or "close this tab" in transcript_lower:
             return await self.ctrl.close_tab()
-        if "show all tabs" in transcript:
+        if "show all tabs" in transcript_lower:
             tabs = await self.ctrl.get_all_tabs()
             return f"There are {len(tabs)} tabs open."
-        if "switch to last tab" in transcript:
+        if "switch to last tab" in transcript_lower:
             return await self.ctrl.switch_to_last_tab()
-        if "switch to tab" in transcript:
+        if "switch to tab" in transcript_lower:
             import re
-            match = re.search(r'\d+', transcript)
+            match = re.search(r'\d+', transcript_lower)
             if match:
                 idx = int(match.group()) - 1
                 return await self.ctrl.switch_to_tab(idx)
-            domain = transcript.replace("switch to the", "").replace("switch to", "").replace("tab", "").strip()
+            domain = transcript_lower.replace("switch to the", "").replace("switch to", "").replace("tab", "").strip()
             return await self.ctrl.switch_to_tab_by_url(domain)
 
         # --- Scrolling ---
-        if "scroll to the bottom" in transcript or "scroll to bottom" in transcript:
+        if "scroll to the bottom" in transcript_lower or "scroll to bottom" in transcript_lower:
             return await self.ctrl.scroll_to_bottom()
-        if "scroll to the top" in transcript or "scroll to top" in transcript:
+        if "scroll to the top" in transcript_lower or "scroll to top" in transcript_lower:
             return await self.ctrl.scroll_to_top()
-        if "scroll down a little" in transcript:
+        if "scroll down a little" in transcript_lower:
             return await self.ctrl.scroll_amount("down", "little")
-        if "scroll up a little" in transcript:
+        if "scroll up a little" in transcript_lower:
             return await self.ctrl.scroll_amount("up", "little")
-        if "scroll down" in transcript:
+        if "scroll down" in transcript_lower:
             return await self.ctrl.scroll("down")
-        if "scroll up" in transcript:
+        if "scroll up" in transcript_lower:
             return await self.ctrl.scroll("up")
 
         # --- Window & Marking ---
-        if "restart browser" in transcript:
+        if "restart browser" in transcript_lower:
             return await self.ctrl.restart_browser()
-        if "clear highlights" in transcript or "remove marks" in transcript:
+        if "clear highlights" in transcript_lower or "remove marks" in transcript_lower:
             return await self.ctrl.clear_marks()
 
         # --- Keyboard & Clipboard ---
-        if "press enter" in transcript: return await self.ctrl.press_key("Enter")
-        if "press escape" in transcript: return await self.ctrl.press_key("Escape")
-        if "press tab" in transcript: return await self.ctrl.press_key("Tab")
-        if "select all" in transcript: return await self.ctrl.clipboard_action("select_all")
-        if "copy" in transcript and "text" in transcript: return await self.ctrl.clipboard_action("copy")
-        if "paste" in transcript: return await self.ctrl.clipboard_action("paste")
-        if "cut" in transcript: return await self.ctrl.clipboard_action("cut")
+        if "press enter" in transcript_lower: return await self.ctrl.press_key("Enter")
+        if "press escape" in transcript_lower: return await self.ctrl.press_key("Escape")
+        if "press tab" in transcript_lower: return await self.ctrl.press_key("Tab")
+        if "select all" in transcript_lower: return await self.ctrl.clipboard_action("select_all")
+        if "copy" in transcript_lower and "text" in transcript_lower: return await self.ctrl.clipboard_action("copy")
+        if "paste" in transcript_lower: return await self.ctrl.clipboard_action("paste")
+        if "cut" in transcript_lower: return await self.ctrl.clipboard_action("cut")
 
         # --- Media & YouTube Controls ---
         import re
-        if re.fullmatch(r'(?:play|pause)(?:\s+(?:the\s+)?(?:video|music|song|playback))?', transcript):
+        if re.fullmatch(r'(?:play|pause)(?:\s+(?:the\s+)?(?:video|music|song|playback))?', transcript_lower):
             return await self.ctrl.media_play_pause()
-        if "mute" in transcript:
+        if "mute" in transcript_lower:
             return await self.ctrl.youtube_mute()
-        if "fullscreen" in transcript:
+        if "fullscreen" in transcript_lower:
             return await self.ctrl.youtube_fullscreen()
-        if "skip ahead" in transcript or "skip forward" in transcript:
+        if "skip ahead" in transcript_lower or "skip forward" in transcript_lower:
             return await self.ctrl.youtube_seek(10)
-        if "go back 10" in transcript:
+        if "go back 10" in transcript_lower:
             return await self.ctrl.youtube_seek(-10)
-        if "next video" in transcript:
+        if "next video" in transcript_lower:
             return await self.ctrl.youtube_next()
 
         # --- Navigation ---
-        if "go back" in transcript:
+        if "go back" in transcript_lower:
             return await self.ctrl.go_back()
-        if "refresh" in transcript or "reload" in transcript:
+        if "refresh" in transcript_lower or "reload" in transcript_lower:
             return await self.ctrl.refresh()
+
 
 
         # --- Dynamic DOM Agent (Clicking, Typing, Interaction) ---

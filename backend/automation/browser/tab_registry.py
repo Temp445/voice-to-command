@@ -270,35 +270,15 @@ class TabRegistry:
                 logger.info(f"TabRegistry: active tab update (source={source}) → {tab_id[:8]}… url={url!r}")
                 self._persist(tab_id, url)
 
-                # Resolve title and broadcast asynchronously to avoid coroutine bugs
-                async def _fetch_title_and_broadcast():
-                    try:
-                        title = await page.title()
-                    except Exception:
-                        title = ""
-                    if not title:
-                        from urllib.parse import urlparse
-                        try:
-                            title = urlparse(url).netloc or url
-                        except Exception:
-                            title = url
-
-                    from app.websocket.manager import ws_manager
-                    payload = {"tab_id": tab_id, "url": url, "title": title}
-                    await ws_manager.broadcast("tab_changed", payload)
-
+                # Resolve title via CDP and broadcast asynchronously on the
+                # main event loop so ws_manager._lock is always acquired
+                # on the correct loop — regardless of which thread set_active
+                # was called from.
                 try:
-                    loop = asyncio.get_event_loop()
-                    if loop.is_running():
-                        asyncio.run_coroutine_threadsafe(_fetch_title_and_broadcast(), loop)
-                    else:
-                        from urllib.parse import urlparse
-                        domain = urlparse(url).netloc or url
-                        self._broadcast_tab_changed(tab_id, url, domain)
+                    from app.websocket.manager import ws_manager as _wsm
+                    _wsm.broadcast_from_thread("tab_changed", {"tab_id": tab_id, "url": url, "title": ""})
                 except Exception:
-                    from urllib.parse import urlparse
-                    domain = urlparse(url).netloc or url
-                    self._broadcast_tab_changed(tab_id, url, domain)
+                    pass
             except Exception as e:
                 logger.debug(f"TabRegistry.set_active broadcast/persist error: {e}")
 
@@ -710,21 +690,11 @@ class TabRegistry:
     def _broadcast_tab_changed(self, tab_id: str, url: str, title: str) -> None:
         try:
             from app.websocket.manager import ws_manager
-            import asyncio as _a
-
             payload = {"tab_id": tab_id, "url": url, "title": title}
-            try:
-                loop = _a.get_event_loop()
-                if loop.is_running():
-                    _a.run_coroutine_threadsafe(
-                        ws_manager.broadcast("tab_changed", payload), loop
-                    )
-                else:
-                    loop.run_until_complete(
-                        ws_manager.broadcast("tab_changed", payload)
-                    )
-            except RuntimeError:
-                pass
+            # broadcast_from_thread() always uses ws_manager._main_loop so the
+            # asyncio.Lock inside broadcast() is acquired on the correct event
+            # loop regardless of which thread calls this method.
+            ws_manager.broadcast_from_thread("tab_changed", payload)
         except Exception as e:
             logger.debug(f"TabRegistry: tab_changed broadcast error: {e}")
 

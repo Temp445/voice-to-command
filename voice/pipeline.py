@@ -371,7 +371,9 @@ class VoicePipeline:
             deadline = time.time() + active_timeout
 
             # 1. First stream pass — capture wake word + command
-            audio_bytes, text = await self._capture_and_stream(timeout=8.0, max_initial_silence_chunks=20)
+            # max_initial_silence_chunks=10 = 1s initial wait (was 20=2s)
+            # timeout=6.0 = max recording window (was 8.0s)
+            audio_bytes, text = await self._capture_and_stream(timeout=6.0, max_initial_silence_chunks=10)
 
             if self._manually_stopped:
                 self._manually_stopped = False
@@ -410,14 +412,27 @@ class VoicePipeline:
                     clean_text = self._strip_wake_word(text)
                     logger.info(f"🚀 Passing to command_service: '{clean_text}'")
                     result = await command_service.parse_and_execute(clean_text)
+
+                    # ── Broadcast result immediately so overlay dismisses ──────────
+                    # on_command_result fires BEFORE TTS so the "Executing your command"
+                    # overlay clears as soon as the automation finishes, not after TTS.
+                    import uuid as _uuid
+                    entry_id = str(_uuid.uuid4())
                     if self.on_command_result:
-                        self.on_command_result(result)
+                        payload = {
+                            "id":           entry_id,
+                            "raw_text":     clean_text,
+                            "intent":       result.get("intent"),
+                            "status":       result.get("status", "failed"),
+                            "result":       result.get("result"),
+                            "source":       "voice",
+                            "duration_ms":  result.get("duration_ms"),
+                            "routed_by_llm": result.get("routed_by_llm", False),
+                        }
+                        self.on_command_result(payload)
 
                     # ── Persist to command_history (non-blocking) ─────────────
-                    asyncio.ensure_future(
-                        self._save_history(clean_text, result),
-                        loop=self._loop,
-                    )
+                    asyncio.create_task(self._save_history(entry_id, clean_text, result))
 
                     if self._manually_stopped:
                         logger.debug("Manually stopped during command execution — skipping response")
@@ -425,6 +440,10 @@ class VoicePipeline:
                         break
 
                     response_text = result.get("result", "Done")
+                    # Reset state to IDLE immediately after execution so the
+                    # overlay dismisses at once — mirrors the console pipeline
+                    # which calls pipeline._set_state(IDLE) before TTS starts.
+                    self._set_state(PipelineState.IDLE)
                     await self._speak(response_text)
                     
                     from app.config import get_settings
@@ -438,6 +457,7 @@ class VoicePipeline:
 
                     # Reset deadline after execution to give another full window
                     deadline = time.time() + active_timeout
+
                 
                 # Check if timeout reached
                 time_left = deadline - time.time()
@@ -471,7 +491,7 @@ class VoicePipeline:
             self._wake_word.start()
             self._active_task = None
 
-    async def _save_history(self, raw_text: str, result: dict) -> None:
+    async def _save_history(self, entry_id: str, raw_text: str, result: dict) -> None:
         """
         Persist a voice command execution to Supabase command_history.
         Mirrors the row structure written by the HTTP /commands/execute route so
@@ -479,7 +499,6 @@ class VoicePipeline:
         Errors are silently logged — a DB failure must never block TTS playback.
         """
         try:
-            import uuid as _uuid
             from datetime import datetime, timezone
             from app.core.supabase_client import supabase_admin, sb_run
             from app.config import settings
@@ -492,7 +511,7 @@ class VoicePipeline:
                 return
 
             row = {
-                "id":          str(_uuid.uuid4()),
+                "id":          entry_id,
                 "user_id":     user_id,
                 "raw_text":    raw_text,
                 "intent":      result.get("intent"),

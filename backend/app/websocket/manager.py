@@ -24,6 +24,9 @@ class ConnectionManager:
     def __init__(self):
         self._connections: list[WebSocket] = []
         self._lock = asyncio.Lock()
+        # Set once at server startup so background threads can safely
+        # schedule broadcasts onto the FastAPI main event loop.
+        self._main_loop: asyncio.AbstractEventLoop | None = None
 
     async def connect(self, websocket: WebSocket) -> None:
         await websocket.accept()
@@ -80,6 +83,20 @@ class ConnectionManager:
             )
         except Exception as e:
             logger.warning(f"Failed to send to WS client: {e}")
+
+    def broadcast_from_thread(self, event: str, data: Any = None) -> None:
+        """
+        Thread-safe fire-and-forget broadcast callable from ANY thread
+        (BrowserThread, VoicePipelineLoop, etc.).
+
+        Uses _main_loop (captured at startup) so the asyncio.Lock inside
+        broadcast() is always acquired on the correct event loop — avoids
+        "Lock is bound to a different event loop" RuntimeError.
+        """
+        loop = self._main_loop
+        if loop is None or not loop.is_running():
+            return
+        asyncio.run_coroutine_threadsafe(self.broadcast(event, data), loop)
 
     @property
     def connection_count(self) -> int:

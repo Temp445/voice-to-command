@@ -511,60 +511,65 @@ class ActionExecutorMixin:
         """
         Main entry point for executing an intent on the DOM.
         """
-        logger.info(f"DOMAgent executing intent: '{intent_text}'")
-        
-        # Dismiss open notification popover if present before any interaction
-        try:
-            view_all_loc = self.page.locator("button:has-text('View all notifications'), a:has-text('View all notifications')").first
-            if await view_all_loc.count() > 0 and await view_all_loc.is_visible():
-                logger.info("Notifications popover detected open. Dismissing it by clicking the notifications bell.")
-                bell_loc = self.page.locator("button:has-text('View notifications'), button[aria-label*='notification' i]").first
-                if await bell_loc.count() > 0:
-                    await bell_loc.click(timeout=1000)
-                    await asyncio.sleep(0.3)
-                else:
-                    await self.page.keyboard.press("Escape")
-                    await asyncio.sleep(0.3)
-        except Exception as e:
-            logger.debug(f"Error dismissing notifications popover: {e}")
-        
-        # 1. Fetch current snapshot
-        page_context_service.invalidate()
-        snapshot = await page_context_service.get_snapshot()
-        if not snapshot or not snapshot.elements:
-            return "Failed to get interactive elements from page."
+        from automation.browser.browser_engine import _run_in_playwright
 
-        # 2. Try deterministic local execution first for quick, high-precision actions
-        det_res = await self.execute_intent_deterministically(intent_text, snapshot)
-        if not det_res.startswith("Could not determine DOM action"):
+        async def _do_execute():
+            logger.info(f"DOMAgent executing intent: '{intent_text}'")
+            
+            # Dismiss open notification popover if present before any interaction
+            try:
+                view_all_loc = self.page.locator("button:has-text('View all notifications'), a:has-text('View all notifications')").first
+                if await view_all_loc.count() > 0 and await view_all_loc.is_visible():
+                    logger.info("Notifications popover detected open. Dismissing it by clicking the notifications bell.")
+                    bell_loc = self.page.locator("button:has-text('View notifications'), button[aria-label*='notification' i]").first
+                    if await bell_loc.count() > 0:
+                        await bell_loc.click(timeout=1000)
+                        await asyncio.sleep(0.3)
+                    else:
+                        await self.page.keyboard.press("Escape")
+                        await asyncio.sleep(0.3)
+            except Exception as e:
+                logger.debug(f"Error dismissing notifications popover: {e}")
+            
+            # 1. Fetch current snapshot
+            page_context_service.invalidate()
+            snapshot = await page_context_service.get_snapshot()
+            if not snapshot or not snapshot.elements:
+                return "Failed to get interactive elements from page."
+
+            # 2. Try deterministic local execution first for quick, high-precision actions
+            det_res = await self.execute_intent_deterministically(intent_text, snapshot)
+            if not det_res.startswith("Could not determine DOM action"):
+                return det_res
+
+            # 3. Try LLM-based execution if enabled and ready
+            if llm_service.is_ready:
+                filtered_elements = snapshot.elements
+                cmd = intent_text.lower().strip()
+                # Stricter filtering: exclude header/navigation/notification elements if targeting a specific record/request generically
+                is_targeting_record = False
+                _words = cmd.split()
+                if len(_words) >= 2:
+                    _action_verbs = {"view", "edit", "update", "delete", "show", "inspect", "open", "change"}
+                    if _words[0] in _action_verbs:
+                        _target_phrase = " ".join(_words[1:])
+                        _nav_notif_words = {"notification", "bell", "profile", "header", "navbar", "navigation", "nav", "menu", "sidebar", "toast", "alert"}
+                        if not any(w in _target_phrase for w in _nav_notif_words):
+                            is_targeting_record = True
+
+                if is_targeting_record:
+                    filtered_elements = [
+                        el for el in snapshot.elements
+                        if not getattr(el, "is_nav_header_or_notification", False)
+                    ]
+                res = await self.execute_intent_with_llm(intent_text, filtered_elements)
+                if res:
+                    return res
+
+            # 4. Fallback to the message returned by deterministic execution
             return det_res
 
-        # 3. Try LLM-based execution if enabled and ready
-        if llm_service.is_ready:
-            filtered_elements = snapshot.elements
-            cmd = intent_text.lower().strip()
-            # Stricter filtering: exclude header/navigation/notification elements if targeting a specific record/request generically
-            is_targeting_record = False
-            _words = cmd.split()
-            if len(_words) >= 2:
-                _action_verbs = {"view", "edit", "update", "delete", "show", "inspect", "open", "change"}
-                if _words[0] in _action_verbs:
-                    _target_phrase = " ".join(_words[1:])
-                    _nav_notif_words = {"notification", "bell", "profile", "header", "navbar", "navigation", "nav", "menu", "sidebar", "toast", "alert"}
-                    if not any(w in _target_phrase for w in _nav_notif_words):
-                        is_targeting_record = True
-
-            if is_targeting_record:
-                filtered_elements = [
-                    el for el in snapshot.elements
-                    if not getattr(el, "is_nav_header_or_notification", False)
-                ]
-            res = await self.execute_intent_with_llm(intent_text, filtered_elements)
-            if res:
-                return res
-
-        # 4. Fallback to the message returned by deterministic execution
-        return det_res
+        return await _run_in_playwright(_do_execute())
 
     async def execute_intent_with_llm(self, command: str, elements: list[PageElement]) -> str | None:
         try:
@@ -782,6 +787,16 @@ class ActionExecutorMixin:
                     if clean_label and len(clean_label) >= 3 and cmd.startswith(clean_label + " "):
                         field_target = clean_label
                         fill_value = cmd[len(clean_label):].strip()
+                        break
+                    # Support matching core credential keywords (password, email, username) if the placeholder or name
+                    # is a longer string containing the keyword (e.g., placeholder "Enter your password" matched by "password")
+                    core_kws = ["password", "email", "username"]
+                    for kw in core_kws:
+                        if kw in label and cmd.startswith(kw + " "):
+                            field_target = kw
+                            fill_value = cmd[len(kw):].strip()
+                            break
+                    if field_target:
                         break
 
         if field_target and fill_value:
